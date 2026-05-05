@@ -22,7 +22,6 @@
         }
         .container { max-width: 1100px; margin: 0 auto; padding: 2rem 1.5rem; }
 
-        /* 头部 */
         .hero {
             text-align: center;
             padding: 3rem 0 2rem;
@@ -41,32 +40,16 @@
             border: 1px solid rgba(33,150,243,0.2);
         }
 
-        /* 演示区 */
-        .demo-section {
+        .section {
             background: var(--card-bg);
             border: 1px solid var(--border);
             border-radius: 8px;
             padding: 2rem;
             margin: 2rem 0;
         }
-        .demo-section h2 { color: var(--blue); margin-bottom: 1.5rem; font-size: 1.3rem; }
-        .ip-display {
-            font-size: clamp(1.5rem, 5vw, 2.5rem);
-            font-weight: bold;
-            color: var(--blue);
-            text-shadow: 0 0 15px rgba(33,150,243,0.3);
-            margin: 1rem 0;
-            word-break: break-all;
-        }
-        .demo-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; margin-top: 2rem; }
-        .demo-card {
-            background: rgba(255,255,255,0.02);
-            border-left: 2px solid var(--blue);
-            padding: 1rem 1.2rem;
-        }
-        .demo-card h3 { font-size: 0.75rem; color: var(--dim); text-transform: uppercase; margin-bottom: 0.8rem; letter-spacing: 1px; }
+        .section h2 { color: var(--blue); margin-bottom: 1.5rem; font-size: 1.5rem; }
+        .section h3 { color: var(--blue); margin: 1.5rem 0 1rem; font-size: 1.2rem; }
 
-        /* 功能表格 */
         .feature-table {
             width: 100%;
             border-collapse: collapse;
@@ -76,25 +59,45 @@
         .feature-table th {
             background: rgba(33,150,243,0.08);
             color: var(--blue);
-            padding: 0.7rem;
+            padding: 0.8rem;
             text-align: left;
-            font-size: 0.7rem;
+            font-size: 0.75rem;
             text-transform: uppercase;
             letter-spacing: 1px;
             border-bottom: 1px solid var(--border);
         }
         .feature-table td {
-            padding: 0.7rem;
+            padding: 0.8rem;
             border-bottom: 1px solid var(--border);
+            vertical-align: top;
         }
         .feature-table tr:hover { background: rgba(255,255,255,0.02); }
-        .test-category {
-            color: var(--blue);
+        .feature-table td:first-child {
             font-weight: bold;
-            font-size: 0.8rem;
+            color: #fff;
+            width: 30%;
+        }
+        .feature-table td:last-child {
+            color: var(--dim);
+            width: 70%;
         }
 
-        /* 按钮 */
+        .demo-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; margin-top: 2rem; }
+        .demo-card {
+            background: rgba(255,255,255,0.02);
+            border-left: 2px solid var(--blue);
+            padding: 1rem 1.2rem;
+        }
+        .demo-card h3 { font-size: 0.75rem; color: var(--dim); text-transform: uppercase; margin-bottom: 0.8rem; }
+        .ip-display {
+            font-size: clamp(1.5rem, 5vw, 2.5rem);
+            font-weight: bold;
+            color: var(--blue);
+            text-shadow: 0 0 15px rgba(33,150,243,0.3);
+            margin: 1rem 0;
+            word-break: break-all;
+        }
+
         .btn {
             background: transparent;
             border: 1px solid var(--dim);
@@ -117,13 +120,12 @@
             .hero h1 { font-size: 1.5rem; }
             .container { padding: 1rem; }
             .feature-table { font-size: 0.75rem; }
-            .feature-table th, .feature-table td { padding: 0.5rem; }
+            .feature-table th, .feature-table td { padding: 0.6rem; }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <!-- 头部介绍 -->
         <div class="hero">
             <h1>⚡ CF-workers-netdiag</h1>
             <p>基于 Cloudflare Workers 的全能网络诊断工具，覆盖延迟、带宽、协议、安全等 20+ 项测试，一键部署，全球极速可用。</p>
@@ -136,10 +138,10 @@
             </div>
         </div>
 
-        <!-- 实时演示区 -->
-        <div class="demo-section">
+        <!-- 实时演示 -->
+        <div class="section">
             <h2>🔍 实时网络检测（演示）</h2>
-            <p style="color: var(--dim); font-size: 0.85rem;">以下是你当前的网络基本信息：</p>
+            <p style="color: var(--dim); margin-bottom: 1rem;">以下是你当前的网络基本信息：</p>
             <div class="ip-display" id="ipv4">检测中...</div>
             <div style="color: var(--dim);" id="ipv6"></div>
             <div class="demo-grid">
@@ -163,12 +165,12 @@
             </div>
         </div>
 
-        <!-- 核心功能表格 - 基础网络检测 -->
-        <div class="demo-section">
+        <!-- 功能详解 -->
+        <div class="section">
             <h2>🖥️ 诊断面板功能详解</h2>
-            <p style="color: var(--dim); margin-bottom: 1.5rem;">部署后直接访问 Worker 域名即可看到完整终端风格界面，所有测试通过点击按钮触发。</p>
+            <p style="color: var(--dim); margin-bottom: 2rem;">部署后直接访问 Worker 域名即可看到完整终端风格界面，所有测试通过点击按钮触发。</p>
 
-            <h3 class="test-category">📶 基础网络检测</h3>
+            <h3>📶 基础网络检测</h3>
             <table class="feature-table">
                 <tr><th>测试项</th><th>说明</th></tr>
                 <tr><td>IPv4 / IPv6</td><td>自动从多个备用源获取双栈公网地址</td></tr>
@@ -178,11 +180,8 @@
                 <tr><td>BANDWIDTH</td><td>分段下载 100KB/500KB/1MB 随机数据，计算 Mbps 及平均速度</td></tr>
                 <tr><td>DNS</td><td>测试 cloudflare.com 与 google.com 的解析延迟</td></tr>
             </table>
-        </div>
 
-        <!-- 安全与协议分析 -->
-        <div class="demo-section">
-            <h3 class="test-category">🛡️ 安全与协议分析</h3>
+            <h3>🛡️ 安全与协议分析</h3>
             <table class="feature-table">
                 <tr><th>测试项</th><th>说明</th></tr>
                 <tr><td>DC / PROXY</td><td>检测当前 AS 组织是否属于数据中心/代理</td></tr>
@@ -196,11 +195,8 @@
                 <tr><td>BOT SCORE</td><td>Cloudflare Bot Management 分配的评分及人类/风险等级</td></tr>
                 <tr><td>WORKER TIME</td><td>Worker 处理本次请求的耗时 (ms)</td></tr>
             </table>
-        </div>
 
-        <!-- 极限性能测试 -->
-        <div class="demo-section">
-            <h3 class="test-category">🧪 极限性能测试（紫色按钮）</h3>
+            <h3>🧪 极限性能测试（紫色按钮）</h3>
             <table class="feature-table">
                 <tr><th>测试项</th><th>说明</th></tr>
                 <tr><td>CPU</td><td>Worker 端执行 50 万次浮点运算，返回 ops/ms 及耗时</td></tr>
@@ -222,7 +218,6 @@
     </div>
 
     <script>
-        // 轻量演示脚本
         (async () => {
             async function getIP(version) {
                 const urls = version === 4
