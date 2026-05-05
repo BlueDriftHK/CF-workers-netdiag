@@ -5,38 +5,137 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CF-workers-netdiag · 网络诊断终极版</title>
     <style>
-        :root { --blue: #2196f3; --bg: #0a0b0d; --card-bg: #111318; --dim: #888; --text: #e0e0e0; --border: #222; }
+        :root {
+            --blue: #2196f3;
+            --bg: #0a0b0d;
+            --card-bg: #111318;
+            --dim: #888;
+            --text: #e0e0e0;
+            --border: #222;
+        }
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Consolas', monospace; line-height: 1.6; }
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Consolas', monospace;
+            line-height: 1.6;
+        }
         .container { max-width: 1100px; margin: 0 auto; padding: 2rem 1.5rem; }
         .hero { text-align: center; padding: 3rem 0 2rem; border-bottom: 1px solid var(--border); margin-bottom: 2rem; }
         .hero h1 { font-size: 2.2rem; color: var(--blue); margin-bottom: 0.8rem; }
         .hero p { color: var(--dim); font-size: 1.1rem; max-width: 700px; margin: 0 auto; }
-        .badges { display: flex; justify-content: center; gap: 0.8rem; flex-wrap: wrap; margin-top: 1.5rem; }
-        .badge { background: rgba(33,150,243,0.1); color: var(--blue); padding: 0.3rem 0.8rem; border-radius: 20px; font-size: 0.8rem; border: 1px solid rgba(33,150,243,0.2); }
-        .section { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 2rem; margin: 2rem 0; }
+        .badges {
+            display: flex;
+            justify-content: center;
+            gap: 0.8rem;
+            flex-wrap: wrap;
+            margin-top: 1.5rem;
+        }
+        .badge {
+            background: rgba(33,150,243,0.1);
+            color: var(--blue);
+            padding: 0.3rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            border: 1px solid rgba(33,150,243,0.2);
+        }
+        .section {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 2rem;
+            margin: 2rem 0;
+        }
         .section h2 { color: var(--blue); margin-bottom: 1.5rem; font-size: 1.5rem; }
         .section h3 { color: var(--blue); margin: 1.5rem 0 1rem; font-size: 1.2rem; }
-        .feature-table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.85rem; }
-        .feature-table th { background: rgba(33,150,243,0.08); color: var(--blue); padding: 0.8rem; text-align: left; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid var(--border); }
-        .feature-table td { padding: 0.8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+        .feature-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+            font-size: 0.85rem;
+        }
+        .feature-table th {
+            background: rgba(33,150,243,0.08);
+            color: var(--blue);
+            padding: 0.8rem;
+            text-align: left;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            border-bottom: 1px solid var(--border);
+        }
+        .feature-table td {
+            padding: 0.8rem;
+            border-bottom: 1px solid var(--border);
+            vertical-align: top;
+        }
         .feature-table tr:hover { background: rgba(255,255,255,0.02); }
-        .feature-table td:first-child { font-weight: bold; color: #fff; width: 30%; }
+        .feature-table td:first-child {
+            font-weight: bold;
+            color: #fff;
+            width: 30%;
+        }
         .feature-table td:last-child { color: var(--dim); width: 70%; }
-        .demo-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; margin-top: 2rem; }
-        .demo-card { background: rgba(255,255,255,0.02); border-left: 2px solid var(--blue); padding: 1rem 1.2rem; }
-        .demo-card h3 { font-size: 0.75rem; color: var(--dim); text-transform: uppercase; margin-bottom: 0.8rem; }
-        .ip-display { font-size: clamp(1.5rem, 5vw, 2.5rem); font-weight: bold; color: var(--blue); text-shadow: 0 0 15px rgba(33,150,243,0.3); margin: 1rem 0; word-break: break-all; }
-        .btn { background: transparent; border: 1px solid var(--dim); color: var(--dim); font-size: 0.75rem; padding: 0.4rem 1rem; cursor: pointer; font-family: inherit; transition: 0.2s; border-radius: 4px; margin-right: 0.4rem; margin-bottom: 0.4rem; }
+        .demo-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin-top: 2rem;
+        }
+        .demo-card {
+            background: rgba(255,255,255,0.02);
+            border-left: 2px solid var(--blue);
+            padding: 1rem 1.2rem;
+        }
+        .demo-card h3 {
+            font-size: 0.75rem;
+            color: var(--dim);
+            text-transform: uppercase;
+            margin-bottom: 0.8rem;
+        }
+        .ip-display {
+            font-size: clamp(1.5rem, 5vw, 2.5rem);
+            font-weight: bold;
+            color: var(--blue);
+            text-shadow: 0 0 15px rgba(33,150,243,0.3);
+            margin: 1rem 0;
+            word-break: break-all;
+        }
+        .btn {
+            background: transparent;
+            border: 1px solid var(--dim);
+            color: var(--dim);
+            font-size: 0.75rem;
+            padding: 0.4rem 1rem;
+            cursor: pointer;
+            font-family: inherit;
+            transition: 0.2s;
+            border-radius: 4px;
+            margin-right: 0.4rem;
+            margin-bottom: 0.4rem;
+        }
         .btn:hover { border-color: var(--blue); color: var(--blue); }
         .btn.primary { background: rgba(33,150,243,0.15); border-color: var(--blue); color: var(--blue); }
-        .footer { text-align: center; color: var(--dim); font-size: 0.8rem; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border); }
+        .footer {
+            text-align: center;
+            color: var(--dim);
+            font-size: 0.8rem;
+            margin-top: 3rem;
+            padding-top: 2rem;
+            border-top: 1px solid var(--border);
+        }
         .footer a { color: var(--blue); text-decoration: none; }
-        @media (max-width: 600px) { .hero h1 { font-size: 1.5rem; } .container { padding: 1rem; } .feature-table { font-size: 0.75rem; } .feature-table th, .feature-table td { padding: 0.6rem; } }
+        @media (max-width: 600px) {
+            .hero h1 { font-size: 1.5rem; }
+            .container { padding: 1rem; }
+            .feature-table { font-size: 0.75rem; }
+            .feature-table th, .feature-table td { padding: 0.6rem; }
+        }
     </style>
 </head>
 <body>
     <div class="container">
+        <!-- 头部介绍 -->
         <div class="hero">
             <h1>⚡ CF-workers-netdiag</h1>
             <p>基于 Cloudflare Workers 的全能网络诊断工具，覆盖延迟、带宽、协议、安全等 20+ 项测试，一键部署，全球极速可用。</p>
@@ -49,6 +148,7 @@
             </div>
         </div>
 
+        <!-- 实时演示 -->
         <div class="section">
             <h2>🔍 实时网络检测（演示）</h2>
             <p style="color: var(--dim); margin-bottom: 1rem;">以下是你当前的网络基本信息：</p>
@@ -75,6 +175,7 @@
             </div>
         </div>
 
+        <!-- 功能详解 -->
         <div class="section">
             <h2>🖥️ 诊断面板功能详解</h2>
             <p style="color: var(--dim); margin-bottom: 2rem;">部署后直接访问 Worker 域名即可看到完整终端风格界面，所有测试通过点击按钮触发。</p>
@@ -131,7 +232,10 @@
             async function getIP(version) {
                 const urls = version === 4 ? ['https://api4.ipify.org', 'https://ipv4.icanhazip.com'] : ['https://api6.ipify.org', 'https://ipv6.icanhazip.com'];
                 for (const url of urls) {
-                    try { const res = await fetch(url, { signal: AbortSignal.timeout(2000) }); if (res.ok) return (await res.text()).trim(); } catch (e) {}
+                    try {
+                        const res = await fetch(url, { signal: AbortSignal.timeout(2000) });
+                        if (res.ok) return (await res.text()).trim();
+                    } catch (e) {}
                 }
                 return null;
             }
@@ -139,15 +243,20 @@
             document.getElementById('ipv4').textContent = ipv4 || '未获取到 IPv4';
             const ipv6 = await getIP(6);
             document.getElementById('ipv6').textContent = ipv6 ? `IPv6: ${ipv6}` : '';
+
             try {
                 const geoRes = await fetch('https://ipapi.co/json/', { signal: AbortSignal.timeout(3000) });
                 if (geoRes.ok) {
                     const geo = await geoRes.json();
                     document.getElementById('geo-info').innerHTML = `${geo.city}, ${geo.region}, ${geo.country_name}<br><span style="color: var(--dim); font-size: 0.8rem;">${geo.org || '未知运营商'}</span>`;
                 }
-            } catch (e) { document.getElementById('geo-info').textContent = '获取失败'; }
+            } catch (e) {
+                document.getElementById('geo-info').textContent = '获取失败';
+            }
+
             document.getElementById('proto').textContent = location.protocol === 'https:' ? 'HTTP/2' : 'HTTP/1.1';
             document.getElementById('tls-ver').textContent = location.protocol === 'https:' ? 'TLS 1.3' : '--';
+
             const rttData = [];
             const canvas = document.getElementById('rtt-chart');
             const ctx = canvas.getContext('2d');
@@ -161,12 +270,23 @@
                 ctx.lineWidth = 2;
                 const stepX = canvas.width / (rttData.length - 1);
                 const maxRtt = 300;
-                rttData.forEach((v, i) => { const x = i * stepX; const y = canvas.height - (Math.min(v, maxRtt) / maxRtt) * (canvas.height - 5); i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y); });
+                rttData.forEach((v, i) => {
+                    const x = i * stepX;
+                    const y = canvas.height - (Math.min(v, maxRtt) / maxRtt) * (canvas.height - 5);
+                    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+                });
                 ctx.stroke();
             }
             async function measureRtt() {
                 const start = performance.now();
-                try { await fetch(location.href + '?_=' + Date.now(), { method: 'HEAD', cache: 'no-store', signal: AbortSignal.timeout(2000) }); const rtt = Math.round(performance.now() - start); document.getElementById('rtt-val').textContent = rtt; rttData.push(rtt); if (rttData.length > 40) rttData.shift(); drawChart(); } catch (e) {}
+                try {
+                    await fetch(location.href + '?_=' + Date.now(), { method: 'HEAD', cache: 'no-store', signal: AbortSignal.timeout(2000) });
+                    const rtt = Math.round(performance.now() - start);
+                    document.getElementById('rtt-val').textContent = rtt;
+                    rttData.push(rtt);
+                    if (rttData.length > 40) rttData.shift();
+                    drawChart();
+                } catch (e) {}
                 setTimeout(measureRtt, 3000);
             }
             measureRtt();
