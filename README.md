@@ -5,9 +5,6 @@
 [![JavaScript](https://img.shields.io/badge/JavaScript-ES2020-yellow?style=flat-square&logo=javascript)](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript)
 
 > 一款部署在 Cloudflare Workers 上的专业级网络诊断工具，提供实时网络监控、性能测试和连接质量评估。
-
-![NetSight Pro 界面预览](https://via.placeholder.com/800x400?text=NetSight+Pro+Screenshot)
-
 ## ✨ 功能特性
 
 ### 📡 实时网络监控
