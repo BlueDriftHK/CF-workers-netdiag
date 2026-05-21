@@ -1,3 +1,9 @@
+// ============================================================
+// 网络诊断工具 - 蓝色主题精美UI版 Cloudflare Worker
+// 功能：网络延迟测试、带宽测速、丢包检测、WebSocket测试、
+//       CPU性能测试、并发测试、流式传输测试等
+// ============================================================
+
 addEventListener('fetch', event => {
   event.respondWith(handleRequest(event.request))
 })
@@ -6,13 +12,13 @@ async function handleRequest(request) {
   const url = new URL(request.url);
   const cache = caches.default;
   
-  // KV 缓存策略：静态资源缓存 7 天
+  // ==================== KV 缓存策略：静态资源缓存 7 天 ====================
   if (url.pathname.startsWith('/static/')) {
     const cacheKey = new Request(url.toString(), request);
     const cachedResponse = await cache.match(cacheKey);
     if (cachedResponse) return cachedResponse;
     
-    if (typeof CACHE_KV !== 'undefined') {
+    if (typeof CACHE_KV !== 'undefined' && CACHE_KV) {
       const kvValue = await CACHE_KV.get(url.pathname);
       if (kvValue) {
         const response = new Response(kvValue, {
@@ -24,9 +30,23 @@ async function handleRequest(request) {
     }
   }
 
-  // CPU 密集型测试端点
+  // ==================== 速度测试端点 ====================
+  if (url.pathname === '/speedtest') {
+    const size = parseInt(url.searchParams.get('size')) || 102400;
+    const data = new Uint8Array(size);
+    crypto.getRandomValues(data);
+    return new Response(data, {
+      headers: {
+        'content-type': 'application/octet-stream',
+        'cache-control': 'no-store',
+        'access-control-allow-origin': '*'
+      }
+    });
+  }
+
+  // ==================== CPU 密集型测试端点 ====================
   if (url.pathname === '/cpu-test') {
-    const iterations = parseInt(url.searchParams.get('n')) || 1000000;
+    const iterations = parseInt(url.searchParams.get('n')) || 500000;
     const start = Date.now();
     let result = 0;
     for (let i = 0; i < iterations; i++) {
@@ -39,15 +59,19 @@ async function handleRequest(request) {
       opsMs: Math.round(iterations / duration * 100) / 100,
       result: result.toString().substring(0, 8)
     }), {
-      headers: { 'content-type': 'application/json', 'cache-control': 'no-store' }
+      headers: { 
+        'content-type': 'application/json', 
+        'cache-control': 'no-store',
+        'access-control-allow-origin': '*'
+      }
     });
   }
 
-  // WebSocket 测试端点
+  // ==================== WebSocket 测试端点 ====================
   if (url.pathname === '/ws-test') {
     const upgradeHeader = request.headers.get('Upgrade');
     if (!upgradeHeader || upgradeHeader !== 'websocket') {
-      return new Response('WebSocket upgrade required', { status: 426 });
+      return new Response('需要 WebSocket 升级', { status: 426 });
     }
     
     const webSocketPair = new WebSocketPair();
@@ -55,13 +79,17 @@ async function handleRequest(request) {
     
     server.accept();
     server.addEventListener('message', event => {
-      const data = JSON.parse(event.data);
-      if (data.type === 'ping') {
-        server.send(JSON.stringify({ 
-          type: 'pong', 
-          timestamp: Date.now(),
-          serverTime: Date.now()
-        }));
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'ping') {
+          server.send(JSON.stringify({ 
+            type: 'pong', 
+            timestamp: Date.now(),
+            serverTime: Date.now()
+          }));
+        }
+      } catch (e) {
+        server.send(JSON.stringify({ type: 'error', message: '无效消息格式' }));
       }
     });
     
@@ -71,7 +99,7 @@ async function handleRequest(request) {
     });
   }
 
-  // HTTP/2 Server Push 检测端点
+  // ==================== HTTP/2 Server Push 检测端点 ====================
   if (url.pathname === '/push-test') {
     const headers = new Headers({
       'content-type': 'text/plain',
@@ -83,7 +111,7 @@ async function handleRequest(request) {
     return new Response(isPushed ? 'PUSHED' : 'MAIN', { headers });
   }
 
-  // 多文件并发下载测试
+  // ==================== 多文件并发下载测试 ====================
   if (url.pathname === '/concurrent-test') {
     const count = parseInt(url.searchParams.get('count')) || 4;
     const size = parseInt(url.searchParams.get('size')) || 1024;
@@ -107,14 +135,18 @@ async function handleRequest(request) {
     
     await Promise.all(promises);
     return new Response(JSON.stringify(results), {
-      headers: { 'content-type': 'application/json', 'cache-control': 'no-store' }
+      headers: { 
+        'content-type': 'application/json', 
+        'cache-control': 'no-store',
+        'access-control-allow-origin': '*'
+      }
     });
   }
 
-  // 大文件流式传输测试
+  // ==================== 大文件流式传输测试 ====================
   if (url.pathname === '/stream-test') {
-    const size = parseInt(url.searchParams.get('size')) || 1048576; // 1MB
-    const chunkSize = 65536; // 64KB chunks
+    const size = parseInt(url.searchParams.get('size')) || 1048576;
+    const chunkSize = 65536;
     
     const stream = new ReadableStream({
       start(controller) {
@@ -142,12 +174,13 @@ async function handleRequest(request) {
       headers: {
         'content-type': 'application/octet-stream',
         'cache-control': 'no-store',
-        'content-length': size.toString()
+        'content-length': size.toString(),
+        'access-control-allow-origin': '*'
       }
     });
   }
 
-  // 主诊断页面
+  // ==================== 主诊断页面 ====================
   const workerStart = Date.now();
   const cf = request.cf || {};
   
@@ -170,10 +203,10 @@ async function handleRequest(request) {
   const data = {
     colo: escapeForJS(cf.colo || 'NRT'),
     asn: escapeForJS(cf.asn || 'N/A'),
-    asOrg: escapeForJS(cf.asOrganization || 'Unknown ISP'),
-    city: escapeForJS(cf.city || 'Unknown'),
-    country: escapeForJS(cf.country || 'Unknown'),
-    region: escapeForJS(cf.region || 'Unknown'),
+    asOrg: escapeForJS(cf.asOrganization || '未知运营商'),
+    city: escapeForJS(cf.city || '未知'),
+    country: escapeForJS(cf.country || '未知'),
+    region: escapeForJS(cf.region || '未知'),
     lat: Math.abs(lat).toFixed(4),
     lon: Math.abs(lon).toFixed(4),
     latDir: escapeForJS(latDir),
@@ -194,9 +227,10 @@ async function handleRequest(request) {
   };
   
   const acceptLang = request.headers.get('accept-language') || '';
-  let defaultLang = 'en';
+  let defaultLang = 'zh-CN';
   if (acceptLang.match(/zh-(CN|SG|MY)/i)) defaultLang = 'zh-CN';
   else if (acceptLang.match(/zh/i)) defaultLang = 'zh-TW';
+  else if (acceptLang.match(/en/i)) defaultLang = 'en';
   
   const workerDuration = Date.now() - workerStart;
 
@@ -237,453 +271,961 @@ async function handleRequest(request) {
   };
   
   const html = `<!DOCTYPE html>
-<html>
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NETWORK DIAGNOSTICS MAX</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>NetSight Pro | 蓝色极速网络诊断</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        :root { --blue: #2196f3; --bg: #0a0b0d; --dim: #666; --red: #ff5252; --orange: #ffa726; --yellow: #ffd600; --card-bg: rgba(33,150,243,0.03); --purple: #7c4dff; }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { 
-            background: var(--bg); 
-            color: #fff; 
-            font-family: 'Consolas', 'Monaco', 'Courier New', monospace; 
-            display: flex; 
-            flex-direction: column; 
-            justify-content: center; 
-            align-items: center; 
-            min-height: 100vh; 
-            padding: 16px;
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
-        body::before { 
-            content: ""; 
-            position: fixed; 
-            top: 0; left: 0; 
-            width: 100%; height: 100%; 
-            background: linear-gradient(rgba(33,150,243,0.03) 1px, transparent 1px), 
-                        linear-gradient(90deg, rgba(33,150,243,0.03) 1px, transparent 1px); 
-            background-size: 30px 30px; 
-            z-index: -1; 
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #0a1628 0%, #0d1b2a 25%, #0f172a 50%, #1e1b4b 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #fff;
+            position: relative;
         }
-        .terminal { 
-            width: 100%; 
-            max-width: 1000px; 
-            background: rgba(16,18,22,0.98); 
-            border: 1px solid var(--blue); 
-            padding: 24px; 
-            box-shadow: 0 0 30px rgba(33,150,243,0.12); 
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: 
+                linear-gradient(rgba(56, 189, 248, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(56, 189, 248, 0.03) 1px, transparent 1px);
+            background-size: 40px 40px;
+            pointer-events: none;
+            z-index: 0;
         }
-        .top-bar {
+
+        body::after {
+            content: '';
+            position: fixed;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle at 30% 40%, rgba(56, 189, 248, 0.08) 0%, transparent 60%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            position: relative;
+            z-index: 1;
+        }
+
+        .glass {
+            background: rgba(15, 25, 45, 0.6);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(56, 189, 248, 0.2);
+            border-radius: 28px;
+        }
+
+        .header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 15px;
+            padding: 20px 30px;
+            margin-bottom: 30px;
             flex-wrap: wrap;
-            gap: 10px;
+            gap: 20px;
+            background: rgba(15, 25, 45, 0.5);
+            backdrop-filter: blur(12px);
+            border-radius: 28px;
+            border: 1px solid rgba(56, 189, 248, 0.15);
         }
-        .header { 
-            display: flex; 
-            justify-content: space-between; 
-            font-size: 11px; 
-            color: var(--blue); 
-            border-bottom: 1px solid var(--blue); 
-            padding-bottom: 10px; 
-            margin-bottom: 20px; 
-            flex-wrap: wrap;
-            gap: 10px;
-            width: 100%;
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 14px;
         }
-        .lang-switcher { 
-            display: flex; 
-            gap: 6px;
-            flex-shrink: 0;
+
+        .logo-icon {
+            width: 52px;
+            height: 52px;
+            background: linear-gradient(135deg, #2563eb, #38bdf8);
+            border-radius: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 26px;
+            box-shadow: 0 8px 20px rgba(37, 99, 235, 0.3);
         }
-        .lang-btn { 
-            background: rgba(255,255,255,0.05); 
-            border: 1px solid var(--dim); 
-            color: var(--dim); 
-            font-size: 10px; 
-            cursor: pointer; 
-            padding: 3px 8px; 
-            transition: 0.3s; 
-            font-family: inherit;
+
+        .logo h1 {
+            font-size: 26px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #fff, #38bdf8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
         }
-        .lang-btn.active { 
-            border-color: var(--blue); 
-            color: var(--blue); 
-            box-shadow: 0 0 5px var(--blue); 
+
+        .logo p {
+            font-size: 12px;
+            color: rgba(56, 189, 248, 0.6);
+            margin-top: 4px;
         }
-        .ip-section { margin-bottom: 15px; }
+
+        .lang-switcher {
+            display: flex;
+            gap: 8px;
+            background: rgba(56, 189, 248, 0.08);
+            padding: 6px;
+            border-radius: 40px;
+            border: 1px solid rgba(56, 189, 248, 0.15);
+        }
+
+        .lang-btn {
+            background: transparent;
+            border: none;
+            color: rgba(255,255,255,0.5);
+            padding: 8px 18px;
+            border-radius: 32px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+
+        .lang-btn.active {
+            background: linear-gradient(135deg, #2563eb, #38bdf8);
+            color: #fff;
+            box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3);
+        }
+
+        .lang-btn:hover {
+            color: #fff;
+        }
+
+        .ip-card {
+            background: linear-gradient(135deg, rgba(37, 99, 235, 0.15) 0%, rgba(56, 189, 248, 0.1) 100%);
+            border-radius: 32px;
+            padding: 30px;
+            margin-bottom: 30px;
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            box-shadow: 0 8px 32px rgba(37, 99, 235, 0.1);
+        }
+
         .ip-row {
             display: flex;
             align-items: baseline;
-            gap: 10px;
-            margin-bottom: 5px;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        .ip-label {
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: #38bdf8;
+            min-width: 55px;
+        }
+
+        .ip-val {
+            font-size: 28px;
+            font-weight: 700;
+            font-family: 'Monaco', 'Courier New', monospace;
+            background: linear-gradient(135deg, #fff, #38bdf8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            word-break: break-all;
+        }
+
+        .ip-val-small {
+            font-size: 18px;
+        }
+
+        .stats-row {
+            display: flex;
+            gap: 24px;
+            margin-top: 20px;
             flex-wrap: wrap;
         }
-        .ip-label {
-            color: var(--dim);
-            font-size: 10px;
-            text-transform: uppercase;
-            min-width: 45px;
+
+        .stat-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            padding: 6px 14px;
+            background: rgba(56, 189, 248, 0.08);
+            border-radius: 40px;
+            border: 1px solid rgba(56, 189, 248, 0.15);
         }
-        .ip-val { 
-            font-size: clamp(1.1rem, 4.5vw, 2rem); 
-            font-weight: bold; 
-            color: var(--blue); 
-            text-shadow: 0 0 10px rgba(33,150,243,0.3); 
-            word-break: break-all; 
+
+        .stat-item i {
+            color: #38bdf8;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+            gap: 24px;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background: rgba(15, 25, 45, 0.55);
+            backdrop-filter: blur(10px);
+            border-radius: 28px;
+            border: 1px solid rgba(56, 189, 248, 0.12);
+            overflow: hidden;
+            transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .card:hover {
+            transform: translateY(-6px);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+            border-color: rgba(56, 189, 248, 0.35);
+        }
+
+        .card-header {
+            padding: 20px 24px;
+            background: linear-gradient(135deg, rgba(37, 99, 235, 0.1) 0%, rgba(56, 189, 248, 0.05) 100%);
+            border-bottom: 1px solid rgba(56, 189, 248, 0.1);
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .card-header i {
+            font-size: 28px;
+            color: #38bdf8;
+        }
+
+        .card-header h3 {
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .card-header p {
+            font-size: 12px;
+            color: rgba(56, 189, 248, 0.6);
+            margin-top: 4px;
+        }
+
+        .card-body {
+            padding: 24px;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(56, 189, 248, 0.08);
+        }
+
+        .info-row:last-child {
+            border-bottom: none;
+        }
+
+        .info-label {
+            font-size: 13px;
+            color: rgba(255,255,255,0.55);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .info-label i {
+            font-size: 14px;
+            width: 20px;
+            color: #38bdf8;
+        }
+
+        .info-value {
+            font-size: 14px;
+            font-weight: 500;
+            font-family: 'Monaco', 'Courier New', monospace;
+        }
+
+        .badge {
+            padding: 4px 12px;
+            border-radius: 30px;
+            font-size: 11px;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .badge-success {
+            background: rgba(34, 197, 94, 0.15);
+            color: #4ade80;
+            border: 1px solid rgba(34, 197, 94, 0.3);
+        }
+
+        .badge-warning {
+            background: rgba(251, 146, 60, 0.15);
+            color: #fb923c;
+            border: 1px solid rgba(251, 146, 60, 0.3);
+        }
+
+        .badge-danger {
+            background: rgba(239, 68, 68, 0.15);
+            color: #f87171;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .badge-info {
+            background: rgba(56, 189, 248, 0.15);
+            color: #38bdf8;
+            border: 1px solid rgba(56, 189, 248, 0.3);
+        }
+
+        /* ========== 实时延迟监控卡片 - 拉长版 ========== */
+        .rtt-card {
+            grid-row: span 1;
+            min-height: 480px;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .rtt-card .card-body {
             flex: 1;
+            display: flex;
+            flex-direction: column;
         }
-        .label { 
-            color: var(--dim); 
-            font-size: 10px; 
-            text-transform: uppercase; 
-            margin-bottom: 6px; 
+
+        .rtt-display {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+            margin-bottom: 25px;
+        }
+
+        .rtt-box {
+            background: rgba(6, 182, 212, 0.1);
+            border-radius: 20px;
+            padding: 20px 12px;
+            text-align: center;
+            border: 1px solid rgba(56, 189, 248, 0.2);
+            transition: all 0.2s;
+        }
+
+        .rtt-box:hover {
+            background: rgba(6, 182, 212, 0.15);
+            border-color: rgba(56, 189, 248, 0.4);
+            transform: translateY(-2px);
+        }
+
+        .rtt-value {
+            font-size: 48px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #fff, #38bdf8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            line-height: 1.2;
+        }
+
+        .rtt-label {
+            font-size: 12px;
+            color: rgba(56, 189, 248, 0.7);
+            margin-top: 10px;
             letter-spacing: 0.5px;
         }
-        .grid { 
-            display: grid; 
-            grid-template-columns: 1fr 1.2fr; 
-            gap: 20px; 
-            border-top: 1px solid #222; 
-            padding-top: 20px; 
-        }
-        .item-box { 
-            background: var(--card-bg); 
-            padding: 12px; 
-            border-left: 2px solid var(--blue); 
-            margin-bottom: 12px; 
-            transition: all 0.3s;
-        }
-        .item-box:hover {
-            background: rgba(33,150,243,0.06);
-        }
-        .row { 
-            display: flex; 
-            justify-content: space-between; 
-            font-size: 11px; 
-            margin-bottom: 4px; 
-            border-bottom: 1px solid rgba(255,255,255,0.05); 
-            padding-bottom: 4px; 
-        }
+
         .chart-container {
+            background: rgba(0, 0, 0, 0.35);
+            border-radius: 20px;
+            padding: 20px;
+            margin: 20px 0;
+            border: 1px solid rgba(56, 189, 248, 0.15);
+        }
+
+        canvas {
             width: 100%;
-            height: 50px;
-            margin-top: 6px;
+            height: 160px;
         }
-        canvas { 
-            display: block;
-            width: 100% !important; 
-            height: 50px !important; 
-            background: rgba(33,150,243,0.02); 
+
+        /* 质量指标行 - 拉长版 */
+        .quality-row {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid rgba(56, 189, 248, 0.15);
         }
-        .blink { animation: b 1.5s infinite; }
-        @keyframes b { 50% { opacity: 0; } }
-        .footer {
-            margin-top: 24px; 
-            font-size: 9px; 
-            display: flex; 
-            justify-content: space-between; 
-            color: var(--blue); 
-            opacity: 0.6;
+
+        .quality-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 12px 16px;
+            border-radius: 16px;
+            transition: all 0.2s;
+        }
+
+        .quality-item:hover {
+            background: rgba(0, 0, 0, 0.45);
+        }
+
+        .quality-label {
+            font-size: 12px;
+            color: rgba(255,255,255,0.5);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .quality-label i {
+            font-size: 14px;
+            color: #38bdf8;
+        }
+
+        .quality-value {
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        /* 按钮组 */
+        .button-group {
+            display: flex;
             flex-wrap: wrap;
-            gap: 10px;
+            gap: 12px;
+            margin-bottom: 20px;
         }
-        .action-btn {
-            background: transparent;
-            border: 1px solid var(--dim);
-            color: var(--dim);
-            font-size: 9px;
-            padding: 5px 10px;
+
+        .btn {
+            padding: 10px 22px;
+            border-radius: 40px;
+            font-size: 13px;
+            font-weight: 500;
+            border: none;
             cursor: pointer;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
             font-family: inherit;
-            transition: 0.3s;
-            margin-right: 8px;
-            margin-bottom: 6px;
         }
-        .action-btn:hover {
-            border-color: var(--blue);
-            color: var(--blue);
+
+        .btn-primary {
+            background: linear-gradient(135deg, #2563eb, #38bdf8);
+            color: white;
+            box-shadow: 0 2px 10px rgba(37, 99, 235, 0.3);
         }
-        .action-btn.purple {
-            border-color: var(--purple);
-            color: var(--purple);
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(37, 99, 235, 0.4);
         }
-        .action-btn.purple:hover {
-            background: rgba(124,77,255,0.1);
+
+        .btn-outline {
+            background: transparent;
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            color: rgba(255,255,255,0.8);
         }
-        .result-text {
-            margin-top: 5px;
-            font-size: 10px;
-            color: var(--dim);
+
+        .btn-outline:hover {
+            border-color: #38bdf8;
+            color: #38bdf8;
+            background: rgba(56, 189, 248, 0.05);
         }
+
+        .btn-cyan {
+            background: linear-gradient(135deg, #0891b2, #06b6d4);
+            color: white;
+        }
+
+        .btn-cyan:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(6, 182, 212, 0.3);
+        }
+
+        .result-area {
+            margin-top: 16px;
+            padding: 14px 16px;
+            background: rgba(0, 0, 0, 0.25);
+            border-radius: 16px;
+            font-size: 12px;
+            border-left: 3px solid #38bdf8;
+            transition: all 0.3s ease;
+            display: none;
+        }
+
         .speed-result {
             display: flex;
-            gap: 15px;
             flex-wrap: wrap;
-            margin-top: 8px;
+            gap: 12px;
+            margin-top: 12px;
         }
+
         .speed-item {
-            background: var(--card-bg);
-            padding: 8px 12px;
-            border-left: 2px solid var(--blue);
-            font-size: 10px;
+            background: linear-gradient(135deg, rgba(37, 99, 235, 0.1), rgba(56, 189, 248, 0.05));
+            border-radius: 14px;
+            padding: 10px 16px;
+            font-size: 12px;
+            border-left: 3px solid #38bdf8;
         }
+
         .perf-badge {
             display: inline-block;
-            padding: 2px 6px;
-            border-radius: 3px;
-            font-size: 9px;
-            margin-left: 5px;
+            padding: 2px 10px;
+            border-radius: 20px;
+            font-size: 10px;
+            margin-left: 8px;
         }
-        .perf-badge.good { background: rgba(76,175,80,0.2); color: #66bb6a; }
-        .perf-badge.warn { background: rgba(255,167,38,0.2); color: var(--orange); }
-        .perf-badge.bad { background: rgba(255,82,82,0.2); color: var(--red); }
-        @media (max-width: 600px) { 
-            .grid { grid-template-columns: 1fr; gap: 15px; } 
-            .terminal { padding: 16px; }
-            .top-bar { flex-direction: column; align-items: flex-start; }
-            .header { margin-top: 0; }
+
+        .footer {
+            margin-top: 30px;
+            padding: 20px 30px;
+            text-align: center;
+            font-size: 12px;
+            color: rgba(56, 189, 248, 0.4);
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 15px;
+            background: rgba(15, 25, 45, 0.4);
+            backdrop-filter: blur(10px);
+            border-radius: 28px;
+            border: 1px solid rgba(56, 189, 248, 0.1);
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.1); }
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        .live-dot {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #38bdf8;
+            animation: pulse 1.5s infinite;
+            margin-right: 8px;
+            box-shadow: 0 0 8px #38bdf8;
+        }
+
+        .fa-spinner {
+            animation: spin 1s linear infinite;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(56, 189, 248, 0.3);
+            border-top-color: #38bdf8;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-right: 8px;
+        }
+
+        @media (max-width: 768px) {
+            body { padding: 12px; }
+            .grid { grid-template-columns: 1fr; }
+            .ip-val { font-size: 18px; }
+            .header { flex-direction: column; text-align: center; }
+            .button-group { justify-content: center; }
+            .rtt-value { font-size: 36px; }
+            .rtt-display { gap: 12px; }
+            .quality-row { grid-template-columns: 1fr; gap: 10px; }
+            .quality-item { padding: 10px 14px; }
+        }
+
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(56, 189, 248, 0.05);
+            border-radius: 10px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(56, 189, 248, 0.4);
+            border-radius: 10px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(56, 189, 248, 0.6);
         }
     </style>
 </head>
 <body>
-    <div class="terminal">
-        <div class="top-bar">
+    <div class="container">
+        <div class="header">
+            <div class="logo">
+                <div class="logo-icon">
+                    <i class="fas fa-chart-network"></i>
+                </div>
+                <div>
+                    <h1>NetSight Pro</h1>
+                    <p><i class="fas fa-bolt"></i> 蓝色极速 · 实时网络诊断</p>
+                </div>
+            </div>
             <div class="lang-switcher">
                 <button class="lang-btn" data-lang="en" onclick="setLang('en')">EN</button>
                 <button class="lang-btn" data-lang="zh-CN" onclick="setLang('zh-CN')">简体</button>
                 <button class="lang-btn" data-lang="zh-TW" onclick="setLang('zh-TW')">繁體</button>
             </div>
         </div>
-        <div class="header">
-            <span id="t-status">⚡ MAX PERFORMANCE MODE</span>
-            <span>NODE: ${data.colo}</span>
-        </div>
-        <div class="ip-section">
+
+        <div class="ip-card">
             <div class="ip-row">
-                <span class="ip-label">IPv4:</span>
-                <span id="v4" class="ip-val">Detecting...</span>
+                <span class="ip-label"><i class="fas fa-globe"></i> IPv4</span>
+                <span id="v4" class="ip-val">检测中...</span>
             </div>
             <div class="ip-row">
-                <span class="ip-label">IPv6:</span>
-                <span id="v6" class="ip-val ip-val-small" style="font-size: 1rem; color: var(--dim);">Detecting...</span>
+                <span class="ip-label"><i class="fas fa-globe"></i> IPv6</span>
+                <span id="v6" class="ip-val ip-val-small">检测中...</span>
+            </div>
+            <div class="stats-row">
+                <div class="stat-item"><i class="fas fa-map-marker-alt"></i> 边缘节点: <strong id="colo-display">${data.colo}</strong></div>
+                <div class="stat-item"><i class="far fa-clock"></i> Worker 耗时: <strong>${workerDuration}ms</strong></div>
+                <div class="stat-item"><span class="live-dot"></span> <span id="t-live">实时监控</span></div>
             </div>
         </div>
+
         <div class="grid">
-            <div class="col">
-                <div class="label" id="t-sec">SECURITY & PROTOCOL</div>
-                <div class="item-box">
-                    <div class="row"><span id="t-dc-label">DC / PROXY</span><span id="s-dc">---</span></div>
-                    <div class="row"><span id="t-risk">RISK LEVEL</span><span id="s-risk">---</span></div>
-                    <div class="row"><span id="t-asn-label">ASN</span><span>${data.asn}</span></div>
-                    <div class="row"><span id="t-proto-label">PROTOCOL</span><span id="proto-val">${data.proto}</span></div>
-                    <div class="row"><span id="t-tls-label">TLS</span><span>${data.tlsVersion}</span></div>
-                    <div class="row"><span id="t-cipher-label">CIPHER</span><span style="font-size:9px;">${data.tlsCipher}</span></div>
-                    <div class="row"><span id="t-ech-label">ECH</span><span id="ech-val">---</span></div>
-                    <div class="row"><span id="t-compress-label">COMPRESSION</span><span id="compress-val">---</span></div>
-                    <div class="row"><span id="t-push-label">H2 PUSH</span><span id="push-val">---</span></div>
-                    <div class="row"><span id="t-bot-label">BOT SCORE</span><span id="bot-score-val">${data.botScore}</span></div>
-                    <div class="row"><span id="t-worker">WORKER TIME</span><span>${workerDuration}ms</span></div>
+            <div class="card">
+                <div class="card-header">
+                    <i class="fas fa-shield-haltered"></i>
+                    <div>
+                        <h3 id="t-sec">安全与协议</h3>
+                        <p>连接安全状态 · TLS/SSL</p>
+                    </div>
                 </div>
-                
-                <div class="label" id="t-geo">LOCATION / ISP</div>
-                <div class="item-box" style="font-size: 12px;">
-                    ${data.city}, ${data.region}, ${data.country}<br>
-                    <span style="color: var(--dim); font-size: 10px;">${data.lat}°${data.latDir} / ${data.lon}°${data.lonDir}</span><br>
-                    <span style="color: var(--dim); font-size: 10px;">${data.asOrg}</span>
-                </div>
-
-                <div class="label" style="margin-top:15px" id="t-user-geo">USER IP LOCATION</div>
-                <div class="item-box" style="font-size: 12px;" id="user-geo-info">
-                    <span style="color: var(--dim);">Fetching...</span>
+                <div class="card-body">
+                    <div class="info-row">
+                        <span class="info-label"><i class="fas fa-server"></i> <span id="t-dc-label">数据中心/代理</span></span>
+                        <span class="info-value" id="s-dc">---</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label"><i class="fas fa-chart-simple"></i> <span id="t-risk">风险等级</span></span>
+                        <span class="info-value" id="s-risk">---</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label"><i class="fas fa-network-wired"></i> ASN</span>
+                        <span class="info-value">${data.asn}</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label"><i class="fas fa-exchange-alt"></i> <span id="t-proto-label">协议</span></span>
+                        <span class="info-value" id="proto-val">${data.proto}</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label"><i class="fas fa-lock"></i> TLS 版本</span>
+                        <span class="info-value"><span class="badge badge-info">${data.tlsVersion}</span></span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label"><i class="fas fa-key"></i> <span id="t-cipher-label">加密套件</span></span>
+                        <span class="info-value" style="font-size: 11px; font-family: monospace;">${data.tlsCipher}</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label"><i class="fas fa-eye"></i> ECH</span>
+                        <span class="info-value" id="ech-val">---</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label"><i class="fas fa-compress-alt"></i> <span id="t-compress-label">压缩算法</span></span>
+                        <span class="info-value" id="compress-val">---</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label"><i class="fas fa-rocket"></i> <span id="t-push-label">H2 推送</span></span>
+                        <span class="info-value" id="push-val">---</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label"><i class="fas fa-robot"></i> <span id="t-bot-label">机器人评分</span></span>
+                        <span class="info-value" id="bot-score-val">${data.botScore}</span>
+                    </div>
                 </div>
             </div>
-            
-            <div class="col">
-                <div class="label" style="display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;">
-                    <span id="t-rtt">LOCAL RTT</span>
-                    <span id="rtt-num">--</span>ms
-                    <span style="margin-left: 8px; color: var(--dim);" id="t-jitter">JITTER</span>
-                    <span id="jitter-val">--</span>
-                </div>
-                <div class="chart-container">
-                    <canvas id="chart"></canvas>
-                </div>
-                
-                <div style="margin-top: 10px; display: flex; flex-wrap: wrap; gap: 8px;">
-                    <button class="action-btn" id="btn-loss-test"><span id="t-loss-btn">PACKET LOSS</span></button>
-                    <button class="action-btn" id="btn-speed-test"><span id="t-speed-btn">BANDWIDTH</span></button>
-                    <button class="action-btn" id="btn-dns-test"><span id="t-dns-btn">DNS</span></button>
-                    <button class="action-btn purple" id="btn-cpu-test"><span id="t-cpu-btn">CPU</span></button>
-                    <button class="action-btn purple" id="btn-ws-test"><span id="t-ws-btn">WS</span></button>
-                    <button class="action-btn purple" id="btn-concurrent-test"><span id="t-concurrent-btn">CONCURRENT</span></button>
-                    <button class="action-btn purple" id="btn-stream-test"><span id="t-stream-btn">STREAM</span></button>
-                </div>
-                <div id="loss-result" class="result-text"></div>
-                <div id="speed-result" class="speed-result"></div>
-                <div id="dns-result" class="result-text"></div>
-                <div id="cpu-result" class="result-text"></div>
-                <div id="ws-result" class="result-text"></div>
-                <div id="concurrent-result" class="result-text"></div>
-                <div id="stream-result" class="result-text"></div>
 
-                <div class="label" style="margin-top:15px" id="t-hw">HARDWARE INFO</div>
-                <div id="hw-info" style="font-size: 10px; color: var(--dim); border-left: 2px solid var(--dim); padding-left: 10px;">Loading...</div>
+            <div class="card">
+                <div class="card-header">
+                    <i class="fas fa-map-pin"></i>
+                    <div>
+                        <h3 id="t-geo">边缘节点位置</h3>
+                        <p>Cloudflare 数据中心</p>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="info-row">
+                        <span class="info-label"><i class="fas fa-location-dot"></i> 位置</span>
+                        <span class="info-value">${data.city}, ${data.region}, ${data.country}</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label"><i class="fas fa-crosshairs"></i> 坐标</span>
+                        <span class="info-value">${data.lat}°${data.latDir} / ${data.lon}°${data.lonDir}</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label"><i class="fas fa-building"></i> 运营商</span>
+                        <span class="info-value" style="font-size: 12px;">${data.asOrg}</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <i class="fas fa-user-secret"></i>
+                    <div>
+                        <h3 id="t-user-geo">真实 IP 位置</h3>
+                        <p>客户端地理位置</p>
+                    </div>
+                </div>
+                <div class="card-body" id="user-geo-info">
+                    <div style="text-align: center; padding: 20px;">
+                        <i class="fas fa-spinner fa-spin"></i> 获取中...
+                    </div>
+                </div>
+            </div>
+
+            <!-- ========== 实时延迟监控卡片 - 拉长版 ========== -->
+            <div class="card rtt-card">
+                <div class="card-header">
+                    <i class="fas fa-waveform"></i>
+                    <div>
+                        <h3 id="t-rtt">实时延迟监控</h3>
+                        <p>往返时延 · 网络抖动 · 实时图表</p>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="rtt-display">
+                        <div class="rtt-box">
+                            <div class="rtt-value" id="rtt-num">--</div>
+                            <div class="rtt-label"><i class="fas fa-arrow-right"></i> 当前 RTT (ms)</div>
+                        </div>
+                        <div class="rtt-box">
+                            <div class="rtt-value" id="jitter-val">--</div>
+                            <div class="rtt-label"><i class="fas fa-chart-line"></i> <span id="t-jitter">抖动</span> (ms)</div>
+                        </div>
+                    </div>
+                    
+                    <div class="chart-container">
+                        <canvas id="chart"></canvas>
+                    </div>
+                    
+                    <div class="quality-row">
+                        <div class="quality-item">
+                            <span class="quality-label"><i class="fas fa-signal"></i> 连接质量</span>
+                            <span class="quality-value" id="quality-badge" style="color: #f87171;">较差</span>
+                        </div>
+                        <div class="quality-item">
+                            <span class="quality-label"><i class="fas fa-chart-simple"></i> 网络稳定性</span>
+                            <span class="quality-value" id="stability-badge" style="color: #f87171;">极不稳定</span>
+                        </div>
+                        <div class="quality-item">
+                            <span class="quality-label"><i class="fas fa-chart-bar"></i> 样本数量</span>
+                            <span class="quality-value" id="sample-count" style="font-family: monospace;">0</span>
+                        </div>
+                        <div class="quality-item">
+                            <span class="quality-label"><i class="fas fa-exchange-alt"></i> 丢包率</span>
+                            <span class="quality-value" id="loss-rate" style="color: #4ade80;">0%</span>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
+
+        <div class="card" style="margin-bottom: 24px;">
+            <div class="card-header">
+                <i class="fas fa-flask"></i>
+                <div>
+                    <h3>诊断工具集</h3>
+                    <p>一键测试 · 全面诊断</p>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="button-group">
+                    <button class="btn btn-outline" id="btn-loss-test"><i class="fas fa-tachometer-alt"></i> <span id="t-loss-btn">丢包率</span></button>
+                    <button class="btn btn-primary" id="btn-speed-test"><i class="fas fa-gauge-high"></i> <span id="t-speed-btn">带宽测速</span></button>
+                    <button class="btn btn-outline" id="btn-dns-test"><i class="fas fa-server"></i> <span id="t-dns-btn">DNS 解析</span></button>
+                    <button class="btn btn-cyan" id="btn-cpu-test"><i class="fas fa-microchip"></i> <span id="t-cpu-btn">CPU 性能</span></button>
+                    <button class="btn btn-cyan" id="btn-ws-test"><i class="fas fa-bolt"></i> <span id="t-ws-btn">WebSocket</span></button>
+                    <button class="btn btn-cyan" id="btn-concurrent-test"><i class="fas fa-layer-group"></i> <span id="t-concurrent-btn">并发测试</span></button>
+                    <button class="btn btn-cyan" id="btn-stream-test"><i class="fas fa-stream"></i> <span id="t-stream-btn">流式传输</span></button>
+                </div>
+
+                <div id="loss-result" class="result-area" style="display: none;"></div>
+                <div id="speed-result" class="result-area" style="display: none;"></div>
+                <div id="dns-result" class="result-area" style="display: none;"></div>
+                <div id="cpu-result" class="result-area" style="display: none;"></div>
+                <div id="ws-result" class="result-area" style="display: none;"></div>
+                <div id="concurrent-result" class="result-area" style="display: none;"></div>
+                <div id="stream-result" class="result-area" style="display: none;"></div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <i class="fas fa-desktop"></i>
+                <div>
+                    <h3 id="t-hw">硬件信息</h3>
+                    <p>客户端环境</p>
+                </div>
+            </div>
+            <div class="card-body">
+                <div id="hw-info" style="font-family: monospace; font-size: 13px; color: rgba(255,255,255,0.7);">
+                    加载中...
+                </div>
+            </div>
+        </div>
+
         <div class="footer">
-            <span>RAY: ${data.rayId} | IP: ${data.clientIp}</span>
-            <span style="display: flex; gap: 15px; align-items: center;">
-                <button class="action-btn" id="copy-report" style="font-size: 9px;">
-                    <span id="t-copy">COPY REPORT</span>
-                </button>
-                <span><span class="blink">●</span> <span id="t-live">LIVE_TRACE</span></span>
-            </span>
+            <span><i class="fas fa-fingerprint"></i> RAY ID: ${data.rayId}</span>
+            <span><i class="fas fa-ip"></i> 客户端: ${data.clientIp}</span>
+            <button class="btn" id="copy-report" style="background: rgba(56, 189, 248, 0.1); padding: 6px 14px; border-radius: 30px;">
+                <i class="fas fa-copy"></i> <span id="t-copy">复制报告</span>
+            </button>
         </div>
     </div>
+
     <script>
         (function(){
             const i18n = {
                 'en': { 
-                    status: '⚡ MAX PERFORMANCE MODE',
-                    geo: 'LOCATION / ISP',
-                    rtt: 'LOCAL RTT',
-                    live: 'LIVE_TRACE',
-                    sec: 'SECURITY & PROTOCOL',
-                    hw: 'HARDWARE INFO',
-                    risk: 'RISK LEVEL',
-                    clean: 'LOW RISK',
-                    high: 'HIGH RISK',
+                    sec: 'Security & Protocol',
+                    geo: 'Edge Location',
+                    userGeo: 'Client Location',
+                    rtt: 'Real-time RTT',
+                    hw: 'Hardware Info',
+                    live: 'Live Monitoring',
+                    risk: 'Risk Level',
+                    clean: 'Low Risk',
+                    high: 'High Risk',
                     yes: 'YES',
                     no: 'NO',
                     unavailable: 'Unavailable',
-                    worker: 'WORKER TIME',
-                    copy: 'COPY REPORT',
-                    copied: 'COPIED!',
-                    dcLabel: 'DC / PROXY',
-                    asnLabel: 'ASN',
-                    protoLabel: 'PROTOCOL',
-                    tlsLabel: 'TLS',
-                    cipherLabel: 'CIPHER',
+                    copy: 'Copy Report',
+                    copied: 'Copied!',
+                    dcLabel: 'DC / Proxy',
+                    protoLabel: 'Protocol',
                     echLabel: 'ECH',
-                    echEnabled: 'ENABLED',
-                    echDisabled: 'DISABLED',
-                    botLabel: 'BOT SCORE',
-                    lossBtn: 'PACKET LOSS',
-                    speedBtn: 'BANDWIDTH',
+                    echEnabled: 'Enabled',
+                    echDisabled: 'Disabled',
+                    botLabel: 'Bot Score',
+                    lossBtn: 'Packet Loss',
+                    speedBtn: 'Bandwidth',
                     dnsBtn: 'DNS',
                     cpuBtn: 'CPU',
-                    wsBtn: 'WS',
-                    concurrentBtn: 'CONCURRENT',
-                    streamBtn: 'STREAM',
+                    wsBtn: 'WebSocket',
+                    concurrentBtn: 'Concurrent',
+                    streamBtn: 'Stream',
                     lossTesting: 'Testing...',
                     lossNone: '0% (no loss)',
-                    jitter: 'JITTER',
-                    userGeo: 'USER IP LOCATION',
-                    reportTitle: 'NETWORK DIAGNOSTICS MAX REPORT',
+                    jitter: 'Jitter',
                     dnsTesting: 'Testing DNS...',
                     speedTesting: 'Testing bandwidth...',
                     cpuTesting: 'CPU benchmark...',
                     wsTesting: 'WebSocket latency...',
                     concurrentTesting: 'Concurrency test...',
                     streamTesting: 'Stream throughput...',
-                    compressLabel: 'COMPRESSION',
-                    pushLabel: 'H2 PUSH'
+                    compressLabel: 'Compression',
+                    pushLabel: 'H2 Push',
+                    lossResult: 'Loss'
                 },
                 'zh-CN': { 
-                    status: '⚡ 性能极限模式',
-                    geo: '地理位置 / 运营商',
-                    rtt: '本地往返时延',
-                    live: '实时追踪中',
-                    sec: '安全及协议',
-                    hw: '硬件摘要',
-                    risk: '风控评级',
+                    sec: '安全与协议',
+                    geo: '边缘节点位置',
+                    userGeo: '真实 IP 位置',
+                    rtt: '实时延迟监控',
+                    hw: '硬件信息',
+                    live: '实时监控',
+                    risk: '风险等级',
                     clean: '低风险',
                     high: '高风险',
                     yes: '是',
                     no: '否',
                     unavailable: '获取失败',
-                    worker: 'Worker 耗时',
                     copy: '复制报告',
                     copied: '已复制!',
                     dcLabel: '数据中心/代理',
-                    asnLabel: 'ASN',
                     protoLabel: '协议',
-                    tlsLabel: 'TLS',
-                    cipherLabel: '加密套件',
                     echLabel: 'ECH',
                     echEnabled: '已启用',
                     echDisabled: '未启用',
                     botLabel: '机器人评分',
                     lossBtn: '丢包率',
-                    speedBtn: '带宽',
-                    dnsBtn: 'DNS',
-                    cpuBtn: 'CPU',
-                    wsBtn: 'WS',
-                    concurrentBtn: '并发',
-                    streamBtn: '流性能',
+                    speedBtn: '带宽测速',
+                    dnsBtn: 'DNS 解析',
+                    cpuBtn: 'CPU 性能',
+                    wsBtn: 'WebSocket',
+                    concurrentBtn: '并发测试',
+                    streamBtn: '流式传输',
                     lossTesting: '测试中...',
                     lossNone: '0% (无丢包)',
                     jitter: '抖动',
-                    userGeo: '真实IP位置',
-                    reportTitle: '网络诊断极限版报告',
                     dnsTesting: '正在测试 DNS...',
                     speedTesting: '正在测速...',
                     cpuTesting: 'CPU 基准测试...',
-                    wsTesting: 'WebSocket 延迟...',
-                    concurrentTesting: '并发测试...',
-                    streamTesting: '流式吞吐量...',
+                    wsTesting: 'WebSocket 延迟测试...',
+                    concurrentTesting: '并发测试中...',
+                    streamTesting: '流式吞吐量测试...',
                     compressLabel: '压缩算法',
-                    pushLabel: 'H2 推送'
+                    pushLabel: 'H2 推送',
+                    lossResult: '丢包率'
                 },
                 'zh-TW': { 
-                    status: '⚡ 效能極限模式',
-                    geo: '地理位置 / 運營商',
-                    rtt: '本地往返時延',
-                    live: '實時追蹤中',
-                    sec: '安全及協議',
-                    hw: '硬體摘要',
-                    risk: '風控評級',
+                    sec: '安全與協議',
+                    geo: '邊緣節點位置',
+                    userGeo: '真實 IP 位置',
+                    rtt: '即時延遲監控',
+                    hw: '硬體資訊',
+                    live: '即時監控',
+                    risk: '風險等級',
                     clean: '低風險',
                     high: '高風險',
                     yes: '是',
                     no: '否',
                     unavailable: '獲取失敗',
-                    worker: 'Worker 耗時',
                     copy: '複製報告',
                     copied: '已複製!',
                     dcLabel: '資料中心/代理',
-                    asnLabel: 'ASN',
-                    protoLabel: '協定',
-                    tlsLabel: 'TLS',
-                    cipherLabel: '加密套件',
+                    protoLabel: '協議',
                     echLabel: 'ECH',
                     echEnabled: '已啟用',
                     echDisabled: '未啟用',
                     botLabel: '機器人評分',
                     lossBtn: '丟包率',
-                    speedBtn: '頻寬',
-                    dnsBtn: 'DNS',
-                    cpuBtn: 'CPU',
-                    wsBtn: 'WS',
-                    concurrentBtn: '併發',
-                    streamBtn: '串流效能',
+                    speedBtn: '頻寬測速',
+                    dnsBtn: 'DNS 解析',
+                    cpuBtn: 'CPU 性能',
+                    wsBtn: 'WebSocket',
+                    concurrentBtn: '併發測試',
+                    streamBtn: '串流傳輸',
                     lossTesting: '測試中...',
                     lossNone: '0% (無丟包)',
                     jitter: '抖動',
-                    userGeo: '真實IP位置',
-                    reportTitle: '網路診斷極限版報告',
                     dnsTesting: '正在測試 DNS...',
                     speedTesting: '正在測速...',
                     cpuTesting: 'CPU 基準測試...',
-                    wsTesting: 'WebSocket 延遲...',
-                    concurrentTesting: '併發測試...',
-                    streamTesting: '串流吞吐量...',
+                    wsTesting: 'WebSocket 延遲測試...',
+                    concurrentTesting: '併發測試中...',
+                    streamTesting: '串流吞吐量測試...',
                     compressLabel: '壓縮演算法',
-                    pushLabel: 'H2 推送'
+                    pushLabel: 'H2 推送',
+                    lossResult: '丟包率'
                 }
             };
             
@@ -719,7 +1261,6 @@ async function handleRequest(request) {
                 realGeoIp: "${realGeoJS.ip}"
             };
             
-            // ... [之前的 elements 对象保持不变，新增以下元素]
             const elements = {
                 v4: document.getElementById('v4'),
                 v6: document.getElementById('v6'),
@@ -755,13 +1296,13 @@ async function handleRequest(request) {
             
             let currentLang = localStorage.getItem('pref-lang') || '${defaultLang}';
             const rttData = [];
-            const MAX_RTT_POINTS = 40;
+            const MAX_RTT_POINTS = 30;
             const jitterHistory = [];
             const MAX_JITTER_HISTORY = 10;
             let geoRetryCount = 0;
             const MAX_GEO_RETRY = 5;
-            
-            // ... [isDataCenter, fetchWithTimeout, updateUI 等函数保持不变]
+            let consecutiveLoss = 0;
+            let sampleCount = 0;
             
             function isDataCenter() {
                 const patterns = /data center|hosting|cloud|akamai|google|amazon|microsoft|aliyun|tencent|fastly|cloudflare|incapsula|leaseweb|ovh|digitalocean|vultr|linode/i;
@@ -775,27 +1316,54 @@ async function handleRequest(request) {
                     .finally(() => clearTimeout(id));
             }
             
+            function calculateDistance(lat1, lon1, lat2, lon2) {
+                const R = 6371;
+                const dLat = (lat2 - lat1) * Math.PI / 180;
+                const dLon = (lon2 - lon1) * Math.PI / 180;
+                const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                          Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                          Math.sin(dLon/2) * Math.sin(dLon/2);
+                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+                return Math.round(R * c);
+            }
+            
+            function showResult(element, html, isError = false) {
+                if (element) {
+                    element.style.display = 'block';
+                    element.innerHTML = html;
+                    element.style.background = isError ? 'rgba(239,68,68,0.1)' : 'rgba(0,0,0,0.25)';
+                    element.style.borderLeftColor = isError ? '#f87171' : '#38bdf8';
+                    setTimeout(() => {
+                        if (element.innerHTML === html) {
+                            element.style.opacity = '0.5';
+                            setTimeout(() => {
+                                if (element.innerHTML === html) {
+                                    element.style.display = 'none';
+                                    element.style.opacity = '1';
+                                }
+                            }, 3000);
+                        }
+                    }, 5000);
+                }
+            }
+            
             function updateUI() {
                 const t = i18n[currentLang];
                 const textIds = {
-                    't-status': t.status,
-                    't-geo': t.geo,
                     't-sec': t.sec,
+                    't-geo': t.geo,
+                    't-user-geo': t.userGeo,
                     't-rtt': t.rtt,
                     't-hw': t.hw,
                     't-live': t.live,
                     't-risk': t.risk,
-                    't-worker': t.worker,
                     't-copy': t.copy,
                     't-dc-label': t.dcLabel,
-                    't-asn-label': t.asnLabel,
                     't-proto-label': t.protoLabel,
-                    't-tls-label': t.tlsLabel,
                     't-cipher-label': t.cipherLabel,
                     't-ech-label': t.echLabel,
                     't-bot-label': t.botLabel,
                     't-jitter': t.jitter,
-                    't-user-geo': t.userGeo,
                     't-loss-btn': t.lossBtn,
                     't-speed-btn': t.speedBtn,
                     't-dns-btn': t.dnsBtn,
@@ -818,57 +1386,45 @@ async function handleRequest(request) {
                 
                 const dc = isDataCenter();
                 if (elements.sDc) {
-                    elements.sDc.textContent = dc ? t.yes : t.no;
-                    elements.sDc.style.color = dc ? 'var(--red)' : 'var(--blue)';
+                    elements.sDc.innerHTML = dc ? '<span class="badge badge-danger">' + t.yes + '</span>' : '<span class="badge badge-success">' + t.no + '</span>';
                 }
                 if (elements.sRisk) {
-                    elements.sRisk.textContent = dc ? t.high : t.clean;
-                    elements.sRisk.style.color = dc ? 'var(--red)' : 'var(--blue)';
+                    elements.sRisk.innerHTML = dc ? '<span class="badge badge-danger">' + t.high + '</span>' : '<span class="badge badge-success">' + t.clean + '</span>';
                 }
 
                 if (elements.protoVal) {
                     const rawProto = BACKEND_DATA.httpProtocolRaw;
                     let displayText = rawProto;
                     if (rawProto.toUpperCase().includes('HTTP/3')) {
-                        displayText += ' ⚡ QUIC';
-                        elements.protoVal.style.color = 'var(--blue)';
-                        elements.protoVal.style.fontWeight = 'bold';
-                    } else {
-                        elements.protoVal.style.color = '';
-                        elements.protoVal.style.fontWeight = '';
+                        displayText += ' <span class="badge badge-info">QUIC</span>';
                     }
-                    elements.protoVal.textContent = displayText;
+                    elements.protoVal.innerHTML = displayText;
                 }
 
                 if (elements.echVal) {
                     const helloLen = BACKEND_DATA.tlsClientHelloLength;
                     if (helloLen > 0) {
-                        elements.echVal.textContent = t.echEnabled + ' (len:' + helloLen + ')';
-                        elements.echVal.style.color = 'var(--blue)';
+                        elements.echVal.innerHTML = '<span class="badge badge-success">' + t.echEnabled + '</span>';
                     } else {
-                        elements.echVal.textContent = t.echDisabled;
-                        elements.echVal.style.color = 'var(--red)';
+                        elements.echVal.innerHTML = '<span class="badge badge-danger">' + t.echDisabled + '</span>';
                     }
                 }
 
                 if (elements.compressVal) {
                     const parts = [];
-                    if (BACKEND_DATA.compressionBrotli) parts.push('br ✓');
-                    if (BACKEND_DATA.compressionGzip) parts.push('gzip ✓');
-                    if (parts.length === 0) parts.push('none');
-                    elements.compressVal.textContent = parts.join(', ');
-                    elements.compressVal.style.color = parts.length > 0 ? 'var(--blue)' : 'var(--red)';
+                    if (BACKEND_DATA.compressionBrotli) parts.push('<span class="badge badge-info">br</span>');
+                    if (BACKEND_DATA.compressionGzip) parts.push('<span class="badge badge-info">gzip</span>');
+                    if (parts.length === 0) parts.push('<span class="badge">none</span>');
+                    elements.compressVal.innerHTML = parts.join(' ');
                 }
 
                 if (elements.botScoreVal) {
                     const score = parseInt(BACKEND_DATA.botScore, 10);
-                    let levelText = '';
-                    let color = '';
-                    if (score >= 100) { levelText = ' 👤 HUMAN'; color = 'var(--blue)'; }
-                    else if (score >= 80) { levelText = ' ✓ LOW'; color = 'var(--yellow)'; }
-                    else if (score >= 30) { levelText = ' ⚠ MEDIUM'; color = 'var(--orange)'; }
-                    else { levelText = ' ❌ HIGH'; color = 'var(--red)'; }
-                    elements.botScoreVal.innerHTML = score + '<span style="color:' + color + '; margin-left: 6px;">' + levelText + '</span>';
+                    let badgeClass = 'badge-info';
+                    if (score >= 80) badgeClass = 'badge-success';
+                    else if (score >= 30) badgeClass = 'badge-warning';
+                    else badgeClass = 'badge-danger';
+                    elements.botScoreVal.innerHTML = '<span class="badge ' + badgeClass + '">' + score + '</span>';
                 }
             }
             
@@ -896,18 +1452,27 @@ async function handleRequest(request) {
                 if (!canvas || canvas.width === 0 || canvas.height === 0) return;
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 if (rttData.length === 0) return;
+                
                 ctx.beginPath();
-                ctx.strokeStyle = '#2196f3';
-                ctx.lineWidth = 2;
+                ctx.strokeStyle = '#38bdf8';
+                ctx.lineWidth = 2.5;
                 const stepX = canvas.width / (MAX_RTT_POINTS - 1);
-                const maxRtt = 500;
+                const maxRtt = Math.max(...rttData, 100);
                 rttData.forEach((value, index) => {
                     const x = index * stepX;
-                    const y = canvas.height - (Math.min(value, maxRtt) / maxRtt) * (canvas.height - 10);
+                    const y = canvas.height - (Math.min(value, maxRtt) / maxRtt) * (canvas.height - 20) - 10;
                     if (index === 0) ctx.moveTo(x, y);
                     else ctx.lineTo(x, y);
                 });
                 ctx.stroke();
+                
+                const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+                gradient.addColorStop(0, 'rgba(56, 189, 248, 0.3)');
+                gradient.addColorStop(1, 'rgba(56, 189, 248, 0)');
+                ctx.fillStyle = gradient;
+                ctx.lineTo(canvas.width, canvas.height);
+                ctx.lineTo(0, canvas.height);
+                ctx.fill();
             }
             
             async function getIP(version) {
@@ -931,7 +1496,43 @@ async function handleRequest(request) {
                 }
                 if (el) {
                     el.textContent = i18n[currentLang].unavailable;
-                    el.style.color = 'var(--red)';
+                    el.style.opacity = '0.5';
+                }
+            }
+            
+            function updateQuality(currentRtt) {
+                const qualityEl = document.getElementById('quality-badge');
+                
+                if (qualityEl) {
+                    let qualityText = '', qualityColor = '';
+                    if (currentRtt < 50) { qualityText = '优秀'; qualityColor = '#4ade80'; }
+                    else if (currentRtt < 100) { qualityText = '良好'; qualityColor = '#4ade80'; }
+                    else if (currentRtt < 150) { qualityText = '一般'; qualityColor = '#fbbf24'; }
+                    else if (currentRtt < 250) { qualityText = '较差'; qualityColor = '#f87171'; }
+                    else { qualityText = '极差'; qualityColor = '#f87171'; }
+                    qualityEl.textContent = qualityText;
+                    qualityEl.style.color = qualityColor;
+                }
+                
+                const stabilityEl = document.getElementById('stability-badge');
+                if (stabilityEl && jitterHistory.length > 0) {
+                    const avgJitter = jitterHistory.reduce((a,b) => a+b, 0) / jitterHistory.length;
+                    let stabilityText = '', stabilityColor = '';
+                    if (avgJitter < 10) { stabilityText = '非常稳定'; stabilityColor = '#4ade80'; }
+                    else if (avgJitter < 30) { stabilityText = '稳定'; stabilityColor = '#38bdf8'; }
+                    else if (avgJitter < 60) { stabilityText = '不稳定'; stabilityColor = '#fbbf24'; }
+                    else { stabilityText = '极不稳定'; stabilityColor = '#f87171'; }
+                    stabilityEl.textContent = stabilityText;
+                    stabilityEl.style.color = stabilityColor;
+                }
+            }
+            
+            function updateLossRate() {
+                const lossRateEl = document.getElementById('loss-rate');
+                if (lossRateEl) {
+                    const rate = sampleCount > 0 ? Math.round((consecutiveLoss / Math.min(sampleCount, 10)) * 100) : 0;
+                    lossRateEl.textContent = rate + '%';
+                    lossRateEl.style.color = rate === 0 ? '#4ade80' : (rate < 5 ? '#fbbf24' : '#f87171');
                 }
             }
             
@@ -943,30 +1544,32 @@ async function handleRequest(request) {
                     const diff = Math.round(performance.now() - start);
                     if (elements.rttNum) elements.rttNum.textContent = diff;
                     
+                    sampleCount++;
+                    const sampleEl = document.getElementById('sample-count');
+                    if (sampleEl) sampleEl.textContent = sampleCount;
+                    
                     if (rttData.length > 0) {
                         const jitter = Math.abs(diff - rttData[rttData.length - 1]);
                         jitterHistory.push(jitter);
                         if (jitterHistory.length > MAX_JITTER_HISTORY) jitterHistory.shift();
                         const avgJitter = Math.round(jitterHistory.reduce((a,b) => a+b, 0) / jitterHistory.length);
-                        if (elements.jitterVal) elements.jitterVal.textContent = avgJitter + 'ms';
+                        if (elements.jitterVal) elements.jitterVal.textContent = avgJitter;
+                        updateQuality(diff);
                     }
+                    
+                    consecutiveLoss = 0;
+                    updateLossRate();
                     
                     rttData.push(diff);
                     if (rttData.length > MAX_RTT_POINTS) rttData.shift();
                     drawChart();
-                } catch (e) {}
+                } catch (e) {
+                    consecutiveLoss++;
+                    updateLossRate();
+                    if (elements.rttNum) elements.rttNum.textContent = 'ERR';
+                    updateQuality(999);
+                }
                 setTimeout(testRtt, 2000);
-            }
-            
-            function calculateDistance(lat1, lon1, lat2, lon2) {
-                const R = 6371;
-                const dLat = (lat2 - lat1) * Math.PI / 180;
-                const dLon = (lon2 - lon1) * Math.PI / 180;
-                const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                          Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-                          Math.sin(dLon/2) * Math.sin(dLon/2);
-                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-                return Math.round(R * c);
             }
             
             async function fetchUserGeo() {
@@ -979,19 +1582,28 @@ async function handleRequest(request) {
                     );
                     
                     elements.userGeoInfo.innerHTML = \`
-                        <div style="display: flex; justify-content: space-between;">
-                            <span>\${BACKEND_DATA.realGeoCity}, \${BACKEND_DATA.realGeoRegion}, \${BACKEND_DATA.realGeoCountry}</span>
-                            <span style="color: var(--yellow);">\${dist} km</span>
+                        <div class="info-row">
+                            <span class="info-label"><i class="fas fa-city"></i> 位置</span>
+                            <span class="info-value">\${BACKEND_DATA.realGeoCity}, \${BACKEND_DATA.realGeoRegion}, \${BACKEND_DATA.realGeoCountry}</span>
                         </div>
-                        <div style="color: var(--dim); font-size: 10px; margin-top: 4px;">
-                            ISP: \${BACKEND_DATA.realGeoOrg} | IP: \${BACKEND_DATA.realGeoIp}
+                        <div class="info-row">
+                            <span class="info-label"><i class="fas fa-ruler"></i> 到节点距离</span>
+                            <span class="info-value"><strong class="badge badge-info">\${dist} 公里</strong></span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label"><i class="fas fa-building"></i> 运营商</span>
+                            <span class="info-value">\${BACKEND_DATA.realGeoOrg}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label"><i class="fas fa-ip"></i> IP 地址</span>
+                            <span class="info-value"><code>\${BACKEND_DATA.realGeoIp}</code></span>
                         </div>
                     \`;
                     return;
                 }
                 
                 const ip = elements.v4 ? elements.v4.textContent : '';
-                if (!ip || ip.includes('Detecting') || ip.includes(i18n[currentLang].unavailable)) {
+                if (!ip || ip.includes('检测中') || ip.includes(i18n[currentLang].unavailable)) {
                     if (geoRetryCount < MAX_GEO_RETRY) {
                         geoRetryCount++;
                         setTimeout(fetchUserGeo, 1500);
@@ -1010,16 +1622,25 @@ async function handleRequest(request) {
                     );
                     
                     elements.userGeoInfo.innerHTML = \`
-                        <div style="display: flex; justify-content: space-between;">
-                            <span>\${geoData.city}, \${geoData.region}, \${geoData.country_name}</span>
-                            <span style="color: var(--yellow);">\${dist} km</span>
+                        <div class="info-row">
+                            <span class="info-label"><i class="fas fa-city"></i> 位置</span>
+                            <span class="info-value">\${geoData.city}, \${geoData.region}, \${geoData.country_name}</span>
                         </div>
-                        <div style="color: var(--dim); font-size: 10px; margin-top: 4px;">
-                            ISP: \${geoData.org} | IP: \${ip}
+                        <div class="info-row">
+                            <span class="info-label"><i class="fas fa-ruler"></i> 到节点距离</span>
+                            <span class="info-value"><strong class="badge badge-info">\${dist} 公里</strong></span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label"><i class="fas fa-building"></i> 运营商</span>
+                            <span class="info-value">\${geoData.org}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label"><i class="fas fa-ip"></i> IP 地址</span>
+                            <span class="info-value"><code>\${ip}</code></span>
                         </div>
                     \`;
                 } catch (e) {
-                    elements.userGeoInfo.innerHTML = '<span style="color: var(--red);">Geo lookup failed</span>';
+                    elements.userGeoInfo.innerHTML = '<div style="text-align: center; padding: 20px; color: #f87171;"><i class="fas fa-exclamation-triangle"></i> 地理位置查询失败</div>';
                 }
             }
             
@@ -1028,49 +1649,60 @@ async function handleRequest(request) {
                 const cores = navigator.hardwareConcurrency || 'N/A';
                 const screenInfo = screen.width + 'x' + screen.height;
                 const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-                elements.hwInfo.textContent = [screenInfo, cores + ' CORE', timezone].join(' | ');
+                const language = navigator.language;
+                const platform = navigator.platform;
+                elements.hwInfo.innerHTML = \`
+                    <div style="display: flex; flex-wrap: wrap; gap: 16px;">
+                        <div class="stat-item"><i class="fas fa-tv"></i> 屏幕: \${screenInfo}</div>
+                        <div class="stat-item"><i class="fas fa-microchip"></i> CPU核心: \${cores}</div>
+                        <div class="stat-item"><i class="fas fa-clock"></i> 时区: \${timezone}</div>
+                        <div class="stat-item"><i class="fas fa-language"></i> 语言: \${language}</div>
+                        <div class="stat-item"><i class="fas fa-desktop"></i> 平台: \${platform}</div>
+                    </div>
+                \`;
             }
 
-            // CPU 性能测试
             let cpuTestRunning = false;
             async function runCpuTest() {
-                if (cpuTestRunning || !elements.cpuResult) return;
+                if (cpuTestRunning) return;
                 cpuTestRunning = true;
                 const t = i18n[currentLang];
-                elements.cpuResult.textContent = t.cpuTesting;
-                elements.cpuResult.style.color = 'var(--yellow)';
+                showResult(elements.cpuResult, '<i class="fas fa-spinner fa-spin"></i> ' + t.cpuTesting);
                 
-                const start = Date.now();
                 try {
                     const res = await fetch('/cpu-test?n=500000');
                     const data = await res.json();
-                    elements.cpuResult.innerHTML = \`
-                        <span style="color: var(--blue);">CPU: \${data.opsMs} ops/ms</span>
-                        <span class="perf-badge good">\${data.duration}ms</span>
-                    \`;
+                    let badgeClass = data.opsMs > 50 ? 'badge-success' : (data.opsMs > 20 ? 'badge-warning' : 'badge-danger');
+                    showResult(elements.cpuResult, \`
+                        <i class="fas fa-microchip"></i> CPU 性能: <strong>\${data.opsMs}</strong> 操作/毫秒
+                        <span class="perf-badge \${badgeClass}">\${data.duration}ms</span>
+                    \`);
                 } catch (e) {
-                    elements.cpuResult.innerHTML = '<span style="color: var(--red);">CPU test failed</span>';
+                    showResult(elements.cpuResult, '<i class="fas fa-exclamation-triangle"></i> CPU 测试失败', true);
                 }
                 cpuTestRunning = false;
             }
 
-            // WebSocket 延迟测试
             let wsTestRunning = false;
             async function runWsTest() {
-                if (wsTestRunning || !elements.wsResult) return;
+                if (wsTestRunning) return;
                 wsTestRunning = true;
                 const t = i18n[currentLang];
-                elements.wsResult.textContent = t.wsTesting;
-                elements.wsResult.style.color = 'var(--yellow)';
+                showResult(elements.wsResult, '<i class="fas fa-spinner fa-spin"></i> ' + t.wsTesting);
                 
                 try {
-                    const wsUrl = window.location.href.replace('http', 'ws') + '/ws-test';
+                    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                    const wsUrl = wsProtocol + '//' + window.location.host + '/ws-test';
                     const ws = new WebSocket(wsUrl);
                     
                     const result = await new Promise((resolve) => {
                         const latencies = [];
                         let testCount = 0;
                         const maxTests = 5;
+                        let timeoutId = setTimeout(() => {
+                            ws.close();
+                            resolve({ success: false });
+                        }, 5000);
                         
                         ws.onopen = () => {
                             const sendPing = () => {
@@ -1089,6 +1721,7 @@ async function handleRequest(request) {
                                     if (testCount < maxTests) {
                                         setTimeout(sendPing, 100);
                                     } else {
+                                        clearTimeout(timeoutId);
                                         ws.close();
                                         const avgLatency = Math.round(latencies.reduce((a,b) => a+b, 0) / latencies.length);
                                         resolve({ success: true, avg: avgLatency, min: Math.min(...latencies), max: Math.max(...latencies) });
@@ -1097,67 +1730,61 @@ async function handleRequest(request) {
                             };
                         };
                         
-                        ws.onerror = () => resolve({ success: false });
-                        setTimeout(() => resolve({ success: false }), 5000);
+                        ws.onerror = () => {
+                            clearTimeout(timeoutId);
+                            resolve({ success: false });
+                        };
                     });
                     
                     if (result.success) {
-                        elements.wsResult.innerHTML = \`
-                            <span style="color: var(--blue);">WS: \${result.avg}ms</span>
-                            <span class="perf-badge good">min: \${result.min}ms</span>
-                            <span class="perf-badge warn">max: \${result.max}ms</span>
-                        \`;
+                        let badgeClass = result.avg < 50 ? 'badge-success' : (result.avg < 150 ? 'badge-warning' : 'badge-danger');
+                        showResult(elements.wsResult, \`
+                            <i class="fas fa-bolt"></i> WebSocket 延迟: <strong>\${result.avg}ms</strong>
+                            <span class="perf-badge \${badgeClass}">最小: \${Math.round(result.min)}ms / 最大: \${Math.round(result.max)}ms</span>
+                        \`);
                     } else {
-                        elements.wsResult.innerHTML = '<span style="color: var(--red);">WebSocket failed</span>';
+                        showResult(elements.wsResult, '<i class="fas fa-exclamation-triangle"></i> WebSocket 连接失败', true);
                     }
                 } catch (e) {
-                    elements.wsResult.innerHTML = '<span style="color: var(--red);">WebSocket failed</span>';
+                    showResult(elements.wsResult, '<i class="fas fa-exclamation-triangle"></i> WebSocket 测试失败', true);
                 }
                 wsTestRunning = false;
             }
 
-            // 并发请求测试
             let concurrentTestRunning = false;
             async function runConcurrentTest() {
-                if (concurrentTestRunning || !elements.concurrentResult) return;
+                if (concurrentTestRunning) return;
                 concurrentTestRunning = true;
                 const t = i18n[currentLang];
-                elements.concurrentResult.textContent = t.concurrentTesting;
-                elements.concurrentResult.style.color = 'var(--yellow)';
+                showResult(elements.concurrentResult, '<i class="fas fa-spinner fa-spin"></i> ' + t.concurrentTesting);
                 
-                const start = performance.now();
                 try {
-                    const urls = [4, 6, 8].map(count => 
-                        fetchWithTimeout(\`/concurrent-test?count=\${count}&size=1024\`, {}, 5000)
-                            .then(r => r.json())
-                    );
+                    const results = await Promise.all([4, 6, 8].map(count => 
+                        fetchWithTimeout(\`/concurrent-test?count=\${count}&size=1024\`, {}, 5000).then(r => r.json())
+                    ));
                     
-                    const results = await Promise.all(urls);
-                    const totalDuration = performance.now() - start;
-                    
-                    let summaryHtml = '<span style="color: var(--blue);">Concurrent: ' + totalDuration + 'ms</span>';
+                    let html = '<i class="fas fa-layer-group"></i> 并发测试结果:<br><div style="display: flex; gap: 12px; margin-top: 8px; flex-wrap: wrap;">';
                     results.forEach(r => {
-                        const avgDuration = r.reduce((sum, item) => sum + (item.duration || 0), 0) / r.length;
-                        summaryHtml += \` <span class="perf-badge good">\${r.length}req: \${Math.round(avgDuration)}ms</span>\`;
+                        const avgDuration = Math.round(r.reduce((sum, item) => sum + (item.duration || 0), 0) / r.length);
+                        let badgeClass = avgDuration < 20 ? 'badge-success' : (avgDuration < 50 ? 'badge-warning' : 'badge-danger');
+                        html += \`<span class="badge \${badgeClass}">\${r.length} 请求: \${avgDuration}ms</span>\`;
                     });
-                    
-                    elements.concurrentResult.innerHTML = summaryHtml;
+                    html += '</div>';
+                    showResult(elements.concurrentResult, html);
                 } catch (e) {
-                    elements.concurrentResult.innerHTML = '<span style="color: var(--red);">Concurrent test failed</span>';
+                    showResult(elements.concurrentResult, '<i class="fas fa-exclamation-triangle"></i> 并发测试失败', true);
                 }
                 concurrentTestRunning = false;
             }
 
-            // 流式传输测试
             let streamTestRunning = false;
             async function runStreamTest() {
-                if (streamTestRunning || !elements.streamResult) return;
+                if (streamTestRunning) return;
                 streamTestRunning = true;
                 const t = i18n[currentLang];
-                elements.streamResult.textContent = t.streamTesting;
-                elements.streamResult.style.color = 'var(--yellow)';
+                showResult(elements.streamResult, '<i class="fas fa-spinner fa-spin"></i> ' + t.streamTesting);
                 
-                const sizes = [65536, 262144, 1048576]; // 64KB, 256KB, 1MB
+                const sizes = [65536, 262144, 1048576];
                 const results = [];
                 
                 for (const size of sizes) {
@@ -1175,47 +1802,40 @@ async function handleRequest(request) {
                         
                         const duration = performance.now() - start;
                         const speedMbps = ((bytesRead * 8) / (duration / 1000)) / 1000000;
-                        results.push({ sizeKB: Math.round(size/1024), speed: speedMbps.toFixed(2), duration: Math.round(duration) });
+                        results.push({ sizeKB: Math.round(size/1024), speed: speedMbps.toFixed(2) });
                     } catch (e) {
-                        results.push({ sizeKB: Math.round(size/1024), speed: '0', duration: 'timeout' });
+                        results.push({ sizeKB: Math.round(size/1024), speed: '0' });
                     }
                 }
                 
-                if (results.length > 0) {
-                    elements.streamResult.innerHTML = results.map(r => 
-                        \`<span class="speed-item" style="background: rgba(124,77,255,0.1); border-left-color: var(--purple);">Stream \${r.sizeKB}KB: \${r.speed} Mbps</span>\`
-                    ).join('');
-                }
+                let html = '<i class="fas fa-stream"></i> 流式吞吐量:<br><div class="speed-result">';
+                html += results.map(r => \`<div class="speed-item">\${r.sizeKB} KB: \${r.speed} Mbps</div>\`).join('');
+                html += '</div>';
+                showResult(elements.streamResult, html);
                 streamTestRunning = false;
             }
 
-            // HTTP/2 Push 检测
             async function testH2Push() {
                 if (!elements.pushVal) return;
                 try {
                     const res = await fetch('/push-test');
                     const text = await res.text();
                     if (text === 'PUSHED') {
-                        elements.pushVal.textContent = '✓ ENABLED';
-                        elements.pushVal.style.color = 'var(--blue)';
+                        elements.pushVal.innerHTML = '<span class="badge badge-success"><i class="fas fa-check"></i> 已启用</span>';
                     } else {
-                        elements.pushVal.textContent = '✗ DISABLED';
-                        elements.pushVal.style.color = 'var(--red)';
+                        elements.pushVal.innerHTML = '<span class="badge badge-danger"><i class="fas fa-times"></i> 未启用</span>';
                     }
                 } catch (e) {
-                    elements.pushVal.textContent = 'N/A';
-                    elements.pushVal.style.color = 'var(--dim)';
+                    elements.pushVal.innerHTML = '<span class="badge">N/A</span>';
                 }
             }
 
-            // 原有的丢包、速度、DNS 测试函数保持不变
             let lossTestRunning = false;
             async function runLossTest() {
-                if (lossTestRunning || !elements.lossResult) return;
+                if (lossTestRunning) return;
                 lossTestRunning = true;
                 const t = i18n[currentLang];
-                elements.lossResult.textContent = t.lossTesting;
-                elements.lossResult.style.color = 'var(--yellow)';
+                showResult(elements.lossResult, '<i class="fas fa-spinner fa-spin"></i> ' + t.lossTesting);
                 
                 const total = 10;
                 let failed = 0;
@@ -1229,21 +1849,19 @@ async function handleRequest(request) {
                 }
                 const lossPercent = Math.round((failed / total) * 100);
                 if (lossPercent === 0) {
-                    elements.lossResult.textContent = t.lossNone;
-                    elements.lossResult.style.color = 'var(--blue)';
+                    showResult(elements.lossResult, '<i class="fas fa-check-circle"></i> ' + t.lossNone);
                 } else {
-                    elements.lossResult.textContent = t.lossResult + ' ' + lossPercent + '% (' + failed + '/' + total + ' lost)';
-                    elements.lossResult.style.color = 'var(--red)';
+                    showResult(elements.lossResult, '<i class="fas fa-exclamation-triangle"></i> ' + t.lossResult + ': ' + lossPercent + '% (' + failed + '/' + total + ' 丢失)', true);
                 }
                 lossTestRunning = false;
             }
 
             let speedTestRunning = false;
             async function runSpeedTest() {
-                if (speedTestRunning || !elements.speedResult) return;
+                if (speedTestRunning) return;
                 speedTestRunning = true;
                 const t = i18n[currentLang];
-                elements.speedResult.innerHTML = '<span style="color: var(--yellow);">' + t.speedTesting + '</span>';
+                showResult(elements.speedResult, '<i class="fas fa-spinner fa-spin"></i> ' + t.speedTesting);
                 
                 const sizes = [102400, 512000, 1048576];
                 const results = [];
@@ -1256,78 +1874,97 @@ async function handleRequest(request) {
                         const speedMbps = ((size * 8) / (duration / 1000)) / 1000000;
                         results.push({ sizeKB: Math.round(size/1024), speed: speedMbps.toFixed(2), duration: Math.round(duration) });
                     } catch (e) {
-                        results.push({ sizeKB: Math.round(size/1024), speed: '0', duration: 'timeout' });
+                        results.push({ sizeKB: Math.round(size/1024), speed: '0', duration: '超时' });
                     }
                 }
                 
-                if (results.length > 0) {
-                    const avgSpeed = results.filter(r => r.speed !== '0').reduce((sum, r) => sum + parseFloat(r.speed), 0) / results.filter(r => r.speed !== '0').length;
-                    elements.speedResult.innerHTML = results.map(r => 
-                        \`<div class="speed-item">\${r.sizeKB}KB: \${r.speed} Mbps (\${r.duration}ms)</div>\`
-                    ).join('') + \`<div style="font-size: 10px; margin-top: 4px; color: var(--blue);">Avg: \${avgSpeed.toFixed(2)} Mbps</div>\`;
-                } else {
-                    elements.speedResult.innerHTML = '<span style="color: var(--red);">Speed test failed</span>';
-                }
+                const validResults = results.filter(r => r.speed !== '0');
+                const avgSpeed = validResults.length > 0 
+                    ? validResults.reduce((sum, r) => sum + parseFloat(r.speed), 0) / validResults.length 
+                    : 0;
+                let avgBadge = avgSpeed > 50 ? 'badge-success' : (avgSpeed > 10 ? 'badge-warning' : 'badge-danger');
+                
+                let html = '<i class="fas fa-gauge-high"></i> 带宽测速结果:<br><div class="speed-result">';
+                html += results.map(r => \`<div class="speed-item">\${r.sizeKB} KB: \${r.speed} Mbps</div>\`).join('');
+                html += \`</div><div style="margin-top: 8px;"><span class="badge \${avgBadge}">平均: \${avgSpeed.toFixed(2)} Mbps</span></div>\`;
+                showResult(elements.speedResult, html);
                 speedTestRunning = false;
             }
 
             let dnsTestRunning = false;
             async function runDnsTest() {
-                if (dnsTestRunning || !elements.dnsResult) return;
+                if (dnsTestRunning) return;
                 dnsTestRunning = true;
                 const t = i18n[currentLang];
-                elements.dnsResult.textContent = t.dnsTesting;
-                elements.dnsResult.style.color = 'var(--yellow)';
+                showResult(elements.dnsResult, '<i class="fas fa-spinner fa-spin"></i> ' + t.dnsTesting);
                 
                 const domains = [
-                    { name: 'cloudflare.com', url: 'https://cloudflare.com/cdn-cgi/trace' },
-                    { name: 'google.com', url: 'https://google.com/generate_204' }
+                    { name: 'Cloudflare', url: 'https://cloudflare.com/cdn-cgi/trace' },
+                    { name: 'Google', url: 'https://google.com/generate_204' },
+                    { name: 'GitHub', url: 'https://github.com/favicon.ico' }
                 ];
                 const results = [];
                 
                 for (const domain of domains) {
                     const start = performance.now();
                     try {
-                        await fetchWithTimeout(domain.url, {}, 5000);
+                        await fetchWithTimeout(domain.url, { method: 'HEAD' }, 5000);
                         const dnsTime = Math.round(performance.now() - start);
                         results.push({ domain: domain.name, time: dnsTime });
                     } catch (e) {
-                        results.push({ domain: domain.name, time: 'timeout' });
+                        results.push({ domain: domain.name, time: '超时' });
                     }
                 }
                 
-                elements.dnsResult.innerHTML = results.map(r => 
-                    \`<span style="margin-right: 15px;">\${r.domain}: \${r.time}ms</span>\`
-                ).join('');
-                elements.dnsResult.style.color = 'var(--dim)';
+                let html = '<i class="fas fa-server"></i> DNS 解析结果:<br><div style="display: flex; gap: 16px; margin-top: 8px; flex-wrap: wrap;">';
+                results.forEach(r => {
+                    let badgeClass = typeof r.time === 'number' && r.time < 50 ? 'badge-success' : (typeof r.time === 'number' && r.time < 150 ? 'badge-warning' : 'badge-danger');
+                    html += \`<span class="badge \${badgeClass}">\${r.domain}: \${r.time}ms</span>\`;
+                });
+                html += '</div>';
+                showResult(elements.dnsResult, html);
                 dnsTestRunning = false;
             }
 
             function generateReportText() {
                 const t = i18n[currentLang];
-                const now = new Date().toISOString();
-                return \`[\${t.reportTitle}]
-Generated: \${now}
-Node: \${BACKEND_DATA.colo}
-IPv4: \${elements.v4 ? elements.v4.textContent : 'N/A'}
-IPv6: \${elements.v6 ? elements.v6.textContent : 'N/A'}
-Ray: \${BACKEND_DATA.rayId}
----
-RTT: \${elements.rttNum ? elements.rttNum.textContent : 'N/A'}
-Jitter: \${elements.jitterVal ? elements.jitterVal.textContent : 'N/A'}
-Protocol: \${BACKEND_DATA.httpProtocolRaw}
-TLS: \${BACKEND_DATA.tlsVersion}
-Cipher: \${BACKEND_DATA.tlsCipher}
-ECH: \${elements.echVal ? elements.echVal.textContent : 'N/A'}
-Compression: \${elements.compressVal ? elements.compressVal.textContent : 'N/A'}
-H2 Push: \${elements.pushVal ? elements.pushVal.textContent : 'N/A'}
-Bot Score: \${BACKEND_DATA.botScore}
-Location: \${BACKEND_DATA.realGeoCity}, \${BACKEND_DATA.realGeoCountry}
+                const now = new Date().toLocaleString('zh-CN');
+                const quality = document.getElementById('quality-badge') ? document.getElementById('quality-badge').textContent : '--';
+                const stability = document.getElementById('stability-badge') ? document.getElementById('stability-badge').textContent : '--';
+                const lossRate = document.getElementById('loss-rate') ? document.getElementById('loss-rate').textContent : '0%';
+                const sampleCountVal = document.getElementById('sample-count') ? document.getElementById('sample-count').textContent : '0';
+                
+                return \`【\${t.reportTitle}】
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📅 生成时间: \${now}
+📍 边缘节点: \${BACKEND_DATA.colo}
+🌐 IPv4: \${elements.v4 ? elements.v4.textContent : 'N/A'}
+🔑 RAY ID: \${BACKEND_DATA.rayId}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📡 网络指标
+   当前 RTT: \${elements.rttNum ? elements.rttNum.textContent : 'N/A'} ms
+   网络抖动: \${elements.jitterVal ? elements.jitterVal.textContent : 'N/A'} ms
+   连接质量: \${quality}
+   网络稳定性: \${stability}
+   丢包率: \${lossRate}
+   样本数量: \${sampleCountVal}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔒 安全与协议
+   协议: \${BACKEND_DATA.httpProtocolRaw}
+   TLS 版本: \${BACKEND_DATA.tlsVersion}
+   ECH: \${BACKEND_DATA.tlsClientHelloLength > 0 ? '已启用' : '未启用'}
+   机器人评分: \${BACKEND_DATA.botScore}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📍 位置信息
+   边缘节点: \${BACKEND_DATA.city}, \${BACKEND_DATA.country}
+   客户端: \${BACKEND_DATA.realGeoCity}, \${BACKEND_DATA.realGeoCountry}
+   运营商: \${BACKEND_DATA.realGeoOrg || BACKEND_DATA.asOrg}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🚀 NetSight Pro - 蓝色极速网络诊断
 \`;
             }
             
             async function copyReport() {
-                if (!elements.copyBtn) return;
                 const text = generateReportText();
                 try {
                     await navigator.clipboard.writeText(text);
@@ -1340,14 +1977,14 @@ Location: \${BACKEND_DATA.realGeoCity}, \${BACKEND_DATA.realGeoCountry}
                         }, 1500);
                     }
                 } catch (err) {
-                    console.error('Copy failed:', err);
+                    console.error('复制失败:', err);
                 }
             }
 
             function init() {
                 updateUI();
                 updateHardwareInfo();
-                testH2Push(); // 检测 HTTP/2 Push
+                testH2Push();
                 window.addEventListener('resize', resizeCanvas);
                 if (elements.chart && elements.chart.parentElement) {
                     const observer = new ResizeObserver(() => resizeCanvas());
@@ -1367,6 +2004,7 @@ Location: \${BACKEND_DATA.realGeoCity}, \${BACKEND_DATA.realGeoCountry}
                 if (elements.concurrentBtn) elements.concurrentBtn.addEventListener('click', runConcurrentTest);
                 if (elements.streamBtn) elements.streamBtn.addEventListener('click', runStreamTest);
             }
+            
             init();
         })();
     </script>
@@ -1377,6 +2015,9 @@ Location: \${BACKEND_DATA.realGeoCity}, \${BACKEND_DATA.realGeoCountry}
     headers: {
       'content-type': 'text/html;charset=UTF-8',
       'cache-control': 'no-cache, no-store, must-revalidate',
+      'x-content-type-options': 'nosniff',
+      'x-frame-options': 'DENY',
+      'x-xss-protection': '1; mode=block',
       'server-timing': `worker;dur=${workerDuration}`
     }
   });
