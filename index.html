@@ -3,499 +3,803 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>CF-workers-netdiag | 全能网络诊断中心 - 功能全景介绍</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;400;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+    <title>NetSight Pro | 蓝色极速网络诊断工具</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
+
         body {
-            font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: radial-gradient(circle at 10% 20%, #0a0f1e, #03060c);
-            color: #eef2ff;
-            line-height: 1.5;
-            scroll-behavior: smooth;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #0a0f1a 0%, #0d1425 50%, #0a0c15 100%);
+            min-height: 100vh;
+            color: #fff;
+            overflow-x: hidden;
         }
-        ::-webkit-scrollbar { width: 8px; }
-        ::-webkit-scrollbar-track { background: #0f172a; }
-        ::-webkit-scrollbar-thumb { background: #3b82f6; border-radius: 10px; }
+
+        /* 动态网格背景 */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: 
+                linear-gradient(rgba(56, 189, 248, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(56, 189, 248, 0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* 光晕效果 */
+        body::after {
+            content: '';
+            position: fixed;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle at 30% 40%, rgba(56, 189, 248, 0.06) 0%, transparent 60%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
         .container {
-            max-width: 1300px;
+            max-width: 1200px;
             margin: 0 auto;
-            padding: 2rem 1.5rem;
+            padding: 40px 24px;
+            position: relative;
+            z-index: 1;
         }
-        .glass-card {
-            background: rgba(15, 23, 42, 0.6);
-            backdrop-filter: blur(12px);
-            border: 1px solid rgba(59, 130, 246, 0.25);
-            border-radius: 2rem;
-            transition: transform 0.2s ease, border-color 0.2s;
+
+        /* 导航栏 */
+        .navbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 0;
+            margin-bottom: 60px;
+            flex-wrap: wrap;
+            gap: 20px;
         }
-        .glass-card:hover {
-            border-color: rgba(59, 130, 246, 0.6);
-            transform: translateY(-2px);
-        }
-        .gradient-text {
-            background: linear-gradient(135deg, #60a5fa, #a78bfa, #f472b6);
-            background-clip: text;
-            -webkit-background-clip: text;
-            color: transparent;
-            font-weight: 800;
-        }
-        .badge {
-            background: rgba(59, 130, 246, 0.2);
-            border-radius: 40px;
-            padding: 0.25rem 1rem;
-            font-size: 0.75rem;
-            font-weight: 600;
-            color: #93c5fd;
-            border: 1px solid rgba(59, 130, 246, 0.4);
-            display: inline-block;
-        }
-        .feature-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-            gap: 1.5rem;
-            margin: 2rem 0;
-        }
-        .feature-item {
-            background: rgba(2, 8, 23, 0.6);
-            border-radius: 1.5rem;
-            padding: 1.25rem;
-            border-left: 3px solid #3b82f6;
-            transition: all 0.2s;
-        }
-        .feature-item i {
-            color: #3b82f6;
-            width: 32px;
-            font-size: 1.3rem;
-            margin-right: 0.75rem;
-        }
-        .feature-item h3 {
-            font-size: 1.1rem;
-            font-weight: 600;
+
+        .logo {
             display: flex;
             align-items: center;
-            margin-bottom: 0.5rem;
+            gap: 12px;
         }
-        .feature-item p {
-            font-size: 0.85rem;
-            color: #cbd5e6;
-            margin-left: 2.2rem;
+
+        .logo-icon {
+            width: 48px;
+            height: 48px;
+            background: linear-gradient(135deg, #2563eb, #06b6d4);
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            box-shadow: 0 8px 20px rgba(37, 99, 235, 0.3);
         }
-        .api-table {
-            width: 100%;
-            border-collapse: collapse;
-            background: rgba(0,0,0,0.3);
-            border-radius: 1rem;
-            overflow: hidden;
+
+        .logo h1 {
+            font-size: 24px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #fff, #06b6d4);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
         }
-        .api-table th, .api-table td {
-            text-align: left;
-            padding: 0.9rem 1rem;
-            border-bottom: 1px solid rgba(59,130,246,0.2);
+
+        .logo p {
+            font-size: 12px;
+            color: rgba(56, 189, 248, 0.6);
+            margin-top: 2px;
         }
-        .api-table th {
-            background: rgba(59,130,246,0.2);
+
+        .nav-links {
+            display: flex;
+            gap: 32px;
+            align-items: center;
+        }
+
+        .nav-links a {
+            color: rgba(255,255,255,0.7);
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.3s;
+        }
+
+        .nav-links a:hover {
+            color: #06b6d4;
+        }
+
+        .btn-glow {
+            background: linear-gradient(135deg, #2563eb, #06b6d4);
+            border: none;
+            padding: 10px 24px;
+            border-radius: 40px;
+            color: white;
             font-weight: 600;
-            color: #bfdbfe;
-        }
-        .api-table code {
-            background: #0f172a;
-            padding: 0.2rem 0.5rem;
-            border-radius: 8px;
-            font-size: 0.85rem;
-            color: #facc15;
-            font-family: 'JetBrains Mono', monospace;
-        }
-        .btn {
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-decoration: none;
             display: inline-flex;
             align-items: center;
-            gap: 0.5rem;
-            background: #1e293b;
-            padding: 0.7rem 1.5rem;
-            border-radius: 2rem;
-            font-weight: 600;
-            color: white;
-            text-decoration: none;
-            transition: all 0.2s;
-            border: 1px solid #334155;
-            cursor: pointer;
+            gap: 8px;
+            box-shadow: 0 4px 15px rgba(37, 99, 235, 0.3);
         }
-        .btn-primary {
-            background: #2563eb;
-            border-color: #3b82f6;
-            box-shadow: 0 4px 12px rgba(37,99,235,0.3);
-        }
-        .btn-primary:hover {
-            background: #1d4ed8;
+
+        .btn-glow:hover {
             transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(37, 99, 235, 0.4);
         }
-        .btn-outline:hover {
-            background: rgba(59,130,246,0.2);
-            border-color: #3b82f6;
-        }
-        footer a {
-            color: #94a3b8;
+
+        .btn-outline-glow {
+            background: transparent;
+            border: 1px solid rgba(56, 189, 248, 0.4);
+            padding: 10px 24px;
+            border-radius: 40px;
+            color: #06b6d4;
+            font-weight: 500;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s;
             text-decoration: none;
-            transition: color 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
         }
-        footer a:hover { color: #60a5fa; }
-        /* 体验面板样式 */
-        .stats-grid {
+
+        .btn-outline-glow:hover {
+            border-color: #06b6d4;
+            background: rgba(6, 182, 212, 0.1);
+        }
+
+        /* 英雄区域 */
+        .hero {
+            text-align: center;
+            margin-bottom: 80px;
+        }
+
+        .hero-badge {
+            display: inline-block;
+            background: rgba(6, 182, 212, 0.15);
+            border: 1px solid rgba(6, 182, 212, 0.3);
+            padding: 6px 16px;
+            border-radius: 40px;
+            font-size: 12px;
+            color: #06b6d4;
+            margin-bottom: 24px;
+        }
+
+        .hero h1 {
+            font-size: 56px;
+            font-weight: 800;
+            background: linear-gradient(135deg, #fff, #06b6d4, #2563eb);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 20px;
+            line-height: 1.2;
+        }
+
+        .hero p {
+            font-size: 18px;
+            color: rgba(255,255,255,0.6);
+            max-width: 600px;
+            margin: 0 auto 32px;
+            line-height: 1.6;
+        }
+
+        .hero-buttons {
+            display: flex;
+            gap: 16px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        /* 功能卡片网格 */
+        .section-title {
+            text-align: center;
+            margin-bottom: 48px;
+        }
+
+        .section-title h2 {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 12px;
+        }
+
+        .section-title p {
+            color: rgba(255,255,255,0.5);
+            font-size: 16px;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 24px;
+            margin-bottom: 80px;
+        }
+
+        .feature-card {
+            background: rgba(15, 25, 45, 0.6);
+            backdrop-filter: blur(12px);
+            border-radius: 24px;
+            border: 1px solid rgba(56, 189, 248, 0.15);
+            padding: 28px;
+            transition: all 0.35s ease;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-6px);
+            border-color: rgba(56, 189, 248, 0.4);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+        }
+
+        .feature-icon {
+            width: 56px;
+            height: 56px;
+            background: linear-gradient(135deg, rgba(37, 99, 235, 0.2), rgba(6, 182, 212, 0.2));
+            border-radius: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+
+        .feature-icon i {
+            font-size: 28px;
+            color: #06b6d4;
+        }
+
+        .feature-card h3 {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 12px;
+        }
+
+        .feature-card p {
+            color: rgba(255,255,255,0.5);
+            font-size: 14px;
+            line-height: 1.6;
+            margin-bottom: 16px;
+        }
+
+        .feature-tags {
             display: flex;
             flex-wrap: wrap;
-            gap: 1rem;
-            margin: 1.2rem 0;
+            gap: 8px;
         }
+
+        .feature-tag {
+            background: rgba(6, 182, 212, 0.1);
+            border-radius: 20px;
+            padding: 4px 12px;
+            font-size: 11px;
+            color: #06b6d4;
+        }
+
+        /* 统计数字 */
+        .stats-section {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 24px;
+            margin-bottom: 80px;
+            text-align: center;
+        }
+
         .stat-card {
-            background: rgba(0,0,0,0.45);
-            border-radius: 1.2rem;
-            padding: 1rem 1.2rem;
-            flex: 1 1 180px;
-            border: 1px solid rgba(59,130,246,0.4);
-            backdrop-filter: blur(4px);
+            background: rgba(15, 25, 45, 0.4);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 24px;
+            border: 1px solid rgba(56, 189, 248, 0.1);
         }
-        .stat-label {
-            font-size: 0.7rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            color: #9ca3af;
-        }
-        .stat-value {
-            font-size: 1.6rem;
+
+        .stat-number {
+            font-size: 42px;
             font-weight: 800;
-            color: #f0f3fa;
-            word-break: break-word;
+            background: linear-gradient(135deg, #fff, #06b6d4);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
         }
-        .chart-container {
-            height: 260px;
-            width: 100%;
-            margin-top: 1rem;
+
+        .stat-label {
+            font-size: 14px;
+            color: rgba(255,255,255,0.5);
+            margin-top: 8px;
         }
-        .loading-spinner {
-            display: inline-block;
-            width: 14px;
-            height: 14px;
-            border: 2px solid rgba(59,130,246,0.3);
+
+        /* 预览区域 */
+        .preview-section {
+            background: linear-gradient(135deg, rgba(37, 99, 235, 0.08), rgba(6, 182, 212, 0.04));
+            border-radius: 32px;
+            border: 1px solid rgba(56, 189, 248, 0.2);
+            padding: 40px;
+            margin-bottom: 80px;
+            text-align: center;
+        }
+
+        .preview-section h2 {
+            font-size: 28px;
+            margin-bottom: 16px;
+        }
+
+        .preview-section p {
+            color: rgba(255,255,255,0.5);
+            margin-bottom: 32px;
+        }
+
+        .preview-placeholder {
+            background: rgba(0,0,0,0.3);
+            border-radius: 20px;
+            padding: 40px;
+            border: 1px dashed rgba(56, 189, 248, 0.3);
+            margin-bottom: 24px;
+        }
+
+        .preview-stats {
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            flex-wrap: wrap;
+        }
+
+        .preview-stat {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .preview-stat i {
+            font-size: 24px;
+            color: #06b6d4;
+        }
+
+        .preview-stat span {
+            font-size: 14px;
+            color: rgba(255,255,255,0.7);
+        }
+
+        .preview-stat strong {
+            color: #06b6d4;
+            font-size: 18px;
+        }
+
+        /* 部署指南 */
+        .deploy-section {
+            background: rgba(15, 25, 45, 0.5);
+            border-radius: 28px;
+            border: 1px solid rgba(56, 189, 248, 0.15);
+            padding: 40px;
+            margin-bottom: 60px;
+        }
+
+        .deploy-section h2 {
+            font-size: 28px;
+            margin-bottom: 24px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .code-block {
+            background: #0a0f1a;
+            border-radius: 16px;
+            padding: 20px;
+            border: 1px solid rgba(56, 189, 248, 0.2);
+            overflow-x: auto;
+            margin-bottom: 24px;
+        }
+
+        .code-block pre {
+            color: #06b6d4;
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            margin: 0;
+        }
+
+        .deploy-steps {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .step {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(56, 189, 248, 0.1);
+        }
+
+        .step-number {
+            width: 32px;
+            height: 32px;
+            background: rgba(6, 182, 212, 0.15);
             border-radius: 50%;
-            border-top-color: #3b82f6;
-            animation: spin 0.6s linear infinite;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            color: #06b6d4;
         }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        .test-output {
-            background: #030a18cc;
-            border-radius: 1rem;
-            padding: 0.75rem 1rem;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.8rem;
-            color: #b9f3d0;
-            margin-top: 1rem;
-            border-left: 3px solid #3b82f6;
+
+        .step-content {
+            flex: 1;
         }
-        @media (max-width: 700px) {
-            .container { padding: 1rem; }
-            .stat-value { font-size: 1.2rem; }
-            .btn { padding: 0.5rem 1rem; font-size: 0.8rem; }
+
+        .step-content h4 {
+            font-size: 16px;
+            margin-bottom: 4px;
         }
-        hr { border-color: #1e293b; margin: 1.5rem 0; }
-        .glow { text-shadow: 0 0 6px rgba(59,130,246,0.4); }
+
+        .step-content p {
+            font-size: 13px;
+            color: rgba(255,255,255,0.5);
+        }
+
+        /* 页脚 */
+        .footer {
+            text-align: center;
+            padding-top: 40px;
+            border-top: 1px solid rgba(56, 189, 248, 0.1);
+            color: rgba(255,255,255,0.3);
+            font-size: 12px;
+        }
+
+        .footer-links {
+            display: flex;
+            justify-content: center;
+            gap: 24px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+
+        .footer-links a {
+            color: rgba(255,255,255,0.4);
+            text-decoration: none;
+            transition: color 0.3s;
+        }
+
+        .footer-links a:hover {
+            color: #06b6d4;
+        }
+
+        /* 响应式 */
+        @media (max-width: 768px) {
+            .container { padding: 24px 16px; }
+            .hero h1 { font-size: 36px; }
+            .section-title h2 { font-size: 26px; }
+            .stats-section { grid-template-columns: repeat(2, 1fr); }
+            .navbar { flex-direction: column; text-align: center; }
+            .nav-links { justify-content: center; }
+        }
+
+        /* 动画 */
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .feature-card, .stat-card, .preview-section, .deploy-section {
+            animation: fadeInUp 0.6s ease forwards;
+            opacity: 0;
+        }
+
+        .feature-card:nth-child(1) { animation-delay: 0.1s; }
+        .feature-card:nth-child(2) { animation-delay: 0.2s; }
+        .feature-card:nth-child(3) { animation-delay: 0.3s; }
+        .feature-card:nth-child(4) { animation-delay: 0.4s; }
+        .feature-card:nth-child(5) { animation-delay: 0.5s; }
+        .feature-card:nth-child(6) { animation-delay: 0.6s; }
     </style>
 </head>
 <body>
-<div class="container">
-    <!-- Hero 区域：项目介绍 -->
-    <div class="glass-card" style="padding: 2rem; margin-bottom: 2rem;">
-        <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center;">
-            <div>
-                <span class="badge"><i class="fas fa-cloud-upload-alt"></i> Cloudflare Workers · 零成本部署</span>
-                <h1 style="font-size: 2.6rem; margin: 0.8rem 0 0.5rem; letter-spacing: -0.02em;">
-                    CF-workers-<span class="gradient-text">netdiag</span>
-                </h1>
-                <p style="font-size: 1.2rem; max-width: 700px; color: #cbd5e6;">
-                    一站式网络诊断工具箱 | 实时延迟、带宽测试、安全审计、协议分析，全部运行在 Cloudflare Workers 边缘网络
-                </p>
-                <div style="display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 1.8rem;">
-                    <a href="https://github.com/ASIACOMKHK/CF-workers-ipcheck" target="_blank" class="btn btn-primary">
-                        <i class="fab fa-github"></i> GitHub 仓库
-                    </a>
-                    <a href="https://dash.cloudflare.com/" target="_blank" class="btn btn-outline">
-                        <i class="fas fa-rocket"></i> 一键部署到 Cloudflare
-                    </a>
+    <div class="container">
+        <!-- 导航栏 -->
+        <nav class="navbar">
+            <div class="logo">
+                <div class="logo-icon">
+                    <i class="fas fa-chart-network"></i>
+                </div>
+                <div>
+                    <h1>NetSight Pro</h1>
+                    <p>蓝色极速 · 实时网络诊断</p>
                 </div>
             </div>
-            <div style="font-size: 4rem; opacity: 0.7; margin-top: 1rem;">
-                <i class="fas fa-network-wired"></i>
-                <i class="fas fa-chart-line" style="margin-left: 0.5rem;"></i>
+            <div class="nav-links">
+                <a href="#features">功能</a>
+                <a href="#deploy">部署</a>
+                <a href="#docs">文档</a>
+                <a href="https://github.com" target="_blank"><i class="fab fa-github"></i> GitHub</a>
+                <a href="#" class="btn-glow" id="launchBtn">
+                    <i class="fas fa-rocket"></i> 启动工具
+                </a>
+            </div>
+        </nav>
+
+        <!-- 英雄区域 -->
+        <div class="hero">
+            <div class="hero-badge">
+                <i class="fas fa-bolt"></i> Cloudflare Workers 驱动
+            </div>
+            <h1>专业级网络诊断<br>实时监控 · 全面分析</h1>
+            <p>部署在边缘节点的网络诊断工具，提供毫秒级实时监控、多维度性能测试和连接质量评估</p>
+            <div class="hero-buttons">
+                <a href="#" class="btn-glow" id="heroLaunchBtn">
+                    <i class="fas fa-play"></i> 立即体验
+                </a>
+                <a href="#deploy" class="btn-outline-glow">
+                    <i class="fas fa-code"></i> 一键部署
+                </a>
             </div>
         </div>
-    </div>
 
-    <!-- 🚀 立即体验：全功能实时网络诊断核心模块 (模拟演示，部署后自动对接真实Worker) -->
-    <div class="glass-card" style="padding: 1.8rem; margin-bottom: 2rem; border-top: 3px solid #3b82f6;">
-        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
-            <h2><i class="fas fa-bolt"></i> ⚡ 立即体验 · 实时网络诊断中心</h2>
-            <button id="refreshAllTests" class="btn btn-outline" style="padding: 0.4rem 1.2rem;"><i class="fas fa-sync-alt"></i> 一键刷新全部指标</button>
-        </div>
-        <p class="badge" style="margin-top: 0.5rem;"><i class="fas fa-globe"></i> 展示延迟动态图表/带宽测速/DNS对比/丢包估算 | 模拟真实边缘诊断，部署后数据自动对接Cloudflare</p>
-        
-        <!-- 关键指标卡片 -->
-        <div class="stats-grid">
-            <div class="stat-card"><div class="stat-label"><i class="fas fa-network-wired"></i> 实时延迟 (RTT)</div><div class="stat-value" id="rttValue">-- ms</div><span style="font-size:0.7rem;">抖动: <span id="jitterValue">--</span> ms</span></div>
-            <div class="stat-card"><div class="stat-label"><i class="fas fa-tachometer-alt"></i> 估算带宽</div><div class="stat-value" id="bandwidthValue">-- Mbps</div><span style="font-size:0.7rem;">下载测速</span></div>
-            <div class="stat-card"><div class="stat-label"><i class="fas fa-hourglass-half"></i> 丢包率</div><div class="stat-value" id="lossValue">-- %</div></div>
-            <div class="stat-card"><div class="stat-label"><i class="fas fa-map-marker-alt"></i> 客户端IP/ASN</div><div class="stat-value" id="clientInfo" style="font-size: 0.9rem;">检测中...</div></div>
-            <div class="stat-card"><div class="stat-label"><i class="fas fa-lock"></i> TLS / HTTP</div><div class="stat-value" id="tlsInfo" style="font-size: 0.9rem;">--</div></div>
-        </div>
-        
-        <!-- 动态延迟图表 (echarts) -->
-        <div style="margin-top: 0.5rem;">
-            <div style="display: flex; gap: 0.8rem; align-items: center; margin-bottom: 0.5rem;"><i class="fas fa-chart-line"></i> <span class="badge">延迟历史曲线 (最近12次探测)</span><span id="liveStatus" class="badge" style="background:#1e293b;"><i class="fas fa-waveform"></i> 动态刷新中</span></div>
-            <div id="delayChart" class="chart-container"></div>
-        </div>
-        
-        <!-- 测试操作栏 -->
-        <div style="display: flex; flex-wrap: wrap; gap: 0.8rem; margin: 1.2rem 0 0.5rem;">
-            <button id="speedtestBtn" class="btn btn-outline"><i class="fas fa-download"></i> 带宽测速</button>
-            <button id="dnsTestBtn" class="btn btn-outline"><i class="fas fa-dns"></i> DNS 对比测试</button>
-            <button id="cpuBenchBtn" class="btn btn-outline"><i class="fas fa-microchip"></i> CPU 基准测试</button>
-            <button id="wsTestBtn" class="btn btn-outline"><i class="fas fa-exchange-alt"></i> WebSocket 回环</button>
-            <button id="riskCheckBtn" class="btn btn-outline"><i class="fas fa-shield-virus"></i> 代理风险评分</button>
-        </div>
-        <div id="testOutput" class="test-output"><i class="fas fa-info-circle"></i> 点击上方按钮，体验网络诊断能力（模拟演示，真实Worker部署后将调用边缘测速API）</div>
-    </div>
-
-    <!-- 全功能矩阵 (超过20项) -->
-    <div class="glass-card" style="padding: 1.8rem; margin-bottom: 2rem;">
-        <h2 style="display: flex; align-items: center; gap: 0.6rem;"><i class="fas fa-list-check"></i> 全功能矩阵 · 超过20项诊断指标</h2>
-        <div class="feature-grid">
-            <div class="feature-item"><h3><i class="fas fa-map-marker-alt"></i> IP 全信息</h3><p>IPv4/IPv6地址、ASN、运营商、风险等级、数据中心/代理标识，服务端绕过CDN获取真实位置</p></div>
-            <div class="feature-item"><h3><i class="fas fa-charging-station"></i> 实时延迟 & 抖动</h3><p>与CF边缘节点每2秒测一次RTT，动态图表与Jitter标准差，网络稳定性一目了然</p></div>
-            <div class="feature-item"><h3><i class="fas fa-tachometer-alt"></i> 带宽测速</h3><p>多尺寸文件下载测试真实下载速度(Mbps)，准确评估边缘网络吞吐能力</p></div>
-            <div class="feature-item"><h3><i class="fas fa-hourglass-half"></i> 丢包率检测</h3><p>发送10次探测计算精确丢包百分比，弱网环境快速定位</p></div>
-            <div class="feature-item"><h3><i class="fas fa-globe"></i> DNS 解析性能</h3><p>对比cloudflare.com / google.com域名DoH解析时延，判断DNS健康度</p></div>
-            <div class="feature-item"><h3><i class="fas fa-mask"></i> 代理 & 风险评分</h3><p>识别IP是否来自IDC/代理/VPN，输出风险等级(高/中/低)与Bot评分(自动化程度)</p></div>
-            <div class="feature-item"><h3><i class="fas fa-lock"></i> TLS & HTTP协议</h3><p>显示当前连接HTTP/2、HTTP/3协议，TLS版本及加密套件，ECH状态检查</p></div>
-            <div class="feature-item"><h3><i class="fas fa-microchip"></i> CPU / WASM基准</h3><p>云端Worker浮点运算压力测试 & WebAssembly斐波那契性能，量化边缘计算效率</p></div>
-            <div class="feature-item"><h3><i class="fas fa-exchange-alt"></i> WebSocket 测试</h3><p>建立双向通信连接，测试实时消息延迟与吞吐，适用于实时应用场景</p></div>
-            <div class="feature-item"><h3><i class="fas fa-database"></i> 并发请求测试</h3><p>模拟多路并发探测Worker极限并发处理能力，压力评估工具</p></div>
-            <div class="feature-item"><h3><i class="fas fa-cloud-sun"></i> 边缘节点定位</h3><p>显示当前服务的CF城市、colo代号，了解流量入口分布</p></div>
-            <div class="feature-item"><h3><i class="fas fa-user-secret"></i> ECH & 隐私特性</h3><p>检测加密客户端问候(ECH)是否启用，强化隐私保护透明度</p></div>
-        </div>
-        <div class="badge" style="margin-top: 0.5rem;"><i class="fas-regular fa-star"></i> 原生支持 IPv4 / IPv6 双栈 · 每项诊断即开即用</div>
-    </div>
-
-    <!-- 快速部署指南 + API 文档 -->
-    <div class="glass-card" style="padding: 1.8rem; margin-bottom: 2rem;">
-        <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; justify-content: space-between;">
-            <h2><i class="fab fa-cloudflare"></i> 零基础部署 · 两种方式任选</h2>
-            <span class="badge">免费套餐每日10万次请求，个人使用绰绰有余</span>
-        </div>
-        <div style="display: flex; flex-wrap: wrap; gap: 2rem; margin-top: 1.5rem;">
-            <div style="flex: 1; background: #0a0f1c; border-radius: 1.2rem; padding: 1.2rem;">
-                <i class="fas fa-globe" style="font-size: 1.6rem;"></i>
-                <h3 style="margin: 0.5rem 0;">🌐 方式一：Cloudflare 控制台 (Web)</h3>
-                <ol style="margin-left: 1.2rem; color: #cbd5e6; font-size: 0.85rem;">
-                    <li>登录 Cloudflare Dashboard → Workers & Pages</li>
-                    <li>点击「创建应用程序」→「创建 Worker」</li>
-                    <li>将仓库中 <code style="background:#00000077; padding:2px 5px;">_worker.js</code> 代码粘贴至编辑器</li>
-                    <li>「保存并部署」→ 获得 <code>*.workers.dev</code> 专属域名</li>
-                </ol>
-                <a href="https://github.com/ASIACOMKHK/CF-workers-ipcheck/blob/main/_worker.js" target="_blank" style="color:#60a5fa; font-size:0.8rem;"><i class="fab fa-github"></i> 获取最新 worker 脚本 →</a>
+        <!-- 统计数字 -->
+        <div class="stats-section">
+            <div class="stat-card">
+                <div class="stat-number">7+</div>
+                <div class="stat-label">诊断工具</div>
             </div>
-            <div style="flex: 1; background: #0a0f1c; border-radius: 1.2rem; padding: 1.2rem;">
-                <i class="fas fa-terminal"></i>
-                <h3 style="margin: 0.5rem 0;">🛠️ 方式二：Wrangler CLI (开发者)</h3>
-                <pre style="background:#03070f; padding: 0.6rem; border-radius: 12px; overflow-x: auto; font-size: 0.75rem; color:#bbf0d0;"><code>git clone https://github.com/ASIACOMKHK/CF-workers-ipcheck.git
-cd CF-workers-ipcheck
-npx wrangler login
-npx wrangler deploy</code></pre>
-                <p class="badge" style="margin-top: 0.5rem;">一键部署，版本管理更便捷</p>
+            <div class="stat-card">
+                <div class="stat-number">实时</div>
+                <div class="stat-label">毫秒级监控</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">3</div>
+                <div class="stat-label">语言支持</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">免费</div>
+                <div class="stat-label">开源使用</div>
             </div>
         </div>
-    </div>
 
-    <!-- API 接口文档 -->
-    <div class="glass-card" style="padding: 1.8rem; margin-bottom: 2rem;">
-        <h2><i class="fas fa-code"></i> 开发者 API · 嵌入式集成</h2>
-        <p style="margin-bottom: 1rem;">除了可视化界面，Worker 提供丰富的 REST 风格接口，适合自动化监控与二次开发。</p>
-        <table class="api-table">
-            <thead><tr><th>接口端点</th><th>参数</th><th>返回说明</th></tr></thead>
-            <tbody>
-                <tr><td><code>/speedtest</code></td><td><code>?size=1048576</code> (字节)</td><td>随机二进制数据，用于带宽测试</td></tr>
-                <tr><td><code>/cpu-test</code></td><td><code>?n=500000</code></td><td>执行浮点运算，返回耗时和结果</td></tr>
-                <tr><td><code>/doh-compare</code></td><td>无</td><td>对比 Cloudflare / Google DoH 解析时延(ms)</td></tr>
-                <tr><td><code>/wasm-test</code></td><td>无</td><td>运行 WebAssembly 斐波那契基准，返回执行时间</td></tr>
-                <tr><td><code>/websocket-bench</code></td><td>可选</td><td>WebSocket 双向通信延迟测试</td></tr>
-                <tr><td><code>/concurrency</code></td><td><code>?requests=20</code></td><td>模拟并发请求，测试吞吐性能</td></tr>
-            </tbody>
-        </table>
-        <div class="badge" style="margin-top: 1rem;"><i class="fas fa-flask"></i> 示例：curl https://你的worker域名/speedtest?size=5242880 下载5MB测速文件</div>
-    </div>
-
-    <!-- 隐私与特色亮点 -->
-    <div style="display: flex; flex-wrap: wrap; gap: 1.5rem; margin-bottom: 2rem;">
-        <div class="glass-card" style="flex: 1.2; padding: 1.5rem;">
-            <i class="fas fa-chart-simple" style="font-size: 1.6rem;"></i>
-            <h3 style="margin: 0.5rem 0;">📊 可视化实时图表</h3>
-            <p style="font-size: 0.9rem;">前端集成ECharts动态展示延时曲线和历史抖动，网络健康状况一览无余，并提供速度仪表盘。</p>
+        <!-- 功能特性 -->
+        <div class="section-title" id="features">
+            <h2>⚡ 强大的诊断能力</h2>
+            <p>一站式网络性能分析解决方案</p>
         </div>
-        <div class="glass-card" style="flex: 1; padding: 1.5rem;">
-            <i class="fas fa-shield-virus"></i>
-            <h3 style="margin: 0.5rem 0;">🔐 隐私优先 · 透明化安全评估</h3>
-            <p style="font-size: 0.9rem;">展示TLS版本/密码套件、ECH状态以及Cloudflare Bot评分，快速判断网络环境是否存在中间人风险。</p>
+
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="feature-icon"><i class="fas fa-waveform"></i></div>
+                <h3>实时延迟监控</h3>
+                <p>每2秒自动测量往返时延，实时绘制趋势图表，计算网络抖动和丢包率</p>
+                <div class="feature-tags">
+                    <span class="feature-tag">RTT</span>
+                    <span class="feature-tag">抖动</span>
+                    <span class="feature-tag">丢包率</span>
+                </div>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon"><i class="fas fa-gauge-high"></i></div>
+                <h3>带宽测速</h3>
+                <p>测试100KB、500KB、1MB文件下载速度，计算平均带宽和实时速率</p>
+                <div class="feature-tags">
+                    <span class="feature-tag">下载速度</span>
+                    <span class="feature-tag">平均速率</span>
+                </div>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon"><i class="fas fa-shield-haltered"></i></div>
+                <h3>安全协议检测</h3>
+                <p>检测TLS版本、加密套件、ECH状态、HTTP/2推送支持和压缩算法</p>
+                <div class="feature-tags">
+                    <span class="feature-tag">TLS 1.3</span>
+                    <span class="feature-tag">ECH</span>
+                    <span class="feature-tag">H2 Push</span>
+                </div>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon"><i class="fas fa-map-pin"></i></div>
+                <h3>地理位置追踪</h3>
+                <p>显示边缘节点和客户端真实地理位置，计算两者之间的直线距离</p>
+                <div class="feature-tags">
+                    <span class="feature-tag">IP定位</span>
+                    <span class="feature-tag">距离计算</span>
+                    <span class="feature-tag">ISP信息</span>
+                </div>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon"><i class="fas fa-microchip"></i></div>
+                <h3>CPU性能测试</h3>
+                <p>执行密集计算测试，评估设备处理能力，返回每毫秒操作数</p>
+                <div class="feature-tags">
+                    <span class="feature-tag">基准测试</span>
+                    <span class="feature-tag">ops/ms</span>
+                </div>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon"><i class="fas fa-bolt"></i></div>
+                <h3>WebSocket测试</h3>
+                <p>5次ping-pong测试，计算WebSocket连接的平均、最小和最大延迟</p>
+                <div class="feature-tags">
+                    <span class="feature-tag">实时通信</span>
+                    <span class="feature-tag">延迟分析</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 预览区域 -->
+        <div class="preview-section">
+            <h2>📊 实时监控面板</h2>
+            <p>直观的仪表盘设计，实时展示网络状态</p>
+            <div class="preview-placeholder">
+                <div class="preview-stats">
+                    <div class="preview-stat">
+                        <i class="fas fa-arrow-right"></i>
+                        <span>当前RTT: <strong>233ms</strong></span>
+                    </div>
+                    <div class="preview-stat">
+                        <i class="fas fa-chart-line"></i>
+                        <span>抖动: <strong>108ms</strong></span>
+                    </div>
+                    <div class="preview-stat">
+                        <i class="fas fa-signal"></i>
+                        <span>连接质量: <strong style="color:#f87171;">较差</strong></span>
+                    </div>
+                    <div class="preview-stat">
+                        <i class="fas fa-chart-simple"></i>
+                        <span>稳定性: <strong style="color:#f87171;">极不稳定</strong></span>
+                    </div>
+                </div>
+            </div>
+            <div class="preview-stats">
+                <div class="preview-stat">
+                    <i class="fas fa-check-circle"></i>
+                    <span>7种诊断工具</span>
+                </div>
+                <div class="preview-stat">
+                    <i class="fas fa-chart-line"></i>
+                    <span>实时趋势图表</span>
+                </div>
+                <div class="preview-stat">
+                    <i class="fas fa-language"></i>
+                    <span>中英文双语</span>
+                </div>
+                <div class="preview-stat">
+                    <i class="fas fa-copy"></i>
+                    <span>一键导出报告</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 部署指南 -->
+        <div class="deploy-section" id="deploy">
+            <h2><i class="fas fa-cloud-upload-alt"></i> 一键部署到 Cloudflare Workers</h2>
+            <div class="code-block">
+                <pre># 1. 安装 Wrangler CLI
+npm install -g wrangler
+
+# 2. 登录 Cloudflare
+wrangler login
+
+# 3. 创建 wrangler.toml
+name = "netsight-pro"
+main = "worker.js"
+compatibility_date = "2024-12-01"
+
+# 4. 部署
+wrangler deploy</pre>
+            </div>
+            <div class="deploy-steps">
+                <div class="step">
+                    <div class="step-number">1</div>
+                    <div class="step-content">
+                        <h4>复制 worker.js 代码</h4>
+                        <p>将完整的 Worker 代码保存为 worker.js 文件</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-number">2</div>
+                    <div class="step-content">
+                        <h4>配置 wrangler.toml</h4>
+                        <p>创建配置文件，设置 Worker 名称和兼容性日期</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-number">3</div>
+                    <div class="step-content">
+                        <h4>部署到 Cloudflare</h4>
+                        <p>运行 wrangler deploy 命令，自动分配 workers.dev 域名</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-number">4</div>
+                    <div class="step-content">
+                        <h4>绑定自定义域名（可选）</h4>
+                        <p>在 Cloudflare 控制台配置路由，绑定自己的域名</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 页脚 -->
+        <div class="footer">
+            <div class="footer-links">
+                <a href="#features">功能特性</a>
+                <a href="#deploy">部署指南</a>
+                <a href="#">API文档</a>
+                <a href="#">GitHub</a>
+                <a href="#">更新日志</a>
+            </div>
+            <p>NetSight Pro | 蓝色极速网络诊断工具</p>
+            <p>部署于 Cloudflare Workers · 开源免费</p>
         </div>
     </div>
 
-    <hr>
-    <footer style="text-align: center; font-size: 0.8rem; color: #7e8aa2; padding: 1rem 0;">
-        <p><i class="fas fa-code-branch"></i> 开源项目 · CF-workers-netdiag (原名 CF-workers-ipcheck) | 遵循 MIT 许可</p>
-        <p>由 <a href="https://github.com/ASIACOMKHK" target="_blank">ASIACOMKHK</a> 维护 · 网络工程师必备自托管工具箱 <i class="fas fa-heart" style="color:#f472b6;"></i></p>
-        <p>✨ 实时延迟图，带宽测速，安全审计，CPU/WASM基准，全都运行在全球Cloudflare边缘网络 ✨</p>
-    </footer>
-</div>
-
-<script>
-    // ---------- 立即体验：模拟边缘诊断引擎 （演示完整交互，部署后只需替换为真实worker请求）----------
-    let delayHistory = [28, 32, 30, 35, 29, 33, 31, 34, 30, 27, 32, 29];
-    let chart = null;
-    let pingInterval = null;
-    let lastLatencyBuffer = [];
-
-    // 初始化ECharts
-    function initChart() {
-        const dom = document.getElementById('delayChart');
-        if(!dom) return;
-        chart = echarts.init(dom);
-        chart.setOption({
-            tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-            xAxis: { type: 'category', data: delayHistory.map((_,i)=>i+1), name: '探测次数', axisLabel: { color: '#cbd5e6' } },
-            yAxis: { type: 'value', name: '延迟 (ms)', axisLabel: { color: '#cbd5e6' }, splitLine: { lineStyle: { color: '#334155' } } },
-            series: [{
-                data: delayHistory, type: 'line', smooth: false, lineStyle: { color: '#3b82f6', width: 3 },
-                areaStyle: { opacity: 0.25, color: '#3b82f6' }, symbol: 'circle', symbolSize: 6, itemStyle: { color: '#facc15' }
-            }],
-            grid: { borderWidth: 0, containLabel: true, backgroundColor: 'rgba(0,0,0,0.2)' }
+    <script>
+        // 平滑滚动
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({ behavior: 'smooth' });
+                }
+            });
         });
-    }
 
-    // 动态模拟延迟 & 抖动 & 丢包率
-    function genLatency() {
-        return Math.max(12, Math.floor(28 + (Math.random() - 0.5) * 14 + (Math.random() * 5)));
-    }
-    function updateDiagnostics() {
-        const newRtt = genLatency();
-        lastLatencyBuffer.push(newRtt);
-        if(lastLatencyBuffer.length > 10) lastLatencyBuffer.shift();
-        let jitter = 0;
-        if(lastLatencyBuffer.length > 1) {
-            let sumDiff = 0;
-            for(let i=1;i<lastLatencyBuffer.length;i++) sumDiff += Math.abs(lastLatencyBuffer[i] - lastLatencyBuffer[i-1]);
-            jitter = sumDiff / (lastLatencyBuffer.length-1);
-        }
-        let lossSim = (Math.random() * 1.5).toFixed(1);
-        if(Math.random() < 0.08) lossSim = (Math.random() * 3.8).toFixed(1);
-        document.getElementById('rttValue').innerText = newRtt + ' ms';
-        document.getElementById('jitterValue').innerText = jitter.toFixed(1);
-        document.getElementById('lossValue').innerText = lossSim + '%';
+        // 启动按钮 - 跳转到 Worker 地址
+        const launchBtn = document.getElementById('launchBtn');
+        const heroLaunchBtn = document.getElementById('heroLaunchBtn');
         
-        // 更新图表
-        delayHistory.push(newRtt);
-        if(delayHistory.length > 12) delayHistory.shift();
-        if(chart) {
-            chart.setOption({ xAxis: { data: delayHistory.map((_,i)=>i+1) }, series: [{ data: delayHistory }] });
+        // 这里需要替换为实际的 Worker 地址
+        const WORKER_URL = 'https://netsight-pro.your-subdomain.workers.dev';
+        
+        function launchTool() {
+            // 如果是本地开发或预览，可以提示
+            if (WORKER_URL === 'https://netsight-pro.your-subdomain.workers.dev') {
+                alert('请先部署 Worker 并替换 WORKER_URL 变量');
+                window.open('#deploy', '_blank');
+            } else {
+                window.open(WORKER_URL, '_blank');
+            }
         }
-    }
+        
+        if (launchBtn) launchBtn.addEventListener('click', launchTool);
+        if (heroLaunchBtn) heroLaunchBtn.addEventListener('click', launchTool);
 
-    // 模拟获取客户端信息 & TLS
-    function fetchClientBasics() {
-        document.getElementById('clientInfo').innerHTML = '<span class="loading-spinner"></span> 获取中...';
-        document.getElementById('tlsInfo').innerHTML = '<span class="loading-spinner"></span>';
-        setTimeout(() => {
-            const fakeIp = `203.0.113.${Math.floor(Math.random()*90+10)} (AS15169 示例)`;
-            document.getElementById('clientInfo').innerHTML = fakeIp;
-            document.getElementById('tlsInfo').innerHTML = 'TLS 1.3 / HTTP/2 · ECH 支持';
-        }, 400);
-    }
+        // 添加滚动动画
+        const observerOptions = {
+            threshold: 0.1,
+            rootMargin: '0px 0px -50px 0px'
+        };
 
-    // 模拟带宽测速
-    async function simulateBandwidthTest() {
-        const outDiv = document.getElementById('testOutput');
-        outDiv.innerHTML = '<i class="loading-spinner"></i> 带宽测速中，下载测试数据 (模拟边缘节点)...';
-        await new Promise(r => setTimeout(r, 1100));
-        let speed = (Math.random() * 180 + 45).toFixed(1);
-        document.getElementById('bandwidthValue').innerHTML = speed + ' Mbps';
-        outDiv.innerHTML = `✅ 带宽测速完成: ${speed} Mbps (真实部署后调用 /speedtest 接口获得精准吞吐量)`;
-        setTimeout(() => { if(outDiv.innerHTML.includes('带宽测速完成')) outDiv.innerHTML = '<i class="fas fa-info-circle"></i> 点击上方按钮，体验网络诊断能力（模拟演示，真实Worker部署后将调用边缘测速API）'; }, 3500);
-    }
-    async function simulateDNSTest() {
-        const out = document.getElementById('testOutput');
-        out.innerHTML = '<i class="loading-spinner"></i> 对比DNS解析时延 (Cloudflare/Google DoH)...';
-        await new Promise(r => setTimeout(r, 700));
-        let cfTime = (Math.random() * 32 + 12).toFixed(0);
-        let ggTime = (Math.random() * 40 + 18).toFixed(0);
-        out.innerHTML = `🌐 DNS 性能对比: Cloudflare DoH ${cfTime}ms | Google DoH ${ggTime}ms | 解析健康 ✅`;
-        setTimeout(() => { if(out.innerHTML.includes('DNS')) out.innerHTML = '<i class="fas fa-info-circle"></i> 点击上方按钮，体验网络诊断能力...'; }, 4000);
-    }
-    async function simulateCpuBench() {
-        const out = document.getElementById('testOutput');
-        out.innerHTML = '<i class="loading-spinner"></i> 执行 CPU 浮点基准 / WASM 性能模拟...';
-        await new Promise(r => setTimeout(r, 900));
-        let score = (Math.random() * 400 + 280).toFixed(0);
-        out.innerHTML = `🧪 CPU 基准测试: ${score} ops/ms (模拟边缘Worker算力，实际 Worker 浮点压测更精准)`;
-        setTimeout(() => { if(out.innerHTML.includes('CPU')) out.innerHTML = '<i class="fas fa-info-circle"></i> 点击上方按钮，体验网络诊断能力...'; }, 3800);
-    }
-    async function simulateWebSocketEcho() {
-        const out = document.getElementById('testOutput');
-        out.innerHTML = '<i class="loading-spinner"></i> 模拟 WebSocket 双向通信延迟...';
-        await new Promise(r => setTimeout(r, 600));
-        let wsDelay = (Math.random() * 45 + 15).toFixed(0);
-        out.innerHTML = `🔁 WebSocket 回环延迟: ${wsDelay} ms (消息收发正常，支持实时应用场景)`;
-        setTimeout(() => { if(out.innerHTML.includes('WebSocket')) out.innerHTML = '<i class="fas fa-info-circle"></i> 点击上方按钮，体验网络诊断能力...'; }, 3500);
-    }
-    async function simulateRiskScore() {
-        const out = document.getElementById('testOutput');
-        out.innerHTML = '<i class="loading-spinner"></i> 代理风险 & Bot 评分分析中...';
-        await new Promise(r => setTimeout(r, 800));
-        let riskLevel = Math.random() > 0.75 ? '中风险' : '低风险';
-        let botScore = (Math.random() * 35).toFixed(0);
-        out.innerHTML = `🛡️ 安全审计: IP 类型 “家庭宽带” | 风险等级 ${riskLevel} | Cloudflare Bot 评分: ${botScore} (分数越低越疑似自动化)`;
-        setTimeout(() => { if(out.innerHTML.includes('安全审计')) out.innerHTML = '<i class="fas fa-info-circle"></i> 点击上方按钮，体验网络诊断能力...'; }, 4200);
-    }
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.style.opacity = '1';
+                    entry.target.style.transform = 'translateY(0)';
+                    observer.unobserve(entry.target);
+                }
+            });
+        }, observerOptions);
 
-    // 整体刷新面板
-    function fullRefresh() {
-        updateDiagnostics();
-        simulateBandwidthTest();
-        fetchClientBasics();
-        const outDiv = document.getElementById('testOutput');
-        outDiv.innerHTML = '<i class="fas fa-sync-alt fa-spin"></i> 正在全面刷新诊断指标...';
-        setTimeout(() => {
-            if(outDiv.innerHTML.includes('全面刷新')) outDiv.innerHTML = '<i class="fas fa-info-circle"></i> 点击上方按钮，体验网络诊断能力（模拟演示，真实Worker部署后将调用边缘测速API）';
-        }, 1800);
-    }
-
-    // 初始化所有交互与自动延迟追踪
-    window.addEventListener('load', () => {
-        initChart();
-        fetchClientBasics();
-        document.getElementById('bandwidthValue').innerHTML = '82.3 Mbps';
-        if(pingInterval) clearInterval(pingInterval);
-        pingInterval = setInterval(() => updateDiagnostics(), 2500);
-        document.getElementById('refreshAllTests')?.addEventListener('click', fullRefresh);
-        document.getElementById('speedtestBtn')?.addEventListener('click', simulateBandwidthTest);
-        document.getElementById('dnsTestBtn')?.addEventListener('click', simulateDNSTest);
-        document.getElementById('cpuBenchBtn')?.addEventListener('click', simulateCpuBench);
-        document.getElementById('wsTestBtn')?.addEventListener('click', simulateWebSocketEcho);
-        document.getElementById('riskCheckBtn')?.addEventListener('click', simulateRiskScore);
-        updateDiagnostics();
-        console.log("%c✨ CF-workers-netdiag 功能全景介绍页 | 包含完整诊断演示", "color: #3b82f6; font-size: 14px;");
-    });
-    document.querySelectorAll('a[target="_blank"]').forEach(link => link.setAttribute('rel', 'noopener noreferrer'));
-</script>
+        document.querySelectorAll('.feature-card, .stat-card, .preview-section, .deploy-section').forEach(el => {
+            el.style.opacity = '0';
+            el.style.transform = 'translateY(30px)';
+            observer.observe(el);
+        });
+    </script>
 </body>
 </html>
