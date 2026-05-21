@@ -106,6 +106,7 @@
             display: flex;
             gap: 32px;
             align-items: center;
+            flex-wrap: wrap;
         }
 
         .nav-links a {
@@ -376,6 +377,104 @@
             font-size: 18px;
         }
 
+        /* 更新日志 */
+        .changelog-section {
+            background: rgba(15, 25, 45, 0.5);
+            border-radius: 28px;
+            border: 1px solid rgba(56, 189, 248, 0.15);
+            padding: 40px;
+            margin-bottom: 60px;
+        }
+
+        .changelog-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 16px;
+            margin-bottom: 32px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid rgba(56, 189, 248, 0.15);
+        }
+
+        .changelog-header h2 {
+            font-size: 28px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .version-badge {
+            background: linear-gradient(135deg, #2563eb, #06b6d4);
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .changelog-list {
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        .changelog-item {
+            padding: 16px;
+            background: rgba(0,0,0,0.2);
+            border-radius: 20px;
+            border-left: 3px solid #06b6d4;
+        }
+
+        .changelog-version {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+        }
+
+        .version-tag {
+            background: rgba(6, 182, 212, 0.2);
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+            color: #06b6d4;
+        }
+
+        .version-date {
+            font-size: 12px;
+            color: rgba(255,255,255,0.4);
+        }
+
+        .changelog-content {
+            padding-left: 8px;
+        }
+
+        .changelog-content ul {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .changelog-content li {
+            padding: 6px 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 14px;
+            color: rgba(255,255,255,0.7);
+        }
+
+        .changelog-content li i {
+            width: 20px;
+            font-size: 12px;
+        }
+
+        .changelog-content li i.fa-plus-circle { color: #4ade80; }
+        .changelog-content li i.fa-wrench { color: #fbbf24; }
+        .changelog-content li i.fa-bug { color: #f87171; }
+        .changelog-content li i.fa-arrow-up { color: #06b6d4; }
+
         /* 部署指南 */
         .deploy-section {
             background: rgba(15, 25, 45, 0.5);
@@ -485,6 +584,7 @@
             .stats-section { grid-template-columns: repeat(2, 1fr); }
             .navbar { flex-direction: column; text-align: center; }
             .nav-links { justify-content: center; }
+            .changelog-header { flex-direction: column; text-align: center; }
         }
 
         /* 动画 */
@@ -499,7 +599,7 @@
             }
         }
 
-        .feature-card, .stat-card, .preview-section, .deploy-section {
+        .feature-card, .stat-card, .preview-section, .changelog-section, .deploy-section {
             animation: fadeInUp 0.6s ease forwards;
             opacity: 0;
         }
@@ -527,8 +627,8 @@
             </div>
             <div class="nav-links">
                 <a href="#features">功能</a>
+                <a href="#changelog">更新日志</a>
                 <a href="#deploy">部署</a>
-                <a href="#docs">文档</a>
                 <a href="https://github.com" target="_blank"><i class="fab fa-github"></i> GitHub</a>
                 <a href="#" class="btn-glow" id="launchBtn">
                     <i class="fas fa-rocket"></i> 启动工具
@@ -683,6 +783,64 @@
             </div>
         </div>
 
+        <!-- 更新日志 -->
+        <div class="changelog-section" id="changelog">
+            <div class="changelog-header">
+                <h2><i class="fas fa-history"></i> 更新日志</h2>
+                <span class="version-badge"><i class="fas fa-tag"></i> 最新版本 v2.0</span>
+            </div>
+            <div class="changelog-list">
+                <div class="changelog-item">
+                    <div class="changelog-version">
+                        <span class="version-tag">v2.0.0</span>
+                        <span class="version-date">2024年12月15日</span>
+                    </div>
+                    <div class="changelog-content">
+                        <ul>
+                            <li><i class="fas fa-plus-circle"></i> 全新蓝色主题UI设计，玻璃态毛玻璃效果</li>
+                            <li><i class="fas fa-plus-circle"></i> 增强实时延迟监控图表，高度从100px增加到160px</li>
+                            <li><i class="fas fa-plus-circle"></i> 新增连接质量和网络稳定性实时评估</li>
+                            <li><i class="fas fa-plus-circle"></i> 完整的多语言支持（简体/繁体/英文）</li>
+                            <li><i class="fas fa-plus-circle"></i> 添加最低/最高RTT历史统计</li>
+                            <li><i class="fas fa-plus-circle"></i> 新增丢包率实时监控</li>
+                            <li><i class="fas fa-wrench"></i> 优化所有测试端点的超时处理机制</li>
+                            <li><i class="fas fa-wrench"></i> 改进响应式布局，移动端体验优化</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="changelog-item">
+                    <div class="changelog-version">
+                        <span class="version-tag">v1.5.0</span>
+                        <span class="version-date">2024年11月20日</span>
+                    </div>
+                    <div class="changelog-content">
+                        <ul>
+                            <li><i class="fas fa-plus-circle"></i> 新增并发请求测试功能</li>
+                            <li><i class="fas fa-plus-circle"></i> 新增流式传输吞吐量测试</li>
+                            <li><i class="fas fa-plus-circle"></i> 添加HTTP/2 Server Push检测</li>
+                            <li><i class="fas fa-wrench"></i> 优化带宽测速算法，提高准确度</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="changelog-item">
+                    <div class="changelog-version">
+                        <span class="version-tag">v1.0.0</span>
+                        <span class="version-date">2024年10月1日</span>
+                    </div>
+                    <div class="changelog-content">
+                        <ul>
+                            <li><i class="fas fa-plus-circle"></i> 初始版本发布</li>
+                            <li><i class="fas fa-plus-circle"></i 支持实时RTT监控和图表绘制</li>
+                            <li><i class="fas fa-plus-circle"></i> 支持丢包率测试、带宽测速、DNS解析</li>
+                            <li><i class="fas fa-plus-circle"></i> 支持CPU性能测试和WebSocket延迟测试</li>
+                            <li><i class="fas fa-plus-circle"></i> 支持安全协议检测和地理位置追踪</li>
+                            <li><i class="fas fa-plus-circle"></i> 支持一键复制诊断报告</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- 部署指南 -->
         <div class="deploy-section" id="deploy">
             <h2><i class="fas fa-cloud-upload-alt"></i> 一键部署到 Cloudflare Workers</h2>
@@ -737,13 +895,13 @@ wrangler deploy</pre>
         <div class="footer">
             <div class="footer-links">
                 <a href="#features">功能特性</a>
+                <a href="#changelog">更新日志</a>
                 <a href="#deploy">部署指南</a>
-                <a href="#">API文档</a>
-                <a href="#">GitHub</a>
-                <a href="#">更新日志</a>
+                <a href="https://github.com" target="_blank">GitHub</a>
+                <a href="#">关于</a>
             </div>
             <p>NetSight Pro | 蓝色极速网络诊断工具</p>
-            <p>部署于 Cloudflare Workers · 开源免费</p>
+            <p>部署于 Cloudflare Workers · 开源免费 · MIT License</p>
         </div>
     </div>
 
@@ -767,7 +925,6 @@ wrangler deploy</pre>
         const WORKER_URL = 'https://netsight-pro.your-subdomain.workers.dev';
         
         function launchTool() {
-            // 如果是本地开发或预览，可以提示
             if (WORKER_URL === 'https://netsight-pro.your-subdomain.workers.dev') {
                 alert('请先部署 Worker 并替换 WORKER_URL 变量');
                 window.open('#deploy', '_blank');
@@ -795,7 +952,7 @@ wrangler deploy</pre>
             });
         }, observerOptions);
 
-        document.querySelectorAll('.feature-card, .stat-card, .preview-section, .deploy-section').forEach(el => {
+        document.querySelectorAll('.feature-card, .stat-card, .preview-section, .changelog-section, .deploy-section').forEach(el => {
             el.style.opacity = '0';
             el.style.transform = 'translateY(30px)';
             observer.observe(el);
