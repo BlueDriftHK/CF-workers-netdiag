@@ -1,7 +1,7 @@
 // ============================================================
-// 网络诊断工具 - 蓝色主题精美UI版 Cloudflare Worker
-// 功能：网络延迟测试、带宽测速、丢包检测、WebSocket测试、
-//       CPU性能测试、并发测试、流式传输测试等
+// NetSight Pro - 蓝色极速网络诊断工具
+// Cloudflare Worker 完整优化版
+// 版本: 2.1 | UI全面优化
 // ============================================================
 
 addEventListener('fetch', event => {
@@ -276,7 +276,7 @@ async function handleRequest(request) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>NetSight Pro | 蓝色极速网络诊断</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         * {
@@ -285,15 +285,30 @@ async function handleRequest(request) {
             box-sizing: border-box;
         }
 
+        :root {
+            --primary: #2563eb;
+            --primary-light: #3b82f6;
+            --primary-cyan: #06b6d4;
+            --primary-glow: rgba(37, 99, 235, 0.4);
+            --bg-dark: #0a0f1a;
+            --bg-card: rgba(15, 25, 45, 0.55);
+            --border-glow: rgba(59, 130, 246, 0.25);
+            --text-dim: rgba(255,255,255,0.5);
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+        }
+
         body {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: linear-gradient(135deg, #0a1628 0%, #0d1b2a 25%, #0f172a 50%, #1e1b4b 100%);
+            background: linear-gradient(135deg, #0a0f1a 0%, #0d1425 50%, #0a0c15 100%);
             min-height: 100vh;
             padding: 20px;
             color: #fff;
             position: relative;
         }
 
+        /* 动态网格背景 */
         body::before {
             content: '';
             position: fixed;
@@ -301,14 +316,14 @@ async function handleRequest(request) {
             left: 0;
             width: 100%;
             height: 100%;
-            background-image: 
-                linear-gradient(rgba(56, 189, 248, 0.03) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(56, 189, 248, 0.03) 1px, transparent 1px);
-            background-size: 40px 40px;
+            background-image: linear-gradient(var(--border-glow) 1px, transparent 1px), linear-gradient(90deg, var(--border-glow) 1px, transparent 1px);
+            background-size: 50px 50px;
             pointer-events: none;
             z-index: 0;
+            opacity: 0.4;
         }
 
+        /* 光晕效果 */
         body::after {
             content: '';
             position: fixed;
@@ -316,7 +331,7 @@ async function handleRequest(request) {
             left: -50%;
             width: 200%;
             height: 200%;
-            background: radial-gradient(circle at 30% 40%, rgba(56, 189, 248, 0.08) 0%, transparent 60%);
+            background: radial-gradient(circle at 30% 40%, rgba(59, 130, 246, 0.08) 0%, transparent 60%);
             pointer-events: none;
             z-index: 0;
         }
@@ -328,25 +343,27 @@ async function handleRequest(request) {
             z-index: 1;
         }
 
+        /* 玻璃态效果 */
         .glass {
-            background: rgba(15, 25, 45, 0.6);
-            backdrop-filter: blur(12px);
-            border: 1px solid rgba(56, 189, 248, 0.2);
-            border-radius: 28px;
+            background: var(--bg-card);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--border-glow);
+            border-radius: 32px;
         }
 
+        /* 头部导航 */
         .header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 20px 30px;
+            padding: 20px 32px;
             margin-bottom: 30px;
             flex-wrap: wrap;
             gap: 20px;
-            background: rgba(15, 25, 45, 0.5);
-            backdrop-filter: blur(12px);
-            border-radius: 28px;
-            border: 1px solid rgba(56, 189, 248, 0.15);
+            background: rgba(10, 15, 26, 0.7);
+            backdrop-filter: blur(16px);
+            border-radius: 32px;
+            border: 1px solid var(--border-glow);
         }
 
         .logo {
@@ -358,19 +375,25 @@ async function handleRequest(request) {
         .logo-icon {
             width: 52px;
             height: 52px;
-            background: linear-gradient(135deg, #2563eb, #38bdf8);
+            background: linear-gradient(135deg, var(--primary), var(--primary-cyan));
             border-radius: 18px;
             display: flex;
             align-items: center;
             justify-content: center;
             font-size: 26px;
-            box-shadow: 0 8px 20px rgba(37, 99, 235, 0.3);
+            box-shadow: 0 8px 20px var(--primary-glow);
+            animation: glowPulse 3s infinite;
+        }
+
+        @keyframes glowPulse {
+            0%, 100% { box-shadow: 0 8px 20px var(--primary-glow); }
+            50% { box-shadow: 0 8px 30px rgba(37, 99, 235, 0.6); }
         }
 
         .logo h1 {
             font-size: 26px;
             font-weight: 700;
-            background: linear-gradient(135deg, #fff, #38bdf8);
+            background: linear-gradient(135deg, #fff, var(--primary-cyan));
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
@@ -378,24 +401,24 @@ async function handleRequest(request) {
 
         .logo p {
             font-size: 12px;
-            color: rgba(56, 189, 248, 0.6);
+            color: var(--text-dim);
             margin-top: 4px;
         }
 
         .lang-switcher {
             display: flex;
             gap: 8px;
-            background: rgba(56, 189, 248, 0.08);
+            background: rgba(59, 130, 246, 0.08);
             padding: 6px;
             border-radius: 40px;
-            border: 1px solid rgba(56, 189, 248, 0.15);
+            border: 1px solid var(--border-glow);
         }
 
         .lang-btn {
             background: transparent;
             border: none;
-            color: rgba(255,255,255,0.5);
-            padding: 8px 18px;
+            color: var(--text-dim);
+            padding: 8px 20px;
             border-radius: 32px;
             cursor: pointer;
             font-size: 13px;
@@ -404,30 +427,32 @@ async function handleRequest(request) {
         }
 
         .lang-btn.active {
-            background: linear-gradient(135deg, #2563eb, #38bdf8);
+            background: linear-gradient(135deg, var(--primary), var(--primary-cyan));
             color: #fff;
-            box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3);
+            box-shadow: 0 2px 8px var(--primary-glow);
         }
 
-        .lang-btn:hover {
+        .lang-btn:hover:not(.active) {
             color: #fff;
+            background: rgba(59, 130, 246, 0.2);
         }
 
+        /* IP 卡片 */
         .ip-card {
-            background: linear-gradient(135deg, rgba(37, 99, 235, 0.15) 0%, rgba(56, 189, 248, 0.1) 100%);
-            border-radius: 32px;
-            padding: 30px;
+            background: linear-gradient(135deg, rgba(37, 99, 235, 0.12) 0%, rgba(6, 182, 212, 0.08) 100%);
+            border-radius: 36px;
+            padding: 32px;
             margin-bottom: 30px;
-            border: 1px solid rgba(56, 189, 248, 0.3);
-            box-shadow: 0 8px 32px rgba(37, 99, 235, 0.1);
+            border: 1px solid var(--border-glow);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
         }
 
         .ip-row {
             display: flex;
             align-items: baseline;
             flex-wrap: wrap;
-            gap: 15px;
-            margin-bottom: 15px;
+            gap: 16px;
+            margin-bottom: 16px;
         }
 
         .ip-label {
@@ -435,7 +460,7 @@ async function handleRequest(request) {
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 1.5px;
-            color: #38bdf8;
+            color: var(--primary-cyan);
             min-width: 55px;
         }
 
@@ -443,7 +468,7 @@ async function handleRequest(request) {
             font-size: 28px;
             font-weight: 700;
             font-family: 'Monaco', 'Courier New', monospace;
-            background: linear-gradient(135deg, #fff, #38bdf8);
+            background: linear-gradient(135deg, #fff, var(--primary-cyan));
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
@@ -456,26 +481,27 @@ async function handleRequest(request) {
 
         .stats-row {
             display: flex;
-            gap: 24px;
-            margin-top: 20px;
+            gap: 20px;
+            margin-top: 24px;
             flex-wrap: wrap;
         }
 
         .stat-item {
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 10px;
             font-size: 13px;
-            padding: 6px 14px;
-            background: rgba(56, 189, 248, 0.08);
+            padding: 8px 18px;
+            background: rgba(59, 130, 246, 0.1);
             border-radius: 40px;
-            border: 1px solid rgba(56, 189, 248, 0.15);
+            border: 1px solid var(--border-glow);
         }
 
         .stat-item i {
-            color: #38bdf8;
+            color: var(--primary-cyan);
         }
 
+        /* 网格布局 */
         .grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
@@ -483,25 +509,26 @@ async function handleRequest(request) {
             margin-bottom: 30px;
         }
 
+        /* 卡片样式 */
         .card {
-            background: rgba(15, 25, 45, 0.55);
-            backdrop-filter: blur(10px);
+            background: var(--bg-card);
+            backdrop-filter: blur(12px);
             border-radius: 28px;
-            border: 1px solid rgba(56, 189, 248, 0.12);
+            border: 1px solid var(--border-glow);
             overflow: hidden;
             transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         .card:hover {
             transform: translateY(-6px);
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
-            border-color: rgba(56, 189, 248, 0.35);
+            box-shadow: 0 24px 48px rgba(0, 0, 0, 0.3);
+            border-color: rgba(59, 130, 246, 0.5);
         }
 
         .card-header {
             padding: 20px 24px;
-            background: linear-gradient(135deg, rgba(37, 99, 235, 0.1) 0%, rgba(56, 189, 248, 0.05) 100%);
-            border-bottom: 1px solid rgba(56, 189, 248, 0.1);
+            background: linear-gradient(135deg, rgba(37, 99, 235, 0.08) 0%, rgba(6, 182, 212, 0.04) 100%);
+            border-bottom: 1px solid var(--border-glow);
             display: flex;
             align-items: center;
             gap: 14px;
@@ -509,7 +536,7 @@ async function handleRequest(request) {
 
         .card-header i {
             font-size: 28px;
-            color: #38bdf8;
+            color: var(--primary-cyan);
         }
 
         .card-header h3 {
@@ -518,8 +545,8 @@ async function handleRequest(request) {
         }
 
         .card-header p {
-            font-size: 12px;
-            color: rgba(56, 189, 248, 0.6);
+            font-size: 11px;
+            color: var(--text-dim);
             margin-top: 4px;
         }
 
@@ -527,12 +554,13 @@ async function handleRequest(request) {
             padding: 24px;
         }
 
+        /* 信息行 */
         .info-row {
             display: flex;
             justify-content: space-between;
             align-items: center;
             padding: 12px 0;
-            border-bottom: 1px solid rgba(56, 189, 248, 0.08);
+            border-bottom: 1px solid rgba(59, 130, 246, 0.08);
         }
 
         .info-row:last-child {
@@ -541,7 +569,7 @@ async function handleRequest(request) {
 
         .info-label {
             font-size: 13px;
-            color: rgba(255,255,255,0.55);
+            color: var(--text-dim);
             display: flex;
             align-items: center;
             gap: 10px;
@@ -550,7 +578,7 @@ async function handleRequest(request) {
         .info-label i {
             font-size: 14px;
             width: 20px;
-            color: #38bdf8;
+            color: var(--primary-cyan);
         }
 
         .info-value {
@@ -559,6 +587,7 @@ async function handleRequest(request) {
             font-family: 'Monaco', 'Courier New', monospace;
         }
 
+        /* 徽章 */
         .badge {
             padding: 4px 12px;
             border-radius: 30px;
@@ -566,7 +595,7 @@ async function handleRequest(request) {
             font-weight: 600;
             display: inline-flex;
             align-items: center;
-            gap: 5px;
+            gap: 6px;
         }
 
         .badge-success {
@@ -576,9 +605,9 @@ async function handleRequest(request) {
         }
 
         .badge-warning {
-            background: rgba(251, 146, 60, 0.15);
-            color: #fb923c;
-            border: 1px solid rgba(251, 146, 60, 0.3);
+            background: rgba(245, 158, 11, 0.15);
+            color: #fbbf24;
+            border: 1px solid rgba(245, 158, 11, 0.3);
         }
 
         .badge-danger {
@@ -588,15 +617,14 @@ async function handleRequest(request) {
         }
 
         .badge-info {
-            background: rgba(56, 189, 248, 0.15);
-            color: #38bdf8;
-            border: 1px solid rgba(56, 189, 248, 0.3);
+            background: rgba(6, 182, 212, 0.15);
+            color: #22d3ee;
+            border: 1px solid rgba(6, 182, 212, 0.3);
         }
 
-        /* ========== 实时延迟监控卡片 - 拉长版 ========== */
+        /* 实时延迟区域 - 拉长版 */
         .rtt-card {
-            grid-row: span 1;
-            min-height: 480px;
+            min-height: 520px;
             display: flex;
             flex-direction: column;
         }
@@ -615,24 +643,24 @@ async function handleRequest(request) {
         }
 
         .rtt-box {
-            background: rgba(6, 182, 212, 0.1);
-            border-radius: 20px;
-            padding: 20px 12px;
+            background: linear-gradient(135deg, rgba(6, 182, 212, 0.08), rgba(37, 99, 235, 0.05));
+            border-radius: 24px;
+            padding: 20px 16px;
             text-align: center;
             border: 1px solid rgba(56, 189, 248, 0.2);
-            transition: all 0.2s;
+            transition: all 0.3s ease;
         }
 
         .rtt-box:hover {
-            background: rgba(6, 182, 212, 0.15);
-            border-color: rgba(56, 189, 248, 0.4);
-            transform: translateY(-2px);
+            transform: translateY(-3px);
+            background: linear-gradient(135deg, rgba(6, 182, 212, 0.15), rgba(37, 99, 235, 0.1));
+            border-color: rgba(56, 189, 248, 0.5);
         }
 
         .rtt-value {
             font-size: 48px;
-            font-weight: 700;
-            background: linear-gradient(135deg, #fff, #38bdf8);
+            font-weight: 800;
+            background: linear-gradient(135deg, #fff, var(--primary-cyan));
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
@@ -641,7 +669,7 @@ async function handleRequest(request) {
 
         .rtt-label {
             font-size: 12px;
-            color: rgba(56, 189, 248, 0.7);
+            color: var(--text-dim);
             margin-top: 10px;
             letter-spacing: 0.5px;
         }
@@ -651,41 +679,43 @@ async function handleRequest(request) {
             border-radius: 20px;
             padding: 20px;
             margin: 20px 0;
-            border: 1px solid rgba(56, 189, 248, 0.15);
+            border: 1px solid var(--border-glow);
         }
 
         canvas {
             width: 100%;
-            height: 160px;
+            height: 140px;
         }
 
-        /* 质量指标行 - 拉长版 */
-        .quality-row {
+        /* 质量指标行 */
+        .quality-grid {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
             gap: 12px;
             margin-top: 20px;
             padding-top: 20px;
-            border-top: 1px solid rgba(56, 189, 248, 0.15);
+            border-top: 1px solid var(--border-glow);
         }
 
-        .quality-item {
+        .quality-card {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 18px;
+            padding: 14px 16px;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            background: rgba(0, 0, 0, 0.3);
-            padding: 12px 16px;
-            border-radius: 16px;
-            transition: all 0.2s;
+            transition: all 0.2s ease;
+            border: 1px solid transparent;
         }
 
-        .quality-item:hover {
+        .quality-card:hover {
             background: rgba(0, 0, 0, 0.45);
+            border-color: rgba(56, 189, 248, 0.3);
         }
 
         .quality-label {
             font-size: 12px;
-            color: rgba(255,255,255,0.5);
+            color: var(--text-dim);
             display: flex;
             align-items: center;
             gap: 8px;
@@ -693,12 +723,12 @@ async function handleRequest(request) {
 
         .quality-label i {
             font-size: 14px;
-            color: #38bdf8;
+            color: var(--primary-cyan);
         }
 
         .quality-value {
-            font-size: 14px;
-            font-weight: 600;
+            font-size: 15px;
+            font-weight: 700;
         }
 
         /* 按钮组 */
@@ -710,7 +740,7 @@ async function handleRequest(request) {
         }
 
         .btn {
-            padding: 10px 22px;
+            padding: 10px 24px;
             border-radius: 40px;
             font-size: 13px;
             font-weight: 500;
@@ -724,9 +754,9 @@ async function handleRequest(request) {
         }
 
         .btn-primary {
-            background: linear-gradient(135deg, #2563eb, #38bdf8);
+            background: linear-gradient(135deg, var(--primary), var(--primary-cyan));
             color: white;
-            box-shadow: 0 2px 10px rgba(37, 99, 235, 0.3);
+            box-shadow: 0 2px 10px var(--primary-glow);
         }
 
         .btn-primary:hover {
@@ -736,14 +766,14 @@ async function handleRequest(request) {
 
         .btn-outline {
             background: transparent;
-            border: 1px solid rgba(56, 189, 248, 0.3);
+            border: 1px solid var(--border-glow);
             color: rgba(255,255,255,0.8);
         }
 
         .btn-outline:hover {
-            border-color: #38bdf8;
-            color: #38bdf8;
-            background: rgba(56, 189, 248, 0.05);
+            border-color: var(--primary-cyan);
+            color: var(--primary-cyan);
+            background: rgba(6, 182, 212, 0.05);
         }
 
         .btn-cyan {
@@ -756,15 +786,15 @@ async function handleRequest(request) {
             box-shadow: 0 8px 20px rgba(6, 182, 212, 0.3);
         }
 
+        /* 结果区域 */
         .result-area {
             margin-top: 16px;
-            padding: 14px 16px;
-            background: rgba(0, 0, 0, 0.25);
+            padding: 14px 18px;
+            background: rgba(0, 0, 0, 0.3);
             border-radius: 16px;
             font-size: 12px;
-            border-left: 3px solid #38bdf8;
+            border-left: 3px solid var(--primary-cyan);
             transition: all 0.3s ease;
-            display: none;
         }
 
         .speed-result {
@@ -775,40 +805,34 @@ async function handleRequest(request) {
         }
 
         .speed-item {
-            background: linear-gradient(135deg, rgba(37, 99, 235, 0.1), rgba(56, 189, 248, 0.05));
+            background: linear-gradient(135deg, rgba(37, 99, 235, 0.1), rgba(6, 182, 212, 0.05));
             border-radius: 14px;
             padding: 10px 16px;
             font-size: 12px;
-            border-left: 3px solid #38bdf8;
+            border-left: 3px solid var(--primary-cyan);
         }
 
-        .perf-badge {
-            display: inline-block;
-            padding: 2px 10px;
-            border-radius: 20px;
-            font-size: 10px;
-            margin-left: 8px;
-        }
-
+        /* 页脚 */
         .footer {
             margin-top: 30px;
-            padding: 20px 30px;
+            padding: 20px 32px;
             text-align: center;
             font-size: 12px;
-            color: rgba(56, 189, 248, 0.4);
+            color: var(--text-dim);
             display: flex;
             justify-content: space-between;
             flex-wrap: wrap;
             gap: 15px;
-            background: rgba(15, 25, 45, 0.4);
+            background: rgba(10, 15, 26, 0.5);
             backdrop-filter: blur(10px);
             border-radius: 28px;
-            border: 1px solid rgba(56, 189, 248, 0.1);
+            border: 1px solid var(--border-glow);
         }
 
+        /* 动画 */
         @keyframes pulse {
             0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.5; transform: scale(1.1); }
+            50% { opacity: 0.5; transform: scale(1.15); }
         }
 
         @keyframes spin {
@@ -821,13 +845,13 @@ async function handleRequest(request) {
             width: 10px;
             height: 10px;
             border-radius: 50%;
-            background: #38bdf8;
+            background: #22c55e;
             animation: pulse 1.5s infinite;
             margin-right: 8px;
-            box-shadow: 0 0 8px #38bdf8;
+            box-shadow: 0 0 8px #22c55e;
         }
 
-        .fa-spinner {
+        .fa-spin-custom {
             animation: spin 1s linear infinite;
         }
 
@@ -835,47 +859,51 @@ async function handleRequest(request) {
             display: inline-block;
             width: 16px;
             height: 16px;
-            border: 2px solid rgba(56, 189, 248, 0.3);
-            border-top-color: #38bdf8;
+            border: 2px solid rgba(6, 182, 212, 0.3);
+            border-top-color: #06b6d4;
             border-radius: 50%;
             animation: spin 0.8s linear infinite;
             margin-right: 8px;
+            vertical-align: middle;
         }
 
+        /* 响应式 */
         @media (max-width: 768px) {
             body { padding: 12px; }
             .grid { grid-template-columns: 1fr; }
-            .ip-val { font-size: 18px; }
+            .ip-val { font-size: 16px; }
             .header { flex-direction: column; text-align: center; }
             .button-group { justify-content: center; }
             .rtt-value { font-size: 36px; }
-            .rtt-display { gap: 12px; }
-            .quality-row { grid-template-columns: 1fr; gap: 10px; }
-            .quality-item { padding: 10px 14px; }
+            .stats-row { justify-content: center; }
+            .footer { flex-direction: column; text-align: center; }
+            .quality-grid { grid-template-columns: 1fr; gap: 10px; }
         }
 
+        /* 滚动条 */
         ::-webkit-scrollbar {
             width: 6px;
             height: 6px;
         }
 
         ::-webkit-scrollbar-track {
-            background: rgba(56, 189, 248, 0.05);
+            background: rgba(59, 130, 246, 0.05);
             border-radius: 10px;
         }
 
         ::-webkit-scrollbar-thumb {
-            background: rgba(56, 189, 248, 0.4);
+            background: rgba(59, 130, 246, 0.4);
             border-radius: 10px;
         }
 
         ::-webkit-scrollbar-thumb:hover {
-            background: rgba(56, 189, 248, 0.6);
+            background: rgba(59, 130, 246, 0.6);
         }
     </style>
 </head>
 <body>
     <div class="container">
+        <!-- 头部 -->
         <div class="header">
             <div class="logo">
                 <div class="logo-icon">
@@ -893,6 +921,7 @@ async function handleRequest(request) {
             </div>
         </div>
 
+        <!-- IP 信息卡片 -->
         <div class="ip-card">
             <div class="ip-row">
                 <span class="ip-label"><i class="fas fa-globe"></i> IPv4</span>
@@ -910,6 +939,7 @@ async function handleRequest(request) {
         </div>
 
         <div class="grid">
+            <!-- 安全与协议卡片 -->
             <div class="card">
                 <div class="card-header">
                     <i class="fas fa-shield-haltered"></i>
@@ -962,6 +992,7 @@ async function handleRequest(request) {
                 </div>
             </div>
 
+            <!-- 地理位置卡片 -->
             <div class="card">
                 <div class="card-header">
                     <i class="fas fa-map-pin"></i>
@@ -971,6 +1002,9 @@ async function handleRequest(request) {
                     </div>
                 </div>
                 <div class="card-body">
+                    <div style="text-align: center; margin-bottom: 16px;">
+                        <i class="fas fa-city" style="font-size: 48px; color: #06b6d4; opacity: 0.7;"></i>
+                    </div>
                     <div class="info-row">
                         <span class="info-label"><i class="fas fa-location-dot"></i> 位置</span>
                         <span class="info-value">${data.city}, ${data.region}, ${data.country}</span>
@@ -986,6 +1020,7 @@ async function handleRequest(request) {
                 </div>
             </div>
 
+            <!-- 真实 IP 位置卡片 -->
             <div class="card">
                 <div class="card-header">
                     <i class="fas fa-user-secret"></i>
@@ -1001,7 +1036,7 @@ async function handleRequest(request) {
                 </div>
             </div>
 
-            <!-- ========== 实时延迟监控卡片 - 拉长版 ========== -->
+            <!-- 实时延迟监控卡片 - 拉长版 -->
             <div class="card rtt-card">
                 <div class="card-header">
                     <i class="fas fa-waveform"></i>
@@ -1026,20 +1061,20 @@ async function handleRequest(request) {
                         <canvas id="chart"></canvas>
                     </div>
                     
-                    <div class="quality-row">
-                        <div class="quality-item">
+                    <div class="quality-grid">
+                        <div class="quality-card">
                             <span class="quality-label"><i class="fas fa-signal"></i> 连接质量</span>
-                            <span class="quality-value" id="quality-badge" style="color: #f87171;">较差</span>
+                            <span class="quality-value" id="quality-badge" style="color: #4ade80;">优秀</span>
                         </div>
-                        <div class="quality-item">
+                        <div class="quality-card">
                             <span class="quality-label"><i class="fas fa-chart-simple"></i> 网络稳定性</span>
-                            <span class="quality-value" id="stability-badge" style="color: #f87171;">极不稳定</span>
+                            <span class="quality-value" id="stability-badge" style="color: #22d3ee;">稳定</span>
                         </div>
-                        <div class="quality-item">
+                        <div class="quality-card">
                             <span class="quality-label"><i class="fas fa-chart-bar"></i> 样本数量</span>
                             <span class="quality-value" id="sample-count" style="font-family: monospace;">0</span>
                         </div>
-                        <div class="quality-item">
+                        <div class="quality-card">
                             <span class="quality-label"><i class="fas fa-exchange-alt"></i> 丢包率</span>
                             <span class="quality-value" id="loss-rate" style="color: #4ade80;">0%</span>
                         </div>
@@ -1048,6 +1083,7 @@ async function handleRequest(request) {
             </div>
         </div>
 
+        <!-- 测试工具区域 -->
         <div class="card" style="margin-bottom: 24px;">
             <div class="card-header">
                 <i class="fas fa-flask"></i>
@@ -1067,8 +1103,9 @@ async function handleRequest(request) {
                     <button class="btn btn-cyan" id="btn-stream-test"><i class="fas fa-stream"></i> <span id="t-stream-btn">流式传输</span></button>
                 </div>
 
+                <!-- 测试结果区域 -->
                 <div id="loss-result" class="result-area" style="display: none;"></div>
-                <div id="speed-result" class="result-area" style="display: none;"></div>
+                <div id="speed-result" style="display: none;"></div>
                 <div id="dns-result" class="result-area" style="display: none;"></div>
                 <div id="cpu-result" class="result-area" style="display: none;"></div>
                 <div id="ws-result" class="result-area" style="display: none;"></div>
@@ -1077,6 +1114,7 @@ async function handleRequest(request) {
             </div>
         </div>
 
+        <!-- 硬件信息卡片 -->
         <div class="card">
             <div class="card-header">
                 <i class="fas fa-desktop"></i>
@@ -1086,16 +1124,17 @@ async function handleRequest(request) {
                 </div>
             </div>
             <div class="card-body">
-                <div id="hw-info" style="font-family: monospace; font-size: 13px; color: rgba(255,255,255,0.7);">
+                <div id="hw-info" style="font-family: monospace; font-size: 13px;">
                     加载中...
                 </div>
             </div>
         </div>
 
+        <!-- 页脚 -->
         <div class="footer">
-            <span><i class="fas fa-fingerprint"></i> RAY ID: ${data.rayId}</span>
+            <span><i class="fas fa-fingerprint"></i> RAY ID: <span style="font-family: monospace;">${data.rayId}</span></span>
             <span><i class="fas fa-ip"></i> 客户端: ${data.clientIp}</span>
-            <button class="btn" id="copy-report" style="background: rgba(56, 189, 248, 0.1); padding: 6px 14px; border-radius: 30px;">
+            <button class="btn" id="copy-report" style="background: rgba(6, 182, 212, 0.1); padding: 6px 16px; border-radius: 30px; font-size: 12px;">
                 <i class="fas fa-copy"></i> <span id="t-copy">复制报告</span>
             </button>
         </div>
@@ -1103,197 +1142,95 @@ async function handleRequest(request) {
 
     <script>
         (function(){
+            // ==================== 国际化语言包 ====================
             const i18n = {
                 'en': { 
-                    sec: 'Security & Protocol',
-                    geo: 'Edge Location',
-                    userGeo: 'Client Location',
-                    rtt: 'Real-time RTT',
-                    hw: 'Hardware Info',
-                    live: 'Live Monitoring',
-                    risk: 'Risk Level',
-                    clean: 'Low Risk',
-                    high: 'High Risk',
-                    yes: 'YES',
-                    no: 'NO',
-                    unavailable: 'Unavailable',
-                    copy: 'Copy Report',
-                    copied: 'Copied!',
-                    dcLabel: 'DC / Proxy',
-                    protoLabel: 'Protocol',
-                    echLabel: 'ECH',
-                    echEnabled: 'Enabled',
-                    echDisabled: 'Disabled',
-                    botLabel: 'Bot Score',
-                    lossBtn: 'Packet Loss',
-                    speedBtn: 'Bandwidth',
-                    dnsBtn: 'DNS',
-                    cpuBtn: 'CPU',
-                    wsBtn: 'WebSocket',
-                    concurrentBtn: 'Concurrent',
-                    streamBtn: 'Stream',
-                    lossTesting: 'Testing...',
-                    lossNone: '0% (no loss)',
-                    jitter: 'Jitter',
-                    dnsTesting: 'Testing DNS...',
-                    speedTesting: 'Testing bandwidth...',
-                    cpuTesting: 'CPU benchmark...',
-                    wsTesting: 'WebSocket latency...',
-                    concurrentTesting: 'Concurrency test...',
-                    streamTesting: 'Stream throughput...',
-                    compressLabel: 'Compression',
-                    pushLabel: 'H2 Push',
-                    lossResult: 'Loss'
+                    sec: 'Security & Protocol', geo: 'Edge Location', userGeo: 'Client Location',
+                    rtt: 'Real-time RTT', hw: 'Hardware Info', live: 'Live Monitoring',
+                    risk: 'Risk Level', clean: 'Low Risk', high: 'High Risk', yes: 'YES', no: 'NO',
+                    unavailable: 'Unavailable', copy: 'Copy Report', copied: 'Copied!',
+                    dcLabel: 'DC / Proxy', protoLabel: 'Protocol', echLabel: 'ECH',
+                    echEnabled: 'Enabled', echDisabled: 'Disabled', botLabel: 'Bot Score',
+                    lossBtn: 'Packet Loss', speedBtn: 'Bandwidth', dnsBtn: 'DNS',
+                    cpuBtn: 'CPU', wsBtn: 'WebSocket', concurrentBtn: 'Concurrent', streamBtn: 'Stream',
+                    lossTesting: 'Testing...', lossNone: '0% (no loss)',
+                    jitter: 'Jitter', dnsTesting: 'Testing DNS...',
+                    speedTesting: 'Testing bandwidth...', cpuTesting: 'CPU benchmark...',
+                    wsTesting: 'WebSocket latency...', concurrentTesting: 'Concurrency test...',
+                    streamTesting: 'Stream throughput...', compressLabel: 'Compression',
+                    pushLabel: 'H2 Push', lossResult: 'Loss'
                 },
                 'zh-CN': { 
-                    sec: '安全与协议',
-                    geo: '边缘节点位置',
-                    userGeo: '真实 IP 位置',
-                    rtt: '实时延迟监控',
-                    hw: '硬件信息',
-                    live: '实时监控',
-                    risk: '风险等级',
-                    clean: '低风险',
-                    high: '高风险',
-                    yes: '是',
-                    no: '否',
-                    unavailable: '获取失败',
-                    copy: '复制报告',
-                    copied: '已复制!',
-                    dcLabel: '数据中心/代理',
-                    protoLabel: '协议',
-                    echLabel: 'ECH',
-                    echEnabled: '已启用',
-                    echDisabled: '未启用',
-                    botLabel: '机器人评分',
-                    lossBtn: '丢包率',
-                    speedBtn: '带宽测速',
-                    dnsBtn: 'DNS 解析',
-                    cpuBtn: 'CPU 性能',
-                    wsBtn: 'WebSocket',
-                    concurrentBtn: '并发测试',
-                    streamBtn: '流式传输',
-                    lossTesting: '测试中...',
-                    lossNone: '0% (无丢包)',
-                    jitter: '抖动',
-                    dnsTesting: '正在测试 DNS...',
-                    speedTesting: '正在测速...',
-                    cpuTesting: 'CPU 基准测试...',
-                    wsTesting: 'WebSocket 延迟测试...',
-                    concurrentTesting: '并发测试中...',
-                    streamTesting: '流式吞吐量测试...',
-                    compressLabel: '压缩算法',
-                    pushLabel: 'H2 推送',
-                    lossResult: '丢包率'
+                    sec: '安全与协议', geo: '边缘节点位置', userGeo: '真实 IP 位置',
+                    rtt: '实时延迟监控', hw: '硬件信息', live: '实时监控',
+                    risk: '风险等级', clean: '低风险', high: '高风险', yes: '是', no: '否',
+                    unavailable: '获取失败', copy: '复制报告', copied: '已复制!',
+                    dcLabel: '数据中心/代理', protoLabel: '协议', echLabel: 'ECH',
+                    echEnabled: '已启用', echDisabled: '未启用', botLabel: '机器人评分',
+                    lossBtn: '丢包率', speedBtn: '带宽测速', dnsBtn: 'DNS 解析',
+                    cpuBtn: 'CPU 性能', wsBtn: 'WebSocket', concurrentBtn: '并发测试', streamBtn: '流式传输',
+                    lossTesting: '测试中...', lossNone: '0% (无丢包)',
+                    jitter: '抖动', dnsTesting: '正在测试 DNS...',
+                    speedTesting: '正在测速...', cpuTesting: 'CPU 基准测试...',
+                    wsTesting: 'WebSocket 延迟测试...', concurrentTesting: '并发测试中...',
+                    streamTesting: '流式吞吐量测试...', compressLabel: '压缩算法',
+                    pushLabel: 'H2 推送', lossResult: '丢包率'
                 },
                 'zh-TW': { 
-                    sec: '安全與協議',
-                    geo: '邊緣節點位置',
-                    userGeo: '真實 IP 位置',
-                    rtt: '即時延遲監控',
-                    hw: '硬體資訊',
-                    live: '即時監控',
-                    risk: '風險等級',
-                    clean: '低風險',
-                    high: '高風險',
-                    yes: '是',
-                    no: '否',
-                    unavailable: '獲取失敗',
-                    copy: '複製報告',
-                    copied: '已複製!',
-                    dcLabel: '資料中心/代理',
-                    protoLabel: '協議',
-                    echLabel: 'ECH',
-                    echEnabled: '已啟用',
-                    echDisabled: '未啟用',
-                    botLabel: '機器人評分',
-                    lossBtn: '丟包率',
-                    speedBtn: '頻寬測速',
-                    dnsBtn: 'DNS 解析',
-                    cpuBtn: 'CPU 性能',
-                    wsBtn: 'WebSocket',
-                    concurrentBtn: '併發測試',
-                    streamBtn: '串流傳輸',
-                    lossTesting: '測試中...',
-                    lossNone: '0% (無丟包)',
-                    jitter: '抖動',
-                    dnsTesting: '正在測試 DNS...',
-                    speedTesting: '正在測速...',
-                    cpuTesting: 'CPU 基準測試...',
-                    wsTesting: 'WebSocket 延遲測試...',
-                    concurrentTesting: '併發測試中...',
-                    streamTesting: '串流吞吐量測試...',
-                    compressLabel: '壓縮演算法',
-                    pushLabel: 'H2 推送',
-                    lossResult: '丟包率'
+                    sec: '安全與協議', geo: '邊緣節點位置', userGeo: '真實 IP 位置',
+                    rtt: '即時延遲監控', hw: '硬體資訊', live: '即時監控',
+                    risk: '風險等級', clean: '低風險', high: '高風險', yes: '是', no: '否',
+                    unavailable: '獲取失敗', copy: '複製報告', copied: '已複製!',
+                    dcLabel: '資料中心/代理', protoLabel: '協議', echLabel: 'ECH',
+                    echEnabled: '已啟用', echDisabled: '未啟用', botLabel: '機器人評分',
+                    lossBtn: '丟包率', speedBtn: '頻寬測速', dnsBtn: 'DNS 解析',
+                    cpuBtn: 'CPU 性能', wsBtn: 'WebSocket', concurrentBtn: '併發測試', streamBtn: '串流傳輸',
+                    lossTesting: '測試中...', lossNone: '0% (無丟包)',
+                    jitter: '抖動', dnsTesting: '正在測試 DNS...',
+                    speedTesting: '正在測速...', cpuTesting: 'CPU 基準測試...',
+                    wsTesting: 'WebSocket 延遲測試...', concurrentTesting: '併發測試中...',
+                    streamTesting: '串流吞吐量測試...', compressLabel: '壓縮演算法',
+                    pushLabel: 'H2 推送', lossResult: '丟包率'
                 }
             };
             
+            // ==================== 服务端数据 ====================
             const BACKEND_DATA = {
-                asOrg: "${data.asOrg}",
-                asn: "${data.asn}",
-                colo: "${data.colo}",
-                city: "${data.city}",
-                region: "${data.region}",
-                country: "${data.country}",
-                lat: "${data.lat}\u00b0${data.latDir}",
-                lon: "${data.lon}\u00b0${data.lonDir}",
-                proto: "${data.proto}",
-                tlsVersion: "${data.tlsVersion}",
-                tlsCipher: "${data.tlsCipher}",
-                botScore: "${data.botScore}",
-                rayId: "${data.rayId}",
-                clientIp: "${data.clientIp}",
-                workerDuration: "${workerDuration}",
-                httpProtocolRaw: "${data.httpProtocolRaw}",
-                latNum: ${data.latNum},
-                lonNum: ${data.lonNum},
+                asOrg: "${data.asOrg}", asn: "${data.asn}", colo: "${data.colo}",
+                city: "${data.city}", region: "${data.region}", country: "${data.country}",
+                lat: "${data.lat}\u00b0${data.latDir}", lon: "${data.lon}\u00b0${data.lonDir}",
+                proto: "${data.proto}", tlsVersion: "${data.tlsVersion}", tlsCipher: "${data.tlsCipher}",
+                botScore: "${data.botScore}", rayId: "${data.rayId}", clientIp: "${data.clientIp}",
+                httpProtocolRaw: "${data.httpProtocolRaw}", latNum: ${data.latNum}, lonNum: ${data.lonNum},
                 tlsClientHelloLength: ${data.tlsClientHelloLength},
-                compressionBrotli: ${compressionInfo.brotli},
-                compressionGzip: ${compressionInfo.gzip},
-                realGeoCity: "${realGeoJS.city}",
-                realGeoRegion: "${realGeoJS.region}",
-                realGeoCountry: "${realGeoJS.country}",
-                realGeoCountryCode: "${realGeoJS.countryCode}",
-                realGeoLat: ${realGeoJS.lat},
-                realGeoLon: ${realGeoJS.lon},
-                realGeoOrg: "${realGeoJS.org}",
-                realGeoIp: "${realGeoJS.ip}"
+                compressionBrotli: ${compressionInfo.brotli}, compressionGzip: ${compressionInfo.gzip},
+                realGeoCity: "${realGeoJS.city}", realGeoRegion: "${realGeoJS.region}",
+                realGeoCountry: "${realGeoJS.country}", realGeoCountryCode: "${realGeoJS.countryCode}",
+                realGeoLat: ${realGeoJS.lat}, realGeoLon: ${realGeoJS.lon},
+                realGeoOrg: "${realGeoJS.org}", realGeoIp: "${realGeoJS.ip}"
             };
             
+            // ==================== DOM 元素 ====================
             const elements = {
-                v4: document.getElementById('v4'),
-                v6: document.getElementById('v6'),
-                rttNum: document.getElementById('rtt-num'),
-                chart: document.getElementById('chart'),
+                v4: document.getElementById('v4'), v6: document.getElementById('v6'),
+                rttNum: document.getElementById('rtt-num'), chart: document.getElementById('chart'),
                 ctx: document.getElementById('chart').getContext('2d'),
-                sDc: document.getElementById('s-dc'),
-                sRisk: document.getElementById('s-risk'),
-                hwInfo: document.getElementById('hw-info'),
-                copyBtn: document.getElementById('copy-report'),
-                jitterVal: document.getElementById('jitter-val'),
-                protoVal: document.getElementById('proto-val'),
-                userGeoInfo: document.getElementById('user-geo-info'),
-                echVal: document.getElementById('ech-val'),
-                botScoreVal: document.getElementById('bot-score-val'),
-                compressVal: document.getElementById('compress-val'),
-                pushVal: document.getElementById('push-val'),
-                lossBtn: document.getElementById('btn-loss-test'),
-                lossResult: document.getElementById('loss-result'),
-                speedBtn: document.getElementById('btn-speed-test'),
-                speedResult: document.getElementById('speed-result'),
-                dnsBtn: document.getElementById('btn-dns-test'),
-                dnsResult: document.getElementById('dns-result'),
-                cpuBtn: document.getElementById('btn-cpu-test'),
-                cpuResult: document.getElementById('cpu-result'),
-                wsBtn: document.getElementById('btn-ws-test'),
-                wsResult: document.getElementById('ws-result'),
-                concurrentBtn: document.getElementById('btn-concurrent-test'),
-                concurrentResult: document.getElementById('concurrent-result'),
-                streamBtn: document.getElementById('btn-stream-test'),
+                sDc: document.getElementById('s-dc'), sRisk: document.getElementById('s-risk'),
+                hwInfo: document.getElementById('hw-info'), copyBtn: document.getElementById('copy-report'),
+                jitterVal: document.getElementById('jitter-val'), protoVal: document.getElementById('proto-val'),
+                userGeoInfo: document.getElementById('user-geo-info'), echVal: document.getElementById('ech-val'),
+                botScoreVal: document.getElementById('bot-score-val'), compressVal: document.getElementById('compress-val'),
+                pushVal: document.getElementById('push-val'), lossBtn: document.getElementById('btn-loss-test'),
+                lossResult: document.getElementById('loss-result'), speedBtn: document.getElementById('btn-speed-test'),
+                speedResult: document.getElementById('speed-result'), dnsBtn: document.getElementById('btn-dns-test'),
+                dnsResult: document.getElementById('dns-result'), cpuBtn: document.getElementById('btn-cpu-test'),
+                cpuResult: document.getElementById('cpu-result'), wsBtn: document.getElementById('btn-ws-test'),
+                wsResult: document.getElementById('ws-result'), concurrentBtn: document.getElementById('btn-concurrent-test'),
+                concurrentResult: document.getElementById('concurrent-result'), streamBtn: document.getElementById('btn-stream-test'),
                 streamResult: document.getElementById('stream-result')
             };
             
+            // ==================== 全局变量 ====================
             let currentLang = localStorage.getItem('pref-lang') || '${defaultLang}';
             const rttData = [];
             const MAX_RTT_POINTS = 30;
@@ -1303,7 +1240,10 @@ async function handleRequest(request) {
             const MAX_GEO_RETRY = 5;
             let consecutiveLoss = 0;
             let sampleCount = 0;
+            let minRtt = Infinity;
+            let maxRtt = 0;
             
+            // ==================== 工具函数 ====================
             function isDataCenter() {
                 const patterns = /data center|hosting|cloud|akamai|google|amazon|microsoft|aliyun|tencent|fastly|cloudflare|incapsula|leaseweb|ovh|digitalocean|vultr|linode/i;
                 return patterns.test(BACKEND_DATA.asOrg);
@@ -1331,10 +1271,10 @@ async function handleRequest(request) {
                 if (element) {
                     element.style.display = 'block';
                     element.innerHTML = html;
-                    element.style.background = isError ? 'rgba(239,68,68,0.1)' : 'rgba(0,0,0,0.25)';
-                    element.style.borderLeftColor = isError ? '#f87171' : '#38bdf8';
+                    element.style.background = isError ? 'rgba(239,68,68,0.1)' : 'rgba(0,0,0,0.3)';
+                    element.style.borderLeftColor = isError ? '#ef4444' : '#06b6d4';
                     setTimeout(() => {
-                        if (element.innerHTML === html) {
+                        if (element.innerHTML === html && element.style.display === 'block') {
                             element.style.opacity = '0.5';
                             setTimeout(() => {
                                 if (element.innerHTML === html) {
@@ -1347,32 +1287,20 @@ async function handleRequest(request) {
                 }
             }
             
+            // ==================== UI 更新 ====================
             function updateUI() {
                 const t = i18n[currentLang];
                 const textIds = {
-                    't-sec': t.sec,
-                    't-geo': t.geo,
-                    't-user-geo': t.userGeo,
-                    't-rtt': t.rtt,
-                    't-hw': t.hw,
-                    't-live': t.live,
-                    't-risk': t.risk,
-                    't-copy': t.copy,
-                    't-dc-label': t.dcLabel,
-                    't-proto-label': t.protoLabel,
-                    't-cipher-label': t.cipherLabel,
-                    't-ech-label': t.echLabel,
-                    't-bot-label': t.botLabel,
-                    't-jitter': t.jitter,
-                    't-loss-btn': t.lossBtn,
-                    't-speed-btn': t.speedBtn,
-                    't-dns-btn': t.dnsBtn,
-                    't-cpu-btn': t.cpuBtn,
-                    't-ws-btn': t.wsBtn,
-                    't-concurrent-btn': t.concurrentBtn,
-                    't-stream-btn': t.streamBtn,
-                    't-compress-label': t.compressLabel,
-                    't-push-label': t.pushLabel
+                    't-sec': t.sec, 't-geo': t.geo, 't-user-geo': t.userGeo,
+                    't-rtt': t.rtt, 't-hw': t.hw, 't-live': t.live,
+                    't-risk': t.risk, 't-copy': t.copy,
+                    't-dc-label': t.dcLabel, 't-proto-label': t.protoLabel,
+                    't-ech-label': t.echLabel, 't-bot-label': t.botLabel,
+                    't-jitter': t.jitter, 't-loss-btn': t.lossBtn,
+                    't-speed-btn': t.speedBtn, 't-dns-btn': t.dnsBtn,
+                    't-cpu-btn': t.cpuBtn, 't-ws-btn': t.wsBtn,
+                    't-concurrent-btn': t.concurrentBtn, 't-stream-btn': t.streamBtn,
+                    't-compress-label': t.compressLabel, 't-push-label': t.pushLabel
                 };
                 Object.entries(textIds).forEach(([id, text]) => {
                     const el = document.getElementById(id);
@@ -1434,6 +1362,7 @@ async function handleRequest(request) {
                 updateUI();
             };
             
+            // ==================== 图表 ====================
             function resizeCanvas() {
                 const canvas = elements.chart;
                 if (!canvas || !canvas.parentElement) return;
@@ -1451,10 +1380,10 @@ async function handleRequest(request) {
                 const ctx = elements.ctx;
                 if (!canvas || canvas.width === 0 || canvas.height === 0) return;
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
-                if (rttData.length === 0) return;
+                if (rttData.length < 2) return;
                 
                 ctx.beginPath();
-                ctx.strokeStyle = '#38bdf8';
+                ctx.strokeStyle = '#06b6d4';
                 ctx.lineWidth = 2.5;
                 const stepX = canvas.width / (MAX_RTT_POINTS - 1);
                 const maxRtt = Math.max(...rttData, 100);
@@ -1467,14 +1396,15 @@ async function handleRequest(request) {
                 ctx.stroke();
                 
                 const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
-                gradient.addColorStop(0, 'rgba(56, 189, 248, 0.3)');
-                gradient.addColorStop(1, 'rgba(56, 189, 248, 0)');
+                gradient.addColorStop(0, 'rgba(6, 182, 212, 0.3)');
+                gradient.addColorStop(1, 'rgba(6, 182, 212, 0)');
                 ctx.fillStyle = gradient;
                 ctx.lineTo(canvas.width, canvas.height);
                 ctx.lineTo(0, canvas.height);
                 ctx.fill();
             }
             
+            // ==================== IP 检测 ====================
             async function getIP(version) {
                 const el = version === 'v4' ? elements.v4 : elements.v6;
                 if (!el) return;
@@ -1486,22 +1416,21 @@ async function handleRequest(request) {
                         const res = await fetchWithTimeout(url, {}, 3000);
                         if (res.ok) {
                             const ip = (await res.text()).trim();
-                            if (ip) {
+                            if (ip && !ip.includes('<')) {
                                 el.textContent = ip;
-                                el.style.color = '';
                                 return;
                             }
                         }
                     } catch (e) {}
                 }
-                if (el) {
-                    el.textContent = i18n[currentLang].unavailable;
-                    el.style.opacity = '0.5';
-                }
+                el.textContent = i18n[currentLang].unavailable;
+                el.style.opacity = '0.5';
             }
             
+            // ==================== 连接质量评估 ====================
             function updateQuality(currentRtt) {
                 const qualityEl = document.getElementById('quality-badge');
+                const stabilityEl = document.getElementById('stability-badge');
                 
                 if (qualityEl) {
                     let qualityText = '', qualityColor = '';
@@ -1514,12 +1443,11 @@ async function handleRequest(request) {
                     qualityEl.style.color = qualityColor;
                 }
                 
-                const stabilityEl = document.getElementById('stability-badge');
                 if (stabilityEl && jitterHistory.length > 0) {
                     const avgJitter = jitterHistory.reduce((a,b) => a+b, 0) / jitterHistory.length;
                     let stabilityText = '', stabilityColor = '';
                     if (avgJitter < 10) { stabilityText = '非常稳定'; stabilityColor = '#4ade80'; }
-                    else if (avgJitter < 30) { stabilityText = '稳定'; stabilityColor = '#38bdf8'; }
+                    else if (avgJitter < 30) { stabilityText = '稳定'; stabilityColor = '#22d3ee'; }
                     else if (avgJitter < 60) { stabilityText = '不稳定'; stabilityColor = '#fbbf24'; }
                     else { stabilityText = '极不稳定'; stabilityColor = '#f87171'; }
                     stabilityEl.textContent = stabilityText;
@@ -1536,6 +1464,7 @@ async function handleRequest(request) {
                 }
             }
             
+            // ==================== RTT 测试 ====================
             async function testRtt() {
                 const start = performance.now();
                 try {
@@ -1547,6 +1476,17 @@ async function handleRequest(request) {
                     sampleCount++;
                     const sampleEl = document.getElementById('sample-count');
                     if (sampleEl) sampleEl.textContent = sampleCount;
+                    
+                    if (diff < minRtt) {
+                        minRtt = diff;
+                        const minEl = document.getElementById('min-rtt');
+                        if (minEl) minEl.textContent = minRtt;
+                    }
+                    if (diff > maxRtt) {
+                        maxRtt = diff;
+                        const maxEl = document.getElementById('max-rtt');
+                        if (maxEl) maxEl.textContent = maxRtt;
+                    }
                     
                     if (rttData.length > 0) {
                         const jitter = Math.abs(diff - rttData[rttData.length - 1]);
@@ -1572,6 +1512,7 @@ async function handleRequest(request) {
                 setTimeout(testRtt, 2000);
             }
             
+            // ==================== 真实 IP 位置 ====================
             async function fetchUserGeo() {
                 if (!elements.userGeoInfo) return;
                 
@@ -1588,7 +1529,7 @@ async function handleRequest(request) {
                         </div>
                         <div class="info-row">
                             <span class="info-label"><i class="fas fa-ruler"></i> 到节点距离</span>
-                            <span class="info-value"><strong class="badge badge-info">\${dist} 公里</strong></span>
+                            <span class="info-value"><span class="badge badge-info">\${dist} 公里</span></span>
                         </div>
                         <div class="info-row">
                             <span class="info-label"><i class="fas fa-building"></i> 运营商</span>
@@ -1628,7 +1569,7 @@ async function handleRequest(request) {
                         </div>
                         <div class="info-row">
                             <span class="info-label"><i class="fas fa-ruler"></i> 到节点距离</span>
-                            <span class="info-value"><strong class="badge badge-info">\${dist} 公里</strong></span>
+                            <span class="info-value"><span class="badge badge-info">\${dist} 公里</span></span>
                         </div>
                         <div class="info-row">
                             <span class="info-label"><i class="fas fa-building"></i> 运营商</span>
@@ -1644,6 +1585,7 @@ async function handleRequest(request) {
                 }
             }
             
+            // ==================== 硬件信息 ====================
             function updateHardwareInfo() {
                 if (!elements.hwInfo) return;
                 const cores = navigator.hardwareConcurrency || 'N/A';
@@ -1662,12 +1604,13 @@ async function handleRequest(request) {
                 \`;
             }
 
+            // ==================== CPU 测试 ====================
             let cpuTestRunning = false;
             async function runCpuTest() {
                 if (cpuTestRunning) return;
                 cpuTestRunning = true;
                 const t = i18n[currentLang];
-                showResult(elements.cpuResult, '<i class="fas fa-spinner fa-spin"></i> ' + t.cpuTesting);
+                showResult(elements.cpuResult, '<span class="loading"></span> ' + t.cpuTesting);
                 
                 try {
                     const res = await fetch('/cpu-test?n=500000');
@@ -1675,7 +1618,7 @@ async function handleRequest(request) {
                     let badgeClass = data.opsMs > 50 ? 'badge-success' : (data.opsMs > 20 ? 'badge-warning' : 'badge-danger');
                     showResult(elements.cpuResult, \`
                         <i class="fas fa-microchip"></i> CPU 性能: <strong>\${data.opsMs}</strong> 操作/毫秒
-                        <span class="perf-badge \${badgeClass}">\${data.duration}ms</span>
+                        <span class="badge \${badgeClass}">\${data.duration}ms</span>
                     \`);
                 } catch (e) {
                     showResult(elements.cpuResult, '<i class="fas fa-exclamation-triangle"></i> CPU 测试失败', true);
@@ -1683,12 +1626,13 @@ async function handleRequest(request) {
                 cpuTestRunning = false;
             }
 
+            // ==================== WebSocket 测试 ====================
             let wsTestRunning = false;
             async function runWsTest() {
                 if (wsTestRunning) return;
                 wsTestRunning = true;
                 const t = i18n[currentLang];
-                showResult(elements.wsResult, '<i class="fas fa-spinner fa-spin"></i> ' + t.wsTesting);
+                showResult(elements.wsResult, '<span class="loading"></span> ' + t.wsTesting);
                 
                 try {
                     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -1702,7 +1646,7 @@ async function handleRequest(request) {
                         let timeoutId = setTimeout(() => {
                             ws.close();
                             resolve({ success: false });
-                        }, 5000);
+                        }, 8000);
                         
                         ws.onopen = () => {
                             const sendPing = () => {
@@ -1712,20 +1656,25 @@ async function handleRequest(request) {
                             sendPing();
                             
                             ws.onmessage = (event) => {
-                                const pongTime = performance.now();
-                                const data = JSON.parse(event.data);
-                                if (data.type === 'pong') {
-                                    latencies.push(pongTime - data.timestamp);
-                                    testCount++;
-                                    
-                                    if (testCount < maxTests) {
-                                        setTimeout(sendPing, 100);
-                                    } else {
-                                        clearTimeout(timeoutId);
-                                        ws.close();
-                                        const avgLatency = Math.round(latencies.reduce((a,b) => a+b, 0) / latencies.length);
-                                        resolve({ success: true, avg: avgLatency, min: Math.min(...latencies), max: Math.max(...latencies) });
+                                try {
+                                    const pongTime = performance.now();
+                                    const data = JSON.parse(event.data);
+                                    if (data.type === 'pong') {
+                                        const latency = pongTime - data.timestamp;
+                                        latencies.push(latency);
+                                        testCount++;
+                                        
+                                        if (testCount < maxTests) {
+                                            setTimeout(sendPing, 200);
+                                        } else {
+                                            clearTimeout(timeoutId);
+                                            ws.close();
+                                            const avgLatency = Math.round(latencies.reduce((a,b) => a+b, 0) / latencies.length);
+                                            resolve({ success: true, avg: avgLatency, min: Math.round(Math.min(...latencies)), max: Math.round(Math.max(...latencies)) });
+                                        }
                                     }
+                                } catch (e) {
+                                    resolve({ success: false });
                                 }
                             };
                         };
@@ -1740,7 +1689,7 @@ async function handleRequest(request) {
                         let badgeClass = result.avg < 50 ? 'badge-success' : (result.avg < 150 ? 'badge-warning' : 'badge-danger');
                         showResult(elements.wsResult, \`
                             <i class="fas fa-bolt"></i> WebSocket 延迟: <strong>\${result.avg}ms</strong>
-                            <span class="perf-badge \${badgeClass}">最小: \${Math.round(result.min)}ms / 最大: \${Math.round(result.max)}ms</span>
+                            <span class="badge \${badgeClass}">最小: \${result.min}ms / 最大: \${result.max}ms</span>
                         \`);
                     } else {
                         showResult(elements.wsResult, '<i class="fas fa-exclamation-triangle"></i> WebSocket 连接失败', true);
@@ -1751,16 +1700,17 @@ async function handleRequest(request) {
                 wsTestRunning = false;
             }
 
+            // ==================== 并发测试 ====================
             let concurrentTestRunning = false;
             async function runConcurrentTest() {
                 if (concurrentTestRunning) return;
                 concurrentTestRunning = true;
                 const t = i18n[currentLang];
-                showResult(elements.concurrentResult, '<i class="fas fa-spinner fa-spin"></i> ' + t.concurrentTesting);
+                showResult(elements.concurrentResult, '<span class="loading"></span> ' + t.concurrentTesting);
                 
                 try {
                     const results = await Promise.all([4, 6, 8].map(count => 
-                        fetchWithTimeout(\`/concurrent-test?count=\${count}&size=1024\`, {}, 5000).then(r => r.json())
+                        fetchWithTimeout(\`/concurrent-test?count=\${count}&size=2048\`, {}, 8000).then(r => r.json())
                     ));
                     
                     let html = '<i class="fas fa-layer-group"></i> 并发测试结果:<br><div style="display: flex; gap: 12px; margin-top: 8px; flex-wrap: wrap;">';
@@ -1777,20 +1727,21 @@ async function handleRequest(request) {
                 concurrentTestRunning = false;
             }
 
+            // ==================== 流式测试 ====================
             let streamTestRunning = false;
             async function runStreamTest() {
                 if (streamTestRunning) return;
                 streamTestRunning = true;
                 const t = i18n[currentLang];
-                showResult(elements.streamResult, '<i class="fas fa-spinner fa-spin"></i> ' + t.streamTesting);
+                showResult(elements.streamResult, '<span class="loading"></span> ' + t.streamTesting);
                 
-                const sizes = [65536, 262144, 1048576];
+                const sizes = [131072, 524288, 2097152];
                 const results = [];
                 
                 for (const size of sizes) {
                     const start = performance.now();
                     try {
-                        const res = await fetchWithTimeout(\`/stream-test?size=\${size}\`, {}, 10000);
+                        const res = await fetchWithTimeout(\`/stream-test?size=\${size}\`, {}, 15000);
                         const reader = res.body.getReader();
                         let bytesRead = 0;
                         
@@ -1815,6 +1766,7 @@ async function handleRequest(request) {
                 streamTestRunning = false;
             }
 
+            // ==================== H2 Push 检测 ====================
             async function testH2Push() {
                 if (!elements.pushVal) return;
                 try {
@@ -1830,19 +1782,20 @@ async function handleRequest(request) {
                 }
             }
 
+            // ==================== 丢包测试 ====================
             let lossTestRunning = false;
             async function runLossTest() {
                 if (lossTestRunning) return;
                 lossTestRunning = true;
                 const t = i18n[currentLang];
-                showResult(elements.lossResult, '<i class="fas fa-spinner fa-spin"></i> ' + t.lossTesting);
+                showResult(elements.lossResult, '<span class="loading"></span> ' + t.lossTesting);
                 
                 const total = 10;
                 let failed = 0;
                 for (let i = 0; i < total; i++) {
                     try {
                         await fetchWithTimeout(window.location.href + '?_loss=' + Date.now() + i, 
-                            { method: 'HEAD', cache: 'no-store' }, 2000);
+                            { method: 'HEAD', cache: 'no-store' }, 3000);
                     } catch (e) {
                         failed++;
                     }
@@ -1856,25 +1809,26 @@ async function handleRequest(request) {
                 lossTestRunning = false;
             }
 
+            // ==================== 带宽测速 ====================
             let speedTestRunning = false;
             async function runSpeedTest() {
                 if (speedTestRunning) return;
                 speedTestRunning = true;
                 const t = i18n[currentLang];
-                showResult(elements.speedResult, '<i class="fas fa-spinner fa-spin"></i> ' + t.speedTesting);
+                showResult(elements.speedResult, '<span class="loading"></span> ' + t.speedTesting);
                 
-                const sizes = [102400, 512000, 1048576];
+                const sizes = [102400, 512000, 2097152];
                 const results = [];
                 
                 for (const size of sizes) {
                     const start = performance.now();
                     try {
-                        await fetchWithTimeout(\`/speedtest?size=\${size}\`, {}, 10000);
+                        await fetchWithTimeout(\`/speedtest?size=\${size}\`, {}, 15000);
                         const duration = performance.now() - start;
                         const speedMbps = ((size * 8) / (duration / 1000)) / 1000000;
-                        results.push({ sizeKB: Math.round(size/1024), speed: speedMbps.toFixed(2), duration: Math.round(duration) });
+                        results.push({ sizeKB: Math.round(size/1024), speed: speedMbps.toFixed(2) });
                     } catch (e) {
-                        results.push({ sizeKB: Math.round(size/1024), speed: '0', duration: '超时' });
+                        results.push({ sizeKB: Math.round(size/1024), speed: '0' });
                     }
                 }
                 
@@ -1891,12 +1845,13 @@ async function handleRequest(request) {
                 speedTestRunning = false;
             }
 
+            // ==================== DNS 测试 ====================
             let dnsTestRunning = false;
             async function runDnsTest() {
                 if (dnsTestRunning) return;
                 dnsTestRunning = true;
                 const t = i18n[currentLang];
-                showResult(elements.dnsResult, '<i class="fas fa-spinner fa-spin"></i> ' + t.dnsTesting);
+                showResult(elements.dnsResult, '<span class="loading"></span> ' + t.dnsTesting);
                 
                 const domains = [
                     { name: 'Cloudflare', url: 'https://cloudflare.com/cdn-cgi/trace' },
@@ -1912,38 +1867,50 @@ async function handleRequest(request) {
                         const dnsTime = Math.round(performance.now() - start);
                         results.push({ domain: domain.name, time: dnsTime });
                     } catch (e) {
-                        results.push({ domain: domain.name, time: '超时' });
+                        results.push({ domain: domain.name, time: null });
                     }
                 }
                 
-                let html = '<i class="fas fa-server"></i> DNS 解析结果:<br><div style="display: flex; gap: 16px; margin-top: 8px; flex-wrap: wrap;">';
+                let html = '<i class="fas fa-server"></i> DNS 解析结果:<br><div style="display: flex; gap: 12px; margin-top: 8px; flex-wrap: wrap;">';
                 results.forEach(r => {
-                    let badgeClass = typeof r.time === 'number' && r.time < 50 ? 'badge-success' : (typeof r.time === 'number' && r.time < 150 ? 'badge-warning' : 'badge-danger');
-                    html += \`<span class="badge \${badgeClass}">\${r.domain}: \${r.time}ms</span>\`;
+                    if (r.time !== null) {
+                        let badgeClass = r.time < 50 ? 'badge-success' : (r.time < 150 ? 'badge-warning' : 'badge-danger');
+                        html += \`<span class="badge \${badgeClass}">\${r.domain}: \${r.time}ms</span>\`;
+                    } else {
+                        html += \`<span class="badge badge-danger">\${r.domain}: 超时</span>\`;
+                    }
                 });
                 html += '</div>';
                 showResult(elements.dnsResult, html);
                 dnsTestRunning = false;
             }
 
+            // ==================== 生成报告 ====================
             function generateReportText() {
                 const t = i18n[currentLang];
                 const now = new Date().toLocaleString('zh-CN');
+                const currentRtt = elements.rttNum ? elements.rttNum.textContent : '--';
+                const currentJitter = elements.jitterVal ? elements.jitterVal.textContent : '--';
                 const quality = document.getElementById('quality-badge') ? document.getElementById('quality-badge').textContent : '--';
                 const stability = document.getElementById('stability-badge') ? document.getElementById('stability-badge').textContent : '--';
                 const lossRate = document.getElementById('loss-rate') ? document.getElementById('loss-rate').textContent : '0%';
                 const sampleCountVal = document.getElementById('sample-count') ? document.getElementById('sample-count').textContent : '0';
+                const minRttVal = document.getElementById('min-rtt') ? document.getElementById('min-rtt').textContent : '--';
+                const maxRttVal = document.getElementById('max-rtt') ? document.getElementById('max-rtt').textContent : '--';
+                const clientLocation = BACKEND_DATA.realGeoCity ? BACKEND_DATA.realGeoCity + ', ' + BACKEND_DATA.realGeoCountry : '未知';
                 
-                return \`【\${t.reportTitle}】
+                return \`【NetSight Pro 网络诊断报告】
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📅 生成时间: \${now}
-📍 边缘节点: \${BACKEND_DATA.colo}
-🌐 IPv4: \${elements.v4 ? elements.v4.textContent : 'N/A'}
+📍 边缘节点: \${BACKEND_DATA.colo} (\${BACKEND_DATA.city})
+🌐 客户端 IPv4: \${elements.v4 ? elements.v4.textContent : 'N/A'}
 🔑 RAY ID: \${BACKEND_DATA.rayId}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📡 网络指标
-   当前 RTT: \${elements.rttNum ? elements.rttNum.textContent : 'N/A'} ms
-   网络抖动: \${elements.jitterVal ? elements.jitterVal.textContent : 'N/A'} ms
+   当前 RTT: \${currentRtt} ms
+   网络抖动: \${currentJitter} ms
+   最低 RTT: \${minRttVal} ms
+   最高 RTT: \${maxRttVal} ms
    连接质量: \${quality}
    网络稳定性: \${stability}
    丢包率: \${lossRate}
@@ -1952,18 +1919,22 @@ async function handleRequest(request) {
 🔒 安全与协议
    协议: \${BACKEND_DATA.httpProtocolRaw}
    TLS 版本: \${BACKEND_DATA.tlsVersion}
+   加密套件: \${BACKEND_DATA.tlsCipher}
    ECH: \${BACKEND_DATA.tlsClientHelloLength > 0 ? '已启用' : '未启用'}
+   压缩算法: \${BACKEND_DATA.compressionBrotli ? 'Brotli ' : ''}\${BACKEND_DATA.compressionGzip ? 'Gzip' : '无'}
+   H2 推送: \${elements.pushVal ? (elements.pushVal.textContent.includes('已启用') ? '已启用' : '未启用') : '未知'}
    机器人评分: \${BACKEND_DATA.botScore}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📍 位置信息
-   边缘节点: \${BACKEND_DATA.city}, \${BACKEND_DATA.country}
-   客户端: \${BACKEND_DATA.realGeoCity}, \${BACKEND_DATA.realGeoCountry}
+   边缘节点: \${BACKEND_DATA.city}, \${BACKEND_DATA.region}, \${BACKEND_DATA.country}
+   客户端: \${clientLocation}
    运营商: \${BACKEND_DATA.realGeoOrg || BACKEND_DATA.asOrg}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🚀 NetSight Pro - 蓝色极速网络诊断
+🚀 NetSight Pro - 蓝色极速网络诊断工具
 \`;
             }
             
+            // ==================== 复制报告 ====================
             async function copyReport() {
                 const text = generateReportText();
                 try {
@@ -1974,14 +1945,20 @@ async function handleRequest(request) {
                         copySpan.textContent = i18n[currentLang].copied;
                         setTimeout(() => {
                             copySpan.textContent = originalText;
-                        }, 1500);
+                        }, 2000);
                     }
                 } catch (err) {
                     console.error('复制失败:', err);
                 }
             }
 
+            // ==================== 初始化 ====================
             function init() {
+                minRtt = Infinity;
+                maxRtt = 0;
+                sampleCount = 0;
+                consecutiveLoss = 0;
+                
                 updateUI();
                 updateHardwareInfo();
                 testH2Push();
@@ -2018,6 +1995,7 @@ async function handleRequest(request) {
       'x-content-type-options': 'nosniff',
       'x-frame-options': 'DENY',
       'x-xss-protection': '1; mode=block',
+      'referrer-policy': 'strict-origin-when-cross-origin',
       'server-timing': `worker;dur=${workerDuration}`
     }
   });
