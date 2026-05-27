@@ -216,7 +216,7 @@ netsight-pro/
 
 ## 📋 更新日志
 
-### v3.1.0 (2024年12月15日)
+### v3.1.0 (2026年05月27日)
 
 **✨ 新增功能**
 - 🎨 **极光主题UI全面升级**：玻璃态毛玻璃效果增强，动态极光渐变背景（蓝/紫/青色）
@@ -248,7 +248,7 @@ netsight-pro/
 
 ---
 
-### v2.0.0 (2024年11月20日)
+### v2.0.0 (2026年05月15日)
 
 **✨ 新增功能**
 - 🎨 **全新蓝色主题UI设计**：毛玻璃效果（`backdrop-filter: blur(20px)`）、动态网格背景、光晕效果
@@ -277,7 +277,7 @@ netsight-pro/
 
 ---
 
-### v1.5.0 (2024年10月15日)
+### v1.5.0 (2026年05月10日)
 
 **✨ 新增功能**
 - 📦 **并发请求测试**：模拟多用户并发访问（4/6/8并发），测试服务器处理能力
@@ -298,7 +298,7 @@ netsight-pro/
 
 ---
 
-### v1.0.0 (2024年9月1日) - 初始版本
+### v1.0.0 (2026年05月01日) - 初始版本
 
 **✨ 核心功能**
 - 📡 **实时RTT监控**：每2秒自动测量，实时图表绘制
@@ -331,7 +331,7 @@ netsight-pro/
 
 | 技术 | 用途 | 版本 |
 |------|------|------|
-| **Cloudflare Workers** | 边缘计算运行时 | 2024-12-01 |
+| **Cloudflare Workers** | 边缘计算运行时 | 2026-05-01 |
 | **WebSocket API** | 实时双向通信测试 | RFC 6455 |
 | **Canvas API** | 实时延迟图表绘制 | HTML5 |
 | **Fetch API** | HTTP 请求处理 | WHATWG |
@@ -370,7 +370,7 @@ netsight-pro/
 # Worker 基本信息
 name = "netsight-pro"
 main = "worker.js"
-compatibility_date = "2024-12-01"
+compatibility_date = "2026-05-01"
 
 # 资源限制（可选）
 limits = {
@@ -489,7 +489,7 @@ let defaultLang = 'zh-CN';
 
 MIT License
 
-Copyright (c) 2024 NetSight Pro Team
+Copyright (c) 2026 NetSight Pro Team
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
