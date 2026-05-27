@@ -1,6 +1,3 @@
-以下是完整的 README.md 代码：
-
-```markdown
 # NetSight Pro 🔍
 
 <p align="center">
