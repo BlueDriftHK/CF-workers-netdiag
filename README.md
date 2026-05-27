@@ -3,7 +3,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/version-3.1.0-blue?style=for-the-badge&logo=cloudflare" alt="Version">
   <img src="https://img.shields.io/badge/Cloudflare-Workers-F38020?style=for-the-badge&logo=cloudflare" alt="Cloudflare Workers">
-  <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="MIT License">
+  <img src="https://img.shields.io/badge/License-GPLv3-red?style=for-the-badge&logo=gnu" alt="GPLv3 License">
   <img src="https://img.shields.io/badge/UI-极光主题-06b6d4?style=for-the-badge" alt="UI Theme">
   <img src="https://img.shields.io/badge/语言-多语言支持-8b5cf6?style=for-the-badge" alt="Multi Language">
 </p>
@@ -20,10 +20,18 @@
   <a href="#-更新日志">更新日志</a> •
   <a href="#-部署指南">部署指南</a> •
   <a href="#-技术架构">技术架构</a> •
-  <a href="#-配置说明">配置说明</a>
+  <a href="#-配置说明">配置说明</a> •
+  <a href="#-许可证">许可证</a>
 </p>
 
 ---
+
+## 📸 界面预览
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/your-repo/netsight-pro/main/screenshot.png" alt="NetSight Pro 界面预览" width="800">
+</p>
+
 | 模块 | 展示内容 |
 |------|----------|
 | 🎯 **英雄区** | IPv4/IPv6 地址、边缘节点信息、Worker 耗时 |
@@ -208,7 +216,7 @@ netsight-pro/
 ├── wrangler.toml          # Wrangler 配置文件
 ├── package.json           # 项目依赖（可选）
 ├── README.md              # 项目文档
-├── LICENSE                # MIT 许可证
+├── LICENSE                # GPLv3 许可证
 └── .gitignore             # Git 忽略文件
 ```
 
@@ -216,7 +224,7 @@ netsight-pro/
 
 ## 📋 更新日志
 
-### v3.1.0 (2026年05月27日)
+### v3.1.0 (2026年05月28日)
 
 **✨ 新增功能**
 - 🎨 **极光主题UI全面升级**：玻璃态毛玻璃效果增强，动态极光渐变背景（蓝/紫/青色）
@@ -248,7 +256,7 @@ netsight-pro/
 
 ---
 
-### v2.0.0 (2026年05月15日)
+### v2.0.0 (2026年05月10日)
 
 **✨ 新增功能**
 - 🎨 **全新蓝色主题UI设计**：毛玻璃效果（`backdrop-filter: blur(20px)`）、动态网格背景、光晕效果
@@ -277,7 +285,7 @@ netsight-pro/
 
 ---
 
-### v1.5.0 (2026年05月10日)
+### v1.5.0 (2026年05月5日)
 
 **✨ 新增功能**
 - 📦 **并发请求测试**：模拟多用户并发访问（4/6/8并发），测试服务器处理能力
@@ -331,7 +339,7 @@ netsight-pro/
 
 | 技术 | 用途 | 版本 |
 |------|------|------|
-| **Cloudflare Workers** | 边缘计算运行时 | 2026-05-01 |
+| **Cloudflare Workers** | 边缘计算运行时 | 2024-12-01 |
 | **WebSocket API** | 实时双向通信测试 | RFC 6455 |
 | **Canvas API** | 实时延迟图表绘制 | HTML5 |
 | **Fetch API** | HTTP 请求处理 | WHATWG |
@@ -370,7 +378,7 @@ netsight-pro/
 # Worker 基本信息
 name = "netsight-pro"
 main = "worker.js"
-compatibility_date = "2026-05-01"
+compatibility_date = "2024-12-01"
 
 # 资源限制（可选）
 limits = {
@@ -434,6 +442,57 @@ let defaultLang = 'zh-CN';
 
 ---
 
+## 📄 许可证
+
+本项目使用 **GNU General Public License v3.0** 许可证。
+
+```
+                    GNU GENERAL PUBLIC LICENSE
+                       Version 3, 29 June 2007
+
+ Copyright (C) 2007 Free Software Foundation, Inc. <https://fsf.org/>
+ Everyone is permitted to copy and distribute verbatim copies
+ of this license document, but changing it is not allowed.
+```
+
+### 许可证摘要
+
+| 项目 | 说明 |
+|------|------|
+| **许可类型** | 开源许可证 |
+| **是否允许商业使用** | ✅ 是 |
+| **是否允许修改** | ✅ 是 |
+| **是否允许分发** | ✅ 是 |
+| **是否需要公开源代码** | ✅ 是（修改后必须公开） |
+| **是否允许专利授权** | ✅ 是 |
+| **是否需要保留版权声明** | ✅ 是 |
+| **是否适用免责声明** | ✅ 是 |
+
+### 主要条款
+
+1. **自由使用**：您可以出于任何目的运行本软件。
+2. **自由修改**：您可以修改本软件以满足您的需求。
+3. **自由分发**：您可以分发本软件的副本。
+4. **Copyleft**：如果您分发修改后的版本，必须同样使用 GPLv3 许可证。
+5. **源代码公开**：如果您分发本软件，必须同时提供源代码。
+6. **保留版权声明**：分发时必须保留原始版权声明和许可证文本。
+
+### 完整许可证文本
+
+本项目的完整 GPLv3 许可证文本请查看 [LICENSE](./LICENSE) 文件，或访问 [https://www.gnu.org/licenses/gpl-3.0.txt](https://www.gnu.org/licenses/gpl-3.0.txt)
+
+### 合规性要求
+
+如果您使用或修改本软件，您必须：
+
+1. 在您的软件中包含 GPLv3 许可证副本
+2. 注明原始版权信息（NetSight Pro Team）
+3. 如果修改了代码，需要说明修改的内容
+4. 如果分发二进制形式，需要同时提供源代码
+5. 任何衍生作品必须同样使用 GPLv3 许可证
+
+---
+
 ## 🤝 贡献指南
 
 ### 贡献流程
@@ -482,32 +541,7 @@ let defaultLang = 'zh-CN';
 - [ ] 测试通过（本地部署验证）
 - [ ] 更新了相关文档
 - [ ] 没有引入新的控制台错误
-
----
-
-## 📄 许可证
-
-MIT License
-
-Copyright (c) 2026 NetSight Pro Team
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+- [ ] 确认 GPLv3 许可证合规
 
 ---
 
@@ -556,5 +590,7 @@ SOFTWARE.
 </p>
 
 <p align="center">
-  <sub>开源免费 · MIT License · 持续更新</sub>
+  <sub>GNU General Public License v3.0 · 开源自由 · 持续更新</sub>
 </p>
+
+---
