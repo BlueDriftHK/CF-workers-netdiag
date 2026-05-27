@@ -24,13 +24,6 @@
 </p>
 
 ---
-
-## 📸 界面预览
-
-<p align="center">
-  <img src="https://raw.githubusercontent.com/your-repo/netsight-pro/main/screenshot.png" alt="NetSight Pro 界面预览" width="800">
-</p>
-
 | 模块 | 展示内容 |
 |------|----------|
 | 🎯 **英雄区** | IPv4/IPv6 地址、边缘节点信息、Worker 耗时 |
