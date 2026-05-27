@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>NetSight Pro | 蓝色极速网络诊断工具</title>
+    <title>NetSight Pro | 极光网络诊断工具</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -13,47 +13,61 @@
             box-sizing: border-box;
         }
 
+        :root {
+            --primary: #3b82f6;
+            --primary-dark: #2563eb;
+            --primary-light: #60a5fa;
+            --cyan: #06b6d4;
+            --cyan-dark: #0891b2;
+            --purple: #8b5cf6;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+        }
+
         body {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: linear-gradient(135deg, #0a0f1a 0%, #0d1425 50%, #0a0c15 100%);
+            background: radial-gradient(ellipse at 20% 30%, #0d1425, #070b14);
             min-height: 100vh;
             color: #fff;
             overflow-x: hidden;
         }
 
-        /* 动态网格背景 */
+        /* 动态极光背景 */
         body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: 
+                radial-gradient(circle at 20% 40%, rgba(59, 130, 246, 0.08) 0%, transparent 40%),
+                radial-gradient(circle at 80% 70%, rgba(139, 92, 246, 0.06) 0%, transparent 45%),
+                radial-gradient(circle at 40% 80%, rgba(6, 182, 212, 0.05) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* 网格纹理 */
+        body::after {
             content: '';
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            background-image: 
-                linear-gradient(rgba(56, 189, 248, 0.03) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(56, 189, 248, 0.03) 1px, transparent 1px);
-            background-size: 50px 50px;
-            pointer-events: none;
-            z-index: 0;
-        }
-
-        /* 光晕效果 */
-        body::after {
-            content: '';
-            position: fixed;
-            top: -50%;
-            left: -50%;
-            width: 200%;
-            height: 200%;
-            background: radial-gradient(circle at 30% 40%, rgba(56, 189, 248, 0.06) 0%, transparent 60%);
+            background-image: linear-gradient(rgba(59, 130, 246, 0.05) 1px, transparent 1px),
+                              linear-gradient(90deg, rgba(59, 130, 246, 0.05) 1px, transparent 1px);
+            background-size: 60px 60px;
             pointer-events: none;
             z-index: 0;
         }
 
         .container {
-            max-width: 1200px;
+            max-width: 1400px;
             margin: 0 auto;
-            padding: 40px 24px;
+            padding: 24px 32px;
             position: relative;
             z-index: 1;
         }
@@ -63,34 +77,44 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 16px 0;
+            padding: 16px 24px;
             margin-bottom: 60px;
             flex-wrap: wrap;
             gap: 20px;
+            background: rgba(10, 15, 26, 0.5);
+            backdrop-filter: blur(20px);
+            border-radius: 60px;
+            border: 1px solid rgba(59, 130, 246, 0.15);
         }
 
         .logo {
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 14px;
         }
 
         .logo-icon {
-            width: 48px;
-            height: 48px;
-            background: linear-gradient(135deg, #2563eb, #06b6d4);
-            border-radius: 14px;
+            width: 52px;
+            height: 52px;
+            background: linear-gradient(135deg, var(--primary), var(--cyan), var(--purple));
+            border-radius: 18px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 24px;
-            box-shadow: 0 8px 20px rgba(37, 99, 235, 0.3);
+            font-size: 26px;
+            box-shadow: 0 8px 32px rgba(59, 130, 246, 0.3);
+            animation: float 3s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-4px); }
         }
 
         .logo h1 {
-            font-size: 24px;
+            font-size: 26px;
             font-weight: 700;
-            background: linear-gradient(135deg, #fff, #06b6d4);
+            background: linear-gradient(135deg, #fff, var(--cyan), var(--purple));
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
@@ -98,13 +122,13 @@
 
         .logo p {
             font-size: 12px;
-            color: rgba(56, 189, 248, 0.6);
-            margin-top: 2px;
+            color: rgba(255,255,255,0.45);
+            margin-top: 4px;
         }
 
         .nav-links {
             display: flex;
-            gap: 32px;
+            gap: 24px;
             align-items: center;
             flex-wrap: wrap;
         }
@@ -118,13 +142,13 @@
         }
 
         .nav-links a:hover {
-            color: #06b6d4;
+            color: var(--cyan);
         }
 
         .btn-glow {
-            background: linear-gradient(135deg, #2563eb, #06b6d4);
+            background: linear-gradient(135deg, var(--primary), var(--cyan));
             border: none;
-            padding: 10px 24px;
+            padding: 10px 28px;
             border-radius: 40px;
             color: white;
             font-weight: 600;
@@ -135,20 +159,20 @@
             display: inline-flex;
             align-items: center;
             gap: 8px;
-            box-shadow: 0 4px 15px rgba(37, 99, 235, 0.3);
+            box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
         }
 
         .btn-glow:hover {
             transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(37, 99, 235, 0.4);
+            box-shadow: 0 8px 25px rgba(59, 130, 246, 0.4);
         }
 
-        .btn-outline-glow {
-            background: transparent;
-            border: 1px solid rgba(56, 189, 248, 0.4);
-            padding: 10px 24px;
+        .btn-outline {
+            background: rgba(59, 130, 246, 0.08);
+            border: 1px solid rgba(59, 130, 246, 0.25);
+            padding: 10px 28px;
             border-radius: 40px;
-            color: #06b6d4;
+            color: rgba(255,255,255,0.85);
             font-weight: 500;
             font-size: 14px;
             cursor: pointer;
@@ -159,9 +183,10 @@
             gap: 8px;
         }
 
-        .btn-outline-glow:hover {
-            border-color: #06b6d4;
-            background: rgba(6, 182, 212, 0.1);
+        .btn-outline:hover {
+            border-color: var(--cyan);
+            color: var(--cyan);
+            background: rgba(6, 182, 212, 0.08);
         }
 
         /* 英雄区域 */
@@ -172,121 +197,40 @@
 
         .hero-badge {
             display: inline-block;
-            background: rgba(6, 182, 212, 0.15);
-            border: 1px solid rgba(6, 182, 212, 0.3);
-            padding: 6px 16px;
+            background: rgba(6, 182, 212, 0.12);
+            border: 1px solid rgba(6, 182, 212, 0.25);
+            padding: 6px 20px;
             border-radius: 40px;
-            font-size: 12px;
-            color: #06b6d4;
-            margin-bottom: 24px;
+            font-size: 13px;
+            color: var(--cyan);
+            margin-bottom: 28px;
+            backdrop-filter: blur(4px);
         }
 
         .hero h1 {
-            font-size: 56px;
+            font-size: 64px;
             font-weight: 800;
-            background: linear-gradient(135deg, #fff, #06b6d4, #2563eb);
+            background: linear-gradient(135deg, #fff, var(--cyan), var(--purple));
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
-            margin-bottom: 20px;
+            margin-bottom: 24px;
             line-height: 1.2;
         }
 
         .hero p {
             font-size: 18px;
-            color: rgba(255,255,255,0.6);
-            max-width: 600px;
-            margin: 0 auto 32px;
+            color: rgba(255,255,255,0.55);
+            max-width: 680px;
+            margin: 0 auto 36px;
             line-height: 1.6;
         }
 
         .hero-buttons {
             display: flex;
-            gap: 16px;
+            gap: 20px;
             justify-content: center;
             flex-wrap: wrap;
-        }
-
-        /* 功能卡片网格 */
-        .section-title {
-            text-align: center;
-            margin-bottom: 48px;
-        }
-
-        .section-title h2 {
-            font-size: 32px;
-            font-weight: 700;
-            margin-bottom: 12px;
-        }
-
-        .section-title p {
-            color: rgba(255,255,255,0.5);
-            font-size: 16px;
-        }
-
-        .features-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-            gap: 24px;
-            margin-bottom: 80px;
-        }
-
-        .feature-card {
-            background: rgba(15, 25, 45, 0.6);
-            backdrop-filter: blur(12px);
-            border-radius: 24px;
-            border: 1px solid rgba(56, 189, 248, 0.15);
-            padding: 28px;
-            transition: all 0.35s ease;
-        }
-
-        .feature-card:hover {
-            transform: translateY(-6px);
-            border-color: rgba(56, 189, 248, 0.4);
-            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
-        }
-
-        .feature-icon {
-            width: 56px;
-            height: 56px;
-            background: linear-gradient(135deg, rgba(37, 99, 235, 0.2), rgba(6, 182, 212, 0.2));
-            border-radius: 18px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 20px;
-        }
-
-        .feature-icon i {
-            font-size: 28px;
-            color: #06b6d4;
-        }
-
-        .feature-card h3 {
-            font-size: 20px;
-            font-weight: 600;
-            margin-bottom: 12px;
-        }
-
-        .feature-card p {
-            color: rgba(255,255,255,0.5);
-            font-size: 14px;
-            line-height: 1.6;
-            margin-bottom: 16px;
-        }
-
-        .feature-tags {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-        }
-
-        .feature-tag {
-            background: rgba(6, 182, 212, 0.1);
-            border-radius: 20px;
-            padding: 4px 12px;
-            font-size: 11px;
-            color: #06b6d4;
         }
 
         /* 统计数字 */
@@ -300,16 +244,22 @@
 
         .stat-card {
             background: rgba(15, 25, 45, 0.4);
-            backdrop-filter: blur(10px);
-            border-radius: 20px;
-            padding: 24px;
-            border: 1px solid rgba(56, 189, 248, 0.1);
+            backdrop-filter: blur(12px);
+            border-radius: 28px;
+            padding: 28px 20px;
+            border: 1px solid rgba(59, 130, 246, 0.12);
+            transition: all 0.3s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+            border-color: rgba(6, 182, 212, 0.3);
         }
 
         .stat-number {
-            font-size: 42px;
+            font-size: 48px;
             font-weight: 800;
-            background: linear-gradient(135deg, #fff, #06b6d4);
+            background: linear-gradient(135deg, #fff, var(--cyan));
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
@@ -318,70 +268,198 @@
         .stat-label {
             font-size: 14px;
             color: rgba(255,255,255,0.5);
-            margin-top: 8px;
+            margin-top: 10px;
         }
 
-        /* 预览区域 */
-        .preview-section {
-            background: linear-gradient(135deg, rgba(37, 99, 235, 0.08), rgba(6, 182, 212, 0.04));
-            border-radius: 32px;
-            border: 1px solid rgba(56, 189, 248, 0.2);
-            padding: 40px;
+        /* 功能卡片 */
+        .section-title {
+            text-align: center;
+            margin-bottom: 56px;
+        }
+
+        .section-title h2 {
+            font-size: 36px;
+            font-weight: 700;
+            margin-bottom: 16px;
+        }
+
+        .section-title p {
+            color: rgba(255,255,255,0.5);
+            font-size: 16px;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+            gap: 28px;
+            margin-bottom: 80px;
+        }
+
+        .feature-card {
+            background: rgba(15, 25, 45, 0.5);
+            backdrop-filter: blur(16px);
+            border-radius: 28px;
+            border: 1px solid rgba(59, 130, 246, 0.12);
+            padding: 32px;
+            transition: all 0.35s ease;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-6px);
+            border-color: rgba(6, 182, 212, 0.35);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+        }
+
+        .feature-icon {
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(6, 182, 212, 0.1));
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 24px;
+        }
+
+        .feature-icon i {
+            font-size: 30px;
+            color: var(--cyan);
+        }
+
+        .feature-card h3 {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 12px;
+        }
+
+        .feature-card p {
+            color: rgba(255,255,255,0.5);
+            font-size: 14px;
+            line-height: 1.6;
+            margin-bottom: 20px;
+        }
+
+        .feature-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .feature-tag {
+            background: rgba(6, 182, 212, 0.1);
+            border-radius: 20px;
+            padding: 4px 14px;
+            font-size: 11px;
+            font-weight: 500;
+            color: var(--cyan);
+        }
+
+        /* 预览卡片 */
+        .preview-card {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.08), rgba(6, 182, 212, 0.04));
+            border-radius: 36px;
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            padding: 48px;
             margin-bottom: 80px;
             text-align: center;
         }
 
-        .preview-section h2 {
-            font-size: 28px;
+        .preview-card h2 {
+            font-size: 32px;
             margin-bottom: 16px;
         }
 
-        .preview-section p {
+        .preview-card p {
             color: rgba(255,255,255,0.5);
             margin-bottom: 32px;
-        }
-
-        .preview-placeholder {
-            background: rgba(0,0,0,0.3);
-            border-radius: 20px;
-            padding: 40px;
-            border: 1px dashed rgba(56, 189, 248, 0.3);
-            margin-bottom: 24px;
         }
 
         .preview-stats {
             display: flex;
             justify-content: center;
-            gap: 40px;
+            gap: 48px;
             flex-wrap: wrap;
         }
 
         .preview-stat {
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 14px;
         }
 
         .preview-stat i {
-            font-size: 24px;
-            color: #06b6d4;
+            font-size: 26px;
+            color: var(--cyan);
         }
 
         .preview-stat span {
             font-size: 14px;
-            color: rgba(255,255,255,0.7);
+            color: rgba(255,255,255,0.65);
         }
 
         .preview-stat strong {
-            color: #06b6d4;
+            color: var(--cyan);
             font-size: 18px;
+        }
+
+        /* API 端点 */
+        .api-section {
+            background: rgba(15, 25, 45, 0.5);
+            border-radius: 32px;
+            border: 1px solid rgba(59, 130, 246, 0.12);
+            padding: 40px;
+            margin-bottom: 60px;
+        }
+
+        .api-section h2 {
+            font-size: 28px;
+            margin-bottom: 24px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .api-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 16px;
+        }
+
+        .api-item {
+            background: rgba(0,0,0,0.25);
+            border-radius: 20px;
+            padding: 16px 20px;
+            border-left: 3px solid var(--cyan);
+        }
+
+        .api-method {
+            display: inline-block;
+            background: rgba(6, 182, 212, 0.15);
+            padding: 2px 10px;
+            border-radius: 20px;
+            font-size: 10px;
+            font-weight: 700;
+            color: var(--cyan);
+            margin-bottom: 10px;
+        }
+
+        .api-path {
+            font-family: monospace;
+            font-size: 13px;
+            color: #fff;
+            margin-bottom: 8px;
+        }
+
+        .api-desc {
+            font-size: 12px;
+            color: rgba(255,255,255,0.5);
         }
 
         /* 更新日志 */
         .changelog-section {
             background: rgba(15, 25, 45, 0.5);
-            border-radius: 28px;
-            border: 1px solid rgba(56, 189, 248, 0.15);
+            border-radius: 32px;
+            border: 1px solid rgba(59, 130, 246, 0.12);
             padding: 40px;
             margin-bottom: 60px;
         }
@@ -394,7 +472,7 @@
             gap: 16px;
             margin-bottom: 32px;
             padding-bottom: 20px;
-            border-bottom: 1px solid rgba(56, 189, 248, 0.15);
+            border-bottom: 1px solid rgba(59, 130, 246, 0.1);
         }
 
         .changelog-header h2 {
@@ -405,9 +483,9 @@
         }
 
         .version-badge {
-            background: linear-gradient(135deg, #2563eb, #06b6d4);
-            padding: 4px 12px;
-            border-radius: 20px;
+            background: linear-gradient(135deg, var(--primary), var(--cyan));
+            padding: 4px 14px;
+            border-radius: 24px;
             font-size: 12px;
             font-weight: 600;
         }
@@ -419,36 +497,32 @@
         }
 
         .changelog-item {
-            padding: 16px;
+            padding: 20px;
             background: rgba(0,0,0,0.2);
-            border-radius: 20px;
-            border-left: 3px solid #06b6d4;
+            border-radius: 24px;
+            border-left: 3px solid var(--cyan);
         }
 
         .changelog-version {
             display: flex;
             align-items: center;
             gap: 12px;
-            margin-bottom: 12px;
+            margin-bottom: 14px;
             flex-wrap: wrap;
         }
 
         .version-tag {
-            background: rgba(6, 182, 212, 0.2);
-            padding: 4px 12px;
-            border-radius: 20px;
+            background: rgba(6, 182, 212, 0.15);
+            padding: 4px 14px;
+            border-radius: 24px;
             font-size: 13px;
             font-weight: 600;
-            color: #06b6d4;
+            color: var(--cyan);
         }
 
         .version-date {
             font-size: 12px;
             color: rgba(255,255,255,0.4);
-        }
-
-        .changelog-content {
-            padding-left: 8px;
         }
 
         .changelog-content ul {
@@ -460,26 +534,26 @@
             padding: 6px 0;
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 12px;
             font-size: 14px;
             color: rgba(255,255,255,0.7);
         }
 
         .changelog-content li i {
             width: 20px;
-            font-size: 12px;
+            font-size: 13px;
         }
 
-        .changelog-content li i.fa-plus-circle { color: #4ade80; }
-        .changelog-content li i.fa-wrench { color: #fbbf24; }
-        .changelog-content li i.fa-bug { color: #f87171; }
-        .changelog-content li i.fa-arrow-up { color: #06b6d4; }
+        .changelog-content li i.fa-plus-circle { color: var(--success); }
+        .changelog-content li i.fa-wrench { color: var(--warning); }
+        .changelog-content li i.fa-bug { color: var(--danger); }
+        .changelog-content li i.fa-arrow-up { color: var(--cyan); }
 
         /* 部署指南 */
         .deploy-section {
             background: rgba(15, 25, 45, 0.5);
-            border-radius: 28px;
-            border: 1px solid rgba(56, 189, 248, 0.15);
+            border-radius: 32px;
+            border: 1px solid rgba(59, 130, 246, 0.12);
             padding: 40px;
             margin-bottom: 60px;
         }
@@ -494,15 +568,15 @@
 
         .code-block {
             background: #0a0f1a;
-            border-radius: 16px;
-            padding: 20px;
-            border: 1px solid rgba(56, 189, 248, 0.2);
+            border-radius: 20px;
+            padding: 24px;
+            border: 1px solid rgba(6, 182, 212, 0.2);
             overflow-x: auto;
-            margin-bottom: 24px;
+            margin-bottom: 28px;
         }
 
         .code-block pre {
-            color: #06b6d4;
+            color: var(--cyan);
             font-family: 'Monaco', 'Courier New', monospace;
             font-size: 13px;
             line-height: 1.6;
@@ -512,27 +586,27 @@
         .deploy-steps {
             display: flex;
             flex-direction: column;
-            gap: 16px;
+            gap: 20px;
         }
 
         .step {
             display: flex;
             align-items: center;
-            gap: 16px;
+            gap: 18px;
             padding: 12px 0;
-            border-bottom: 1px solid rgba(56, 189, 248, 0.1);
+            border-bottom: 1px solid rgba(59, 130, 246, 0.08);
         }
 
         .step-number {
-            width: 32px;
-            height: 32px;
-            background: rgba(6, 182, 212, 0.15);
+            width: 36px;
+            height: 36px;
+            background: rgba(6, 182, 212, 0.12);
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
             font-weight: 700;
-            color: #06b6d4;
+            color: var(--cyan);
         }
 
         .step-content {
@@ -553,38 +627,27 @@
         .footer {
             text-align: center;
             padding-top: 40px;
-            border-top: 1px solid rgba(56, 189, 248, 0.1);
-            color: rgba(255,255,255,0.3);
+            border-top: 1px solid rgba(59, 130, 246, 0.1);
+            color: rgba(255,255,255,0.35);
             font-size: 12px;
         }
 
         .footer-links {
             display: flex;
             justify-content: center;
-            gap: 24px;
-            margin-bottom: 16px;
+            gap: 28px;
+            margin-bottom: 20px;
             flex-wrap: wrap;
         }
 
         .footer-links a {
-            color: rgba(255,255,255,0.4);
+            color: rgba(255,255,255,0.45);
             text-decoration: none;
             transition: color 0.3s;
         }
 
         .footer-links a:hover {
-            color: #06b6d4;
-        }
-
-        /* 响应式 */
-        @media (max-width: 768px) {
-            .container { padding: 24px 16px; }
-            .hero h1 { font-size: 36px; }
-            .section-title h2 { font-size: 26px; }
-            .stats-section { grid-template-columns: repeat(2, 1fr); }
-            .navbar { flex-direction: column; text-align: center; }
-            .nav-links { justify-content: center; }
-            .changelog-header { flex-direction: column; text-align: center; }
+            color: var(--cyan);
         }
 
         /* 动画 */
@@ -599,17 +662,54 @@
             }
         }
 
-        .feature-card, .stat-card, .preview-section, .changelog-section, .deploy-section {
+        .feature-card, .stat-card, .preview-card, .api-section, .changelog-section, .deploy-section {
             animation: fadeInUp 0.6s ease forwards;
             opacity: 0;
         }
 
-        .feature-card:nth-child(1) { animation-delay: 0.1s; }
-        .feature-card:nth-child(2) { animation-delay: 0.2s; }
-        .feature-card:nth-child(3) { animation-delay: 0.3s; }
-        .feature-card:nth-child(4) { animation-delay: 0.4s; }
-        .feature-card:nth-child(5) { animation-delay: 0.5s; }
-        .feature-card:nth-child(6) { animation-delay: 0.6s; }
+        .feature-card:nth-child(1) { animation-delay: 0.05s; }
+        .feature-card:nth-child(2) { animation-delay: 0.1s; }
+        .feature-card:nth-child(3) { animation-delay: 0.15s; }
+        .feature-card:nth-child(4) { animation-delay: 0.2s; }
+        .feature-card:nth-child(5) { animation-delay: 0.25s; }
+        .feature-card:nth-child(6) { animation-delay: 0.3s; }
+        .feature-card:nth-child(7) { animation-delay: 0.35s; }
+
+        /* 响应式 */
+        @media (max-width: 768px) {
+            .container { padding: 16px 20px; }
+            .hero h1 { font-size: 40px; }
+            .section-title h2 { font-size: 28px; }
+            .stats-section { grid-template-columns: repeat(2, 1fr); gap: 16px; }
+            .navbar { flex-direction: column; border-radius: 32px; }
+            .nav-links { justify-content: center; }
+            .preview-card { padding: 28px; }
+            .changelog-header { flex-direction: column; text-align: center; }
+            .features-grid { gap: 20px; }
+            .feature-card { padding: 24px; }
+        }
+
+        @media (max-width: 480px) {
+            .stats-section { grid-template-columns: 1fr; }
+            .hero-buttons { flex-direction: column; align-items: center; }
+            .hero h1 { font-size: 32px; }
+        }
+
+        /* 滚动条 */
+        ::-webkit-scrollbar {
+            width: 5px;
+            height: 5px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(59, 130, 246, 0.05);
+            border-radius: 10px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(59, 130, 246, 0.4);
+            border-radius: 10px;
+        }
     </style>
 </head>
 <body>
@@ -622,14 +722,14 @@
                 </div>
                 <div>
                     <h1>NetSight Pro</h1>
-                    <p>蓝色极速 · 实时网络诊断</p>
+                    <p>极光诊断 · 实时网络分析</p>
                 </div>
             </div>
             <div class="nav-links">
-                <a href="#features">功能</a>
+                <a href="#features">功能特性</a>
+                <a href="#api">API 端点</a>
                 <a href="#changelog">更新日志</a>
-                <a href="#deploy">部署</a>
-                <a href="https://github.com/BlueDriftHK" target="_blank"><i class="fab fa-github"></i> GitHub</a>
+                <a href="#deploy">部署指南</a>
                 <a href="#" class="btn-glow" id="launchBtn">
                     <i class="fas fa-rocket"></i> 启动工具
                 </a>
@@ -639,15 +739,15 @@
         <!-- 英雄区域 -->
         <div class="hero">
             <div class="hero-badge">
-                <i class="fas fa-bolt"></i> Cloudflare Workers 驱动
+                <i class="fas fa-bolt"></i> Cloudflare Workers 边缘驱动
             </div>
             <h1>专业级网络诊断<br>实时监控 · 全面分析</h1>
-            <p>部署在边缘节点的网络诊断工具，提供毫秒级实时监控、多维度性能测试和连接质量评估</p>
+            <p>部署在全球边缘节点的网络诊断工具，提供毫秒级实时监控、多维度性能测试和连接质量评估</p>
             <div class="hero-buttons">
                 <a href="#" class="btn-glow" id="heroLaunchBtn">
                     <i class="fas fa-play"></i> 立即体验
                 </a>
-                <a href="#deploy" class="btn-outline-glow">
+                <a href="#deploy" class="btn-outline">
                     <i class="fas fa-code"></i> 一键部署
                 </a>
             </div>
@@ -656,7 +756,7 @@
         <!-- 统计数字 -->
         <div class="stats-section">
             <div class="stat-card">
-                <div class="stat-number">7+</div>
+                <div class="stat-number">8+</div>
                 <div class="stat-label">诊断工具</div>
             </div>
             <div class="stat-card">
@@ -683,17 +783,18 @@
             <div class="feature-card">
                 <div class="feature-icon"><i class="fas fa-waveform"></i></div>
                 <h3>实时延迟监控</h3>
-                <p>每2秒自动测量往返时延，实时绘制趋势图表，计算网络抖动和丢包率</p>
+                <p>每2秒自动测量往返时延，实时绘制趋势图表，计算网络抖动、丢包率和连接质量评估</p>
                 <div class="feature-tags">
                     <span class="feature-tag">RTT</span>
                     <span class="feature-tag">抖动</span>
                     <span class="feature-tag">丢包率</span>
+                    <span class="feature-tag">质量评估</span>
                 </div>
             </div>
             <div class="feature-card">
                 <div class="feature-icon"><i class="fas fa-gauge-high"></i></div>
                 <h3>带宽测速</h3>
-                <p>测试100KB、500KB、1MB文件下载速度，计算平均带宽和实时速率</p>
+                <p>多档位文件下载速度测试（100KB/500KB/2MB），计算平均带宽和实时速率</p>
                 <div class="feature-tags">
                     <span class="feature-tag">下载速度</span>
                     <span class="feature-tag">平均速率</span>
@@ -702,7 +803,7 @@
             <div class="feature-card">
                 <div class="feature-icon"><i class="fas fa-shield-haltered"></i></div>
                 <h3>安全协议检测</h3>
-                <p>检测TLS版本、加密套件、ECH状态、HTTP/2推送支持和压缩算法</p>
+                <p>检测TLS版本、加密套件、ECH状态、HTTP/2推送支持和压缩算法（Brotli/Gzip）</p>
                 <div class="feature-tags">
                     <span class="feature-tag">TLS 1.3</span>
                     <span class="feature-tag">ECH</span>
@@ -712,7 +813,7 @@
             <div class="feature-card">
                 <div class="feature-icon"><i class="fas fa-map-pin"></i></div>
                 <h3>地理位置追踪</h3>
-                <p>显示边缘节点和客户端真实地理位置，计算两者之间的直线距离</p>
+                <p>显示边缘节点和客户端真实地理位置（IP-API.com），计算两者之间的直线距离</p>
                 <div class="feature-tags">
                     <span class="feature-tag">IP定位</span>
                     <span class="feature-tag">距离计算</span>
@@ -722,7 +823,7 @@
             <div class="feature-card">
                 <div class="feature-icon"><i class="fas fa-microchip"></i></div>
                 <h3>CPU性能测试</h3>
-                <p>执行密集计算测试，评估设备处理能力，返回每毫秒操作数</p>
+                <p>执行50万次密集计算测试，评估设备处理能力，返回每毫秒操作数（ops/ms）</p>
                 <div class="feature-tags">
                     <span class="feature-tag">基准测试</span>
                     <span class="feature-tag">ops/ms</span>
@@ -731,54 +832,89 @@
             <div class="feature-card">
                 <div class="feature-icon"><i class="fas fa-bolt"></i></div>
                 <h3>WebSocket测试</h3>
-                <p>5次ping-pong测试，计算WebSocket连接的平均、最小和最大延迟</p>
+                <p>5次ping-pong往返测试，计算WebSocket连接的平均、最小和最大延迟</p>
                 <div class="feature-tags">
                     <span class="feature-tag">实时通信</span>
                     <span class="feature-tag">延迟分析</span>
                 </div>
             </div>
-        </div>
-
-        <!-- 预览区域 -->
-        <div class="preview-section">
-            <h2>📊 实时监控面板</h2>
-            <p>直观的仪表盘设计，实时展示网络状态</p>
-            <div class="preview-placeholder">
-                <div class="preview-stats">
-                    <div class="preview-stat">
-                        <i class="fas fa-arrow-right"></i>
-                        <span>当前RTT: <strong>233ms</strong></span>
-                    </div>
-                    <div class="preview-stat">
-                        <i class="fas fa-chart-line"></i>
-                        <span>抖动: <strong>108ms</strong></span>
-                    </div>
-                    <div class="preview-stat">
-                        <i class="fas fa-signal"></i>
-                        <span>连接质量: <strong style="color:#f87171;">较差</strong></span>
-                    </div>
-                    <div class="preview-stat">
-                        <i class="fas fa-chart-simple"></i>
-                        <span>稳定性: <strong style="color:#f87171;">极不稳定</strong></span>
-                    </div>
+            <div class="feature-card">
+                <div class="feature-icon"><i class="fas fa-layer-group"></i></div>
+                <h3>并发请求测试</h3>
+                <p>模拟多用户并发访问，测试服务器处理能力（4/6/8并发）</p>
+                <div class="feature-tags">
+                    <span class="feature-tag">压力测试</span>
+                    <span class="feature-tag">吞吐量</span>
                 </div>
             </div>
+            <div class="feature-card">
+                <div class="feature-icon"><i class="fas fa-stream"></i></div>
+                <h3>流式传输测试</h3>
+                <p>测试大文件流式传输吞吐量（128KB/512KB/2MB）</p>
+                <div class="feature-tags">
+                    <span class="feature-tag">流式读取</span>
+                    <span class="feature-tag">吞吐量</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- API 端点 -->
+        <div class="api-section" id="api">
+            <h2><i class="fas fa-plug"></i> API 测试端点</h2>
+            <div class="api-grid">
+                <div class="api-item">
+                    <div class="api-method">GET</div>
+                    <div class="api-path">/speedtest?size=102400</div>
+                    <div class="api-desc">带宽测速，返回随机数据</div>
+                </div>
+                <div class="api-item">
+                    <div class="api-method">GET</div>
+                    <div class="api-path">/cpu-test?n=500000</div>
+                    <div class="api-desc">CPU性能基准测试</div>
+                </div>
+                <div class="api-item">
+                    <div class="api-method">WebSocket</div>
+                    <div class="api-path">/ws-test</div>
+                    <div class="api-desc">WebSocket ping-pong延迟测试</div>
+                </div>
+                <div class="api-item">
+                    <div class="api-method">GET</div>
+                    <div class="api-path">/push-test</div>
+                    <div class="api-desc">HTTP/2 Server Push检测</div>
+                </div>
+                <div class="api-item">
+                    <div class="api-method">GET</div>
+                    <div class="api-path">/concurrent-test?count=4</div>
+                    <div class="api-desc">并发请求压力测试</div>
+                </div>
+                <div class="api-item">
+                    <div class="api-method">GET</div>
+                    <div class="api-path">/stream-test?size=1048576</div>
+                    <div class="api-desc">流式传输吞吐量测试</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 预览卡片 -->
+        <div class="preview-card">
+            <h2>📊 实时监控面板</h2>
+            <p>直观的仪表盘设计，实时展示网络状态</p>
             <div class="preview-stats">
                 <div class="preview-stat">
-                    <i class="fas fa-check-circle"></i>
-                    <span>7种诊断工具</span>
+                    <i class="fas fa-arrow-right"></i>
+                    <span>当前RTT: <strong>实时刷新</strong></span>
                 </div>
                 <div class="preview-stat">
                     <i class="fas fa-chart-line"></i>
-                    <span>实时趋势图表</span>
+                    <span>抖动: <strong>实时计算</strong></span>
                 </div>
                 <div class="preview-stat">
-                    <i class="fas fa-language"></i>
-                    <span>中英文双语</span>
+                    <i class="fas fa-signal"></i>
+                    <span>连接质量: <strong>优秀/良好/一般/较差</strong></span>
                 </div>
                 <div class="preview-stat">
-                    <i class="fas fa-copy"></i>
-                    <span>一键导出报告</span>
+                    <i class="fas fa-chart-simple"></i>
+                    <span>稳定性: <strong>实时评估</strong></span>
                 </div>
             </div>
         </div>
@@ -787,54 +923,65 @@
         <div class="changelog-section" id="changelog">
             <div class="changelog-header">
                 <h2><i class="fas fa-history"></i> 更新日志</h2>
-                <span class="version-badge"><i class="fas fa-tag"></i> 最新版本 v2.0</span>
+                <span class="version-badge"><i class="fas fa-tag"></i> 最新版本 v3.1</span>
             </div>
             <div class="changelog-list">
                 <div class="changelog-item">
                     <div class="changelog-version">
-                        <span class="version-tag">v2.0.0</span>
-                        <span class="version-date">2024年12月15日</span>
+                        <span class="version-tag">v3.1.0</span>
+                        <span class="version-date">2024年12月</span>
                     </div>
                     <div class="changelog-content">
                         <ul>
-                            <li><i class="fas fa-plus-circle"></i> 全新蓝色主题UI设计，玻璃态毛玻璃效果</li>
-                            <li><i class="fas fa-plus-circle"></i> 增强实时延迟监控图表，高度从100px增加到160px</li>
-                            <li><i class="fas fa-plus-circle"></i> 新增连接质量和网络稳定性实时评估</li>
+                            <li><i class="fas fa-plus-circle"></i> 极光主题UI全面升级，玻璃态毛玻璃效果增强</li>
+                            <li><i class="fas fa-plus-circle"></i> 实时延迟监控模块拉长，独占整行展示</li>
+                            <li><i class="fas fa-plus-circle"></i> 新增最低/最高RTT历史统计显示</li>
+                            <li><i class="fas fa-plus-circle"></i> RTT显示区从2列升级为4列（当前/抖动/最低/最高）</li>
+                            <li><i class="fas fa-plus-circle"></i> 质量指标从2列升级为4列，增加丢包率实时监控</li>
+                            <li><i class="fas fa-plus-circle"></i> 图表高度从140px增加到180px，趋势更清晰</li>
+                            <li><i class="fas fa-wrench"></i> 优化响应式布局，完美适配移动端</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="changelog-item">
+                    <div class="changelog-version">
+                        <span class="version-tag">v2.0.0</span>
+                        <span class="version-date">2024年11月</span>
+                    </div>
+                    <div class="changelog-content">
+                        <ul>
+                            <li><i class="fas fa-plus-circle"></i> 全新蓝色主题UI设计，极光渐变背景</li>
                             <li><i class="fas fa-plus-circle"></i> 完整的多语言支持（简体/繁体/英文）</li>
-                            <li><i class="fas fa-plus-circle"></i> 添加最低/最高RTT历史统计</li>
-                            <li><i class="fas fa-plus-circle"></i> 新增丢包率实时监控</li>
-                            <li><i class="fas fa-wrench"></i> 优化所有测试端点的超时处理机制</li>
-                            <li><i class="fas fa-wrench"></i> 改进响应式布局，移动端体验优化</li>
+                            <li><i class="fas fa-plus-circle"></i> 新增连接质量和网络稳定性实时评估</li>
+                            <li><i class="fas fa-plus-circle"></i> 优化所有测试端点的超时处理机制</li>
                         </ul>
                     </div>
                 </div>
                 <div class="changelog-item">
                     <div class="changelog-version">
                         <span class="version-tag">v1.5.0</span>
-                        <span class="version-date">2024年11月20日</span>
+                        <span class="version-date">2024年10月</span>
                     </div>
                     <div class="changelog-content">
                         <ul>
                             <li><i class="fas fa-plus-circle"></i> 新增并发请求测试功能</li>
                             <li><i class="fas fa-plus-circle"></i> 新增流式传输吞吐量测试</li>
                             <li><i class="fas fa-plus-circle"></i> 添加HTTP/2 Server Push检测</li>
-                            <li><i class="fas fa-wrench"></i> 优化带宽测速算法，提高准确度</li>
                         </ul>
                     </div>
                 </div>
                 <div class="changelog-item">
                     <div class="changelog-version">
                         <span class="version-tag">v1.0.0</span>
-                        <span class="version-date">2024年10月1日</span>
+                        <span class="version-date">2024年9月</span>
                     </div>
                     <div class="changelog-content">
                         <ul>
                             <li><i class="fas fa-plus-circle"></i> 初始版本发布</li>
-                            <li><i class="fas fa-plus-circle"></i 支持实时RTT监控和图表绘制</li>
+                            <li><i class="fas fa-plus-circle"></i> 支持实时RTT监控和图表绘制</li>
                             <li><i class="fas fa-plus-circle"></i> 支持丢包率测试、带宽测速、DNS解析</li>
                             <li><i class="fas fa-plus-circle"></i> 支持CPU性能测试和WebSocket延迟测试</li>
                             <li><i class="fas fa-plus-circle"></i> 支持安全协议检测和地理位置追踪</li>
-                            <li><i class="fas fa-plus-circle"></i> 支持一键复制诊断报告</li>
                         </ul>
                     </div>
                 </div>
@@ -864,7 +1011,7 @@ wrangler deploy</pre>
                     <div class="step-number">1</div>
                     <div class="step-content">
                         <h4>复制 worker.js 代码</h4>
-                        <p>将完整的 Worker 代码保存为 worker.js 文件</p>
+                        <p>将完整的 NetSight Pro Worker 代码保存为 worker.js 文件</p>
                     </div>
                 </div>
                 <div class="step">
@@ -895,12 +1042,12 @@ wrangler deploy</pre>
         <div class="footer">
             <div class="footer-links">
                 <a href="#features">功能特性</a>
+                <a href="#api">API 端点</a>
                 <a href="#changelog">更新日志</a>
                 <a href="#deploy">部署指南</a>
-                <a href="https://github.com" target="_blank">GitHub</a>
-                <a href="#">关于</a>
+                <a href="#">GitHub</a>
             </div>
-            <p>NetSight Pro | 蓝色极速网络诊断工具</p>
+            <p>NetSight Pro | 极光网络诊断工具</p>
             <p>部署于 Cloudflare Workers · 开源免费 · MIT License</p>
         </div>
     </div>
@@ -921,13 +1068,13 @@ wrangler deploy</pre>
         const launchBtn = document.getElementById('launchBtn');
         const heroLaunchBtn = document.getElementById('heroLaunchBtn');
         
-        // 这里需要替换为实际的 Worker 地址
+        // 请替换为实际的 Worker 地址
         const WORKER_URL = 'https://netsight-pro.your-subdomain.workers.dev';
         
         function launchTool() {
             if (WORKER_URL === 'https://netsight-pro.your-subdomain.workers.dev') {
-                alert('请先部署 Worker 并替换 WORKER_URL 变量');
-                window.open('#deploy', '_blank');
+                alert('请先部署 Worker 并替换 WORKER_URL 变量为您的实际地址');
+                document.querySelector('#deploy').scrollIntoView({ behavior: 'smooth' });
             } else {
                 window.open(WORKER_URL, '_blank');
             }
@@ -936,10 +1083,10 @@ wrangler deploy</pre>
         if (launchBtn) launchBtn.addEventListener('click', launchTool);
         if (heroLaunchBtn) heroLaunchBtn.addEventListener('click', launchTool);
 
-        // 添加滚动动画
+        // 滚动动画
         const observerOptions = {
             threshold: 0.1,
-            rootMargin: '0px 0px -50px 0px'
+            rootMargin: '0px 0px -30px 0px'
         };
 
         const observer = new IntersectionObserver((entries) => {
@@ -952,7 +1099,7 @@ wrangler deploy</pre>
             });
         }, observerOptions);
 
-        document.querySelectorAll('.feature-card, .stat-card, .preview-section, .changelog-section, .deploy-section').forEach(el => {
+        document.querySelectorAll('.feature-card, .stat-card, .preview-card, .api-section, .changelog-section, .deploy-section').forEach(el => {
             el.style.opacity = '0';
             el.style.transform = 'translateY(30px)';
             observer.observe(el);
