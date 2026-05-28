@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>NetSight Pro - 极光网络诊断工具 | 官方文档</title>
+    <title>NetSight Pro - 极光网络诊断工具 | 在线体验</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -68,9 +68,9 @@
         }
 
         .container {
-            max-width: 1200px;
+            max-width: 1400px;
             margin: 0 auto;
-            padding: 40px 24px;
+            padding: 24px;
             position: relative;
             z-index: 1;
         }
@@ -93,32 +93,40 @@
         }
 
         .card-header {
-            padding: 28px 32px;
+            padding: 24px 32px;
             background: linear-gradient(135deg, rgba(59, 130, 246, 0.06), rgba(6, 182, 212, 0.02));
             border-bottom: 1px solid rgba(59, 130, 246, 0.1);
             display: flex;
             align-items: center;
             gap: 16px;
+            flex-wrap: wrap;
+            justify-content: space-between;
         }
 
-        .card-header i {
-            font-size: 32px;
+        .card-header-left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .card-header-left i {
+            font-size: 28px;
             color: var(--cyan);
         }
 
-        .card-header h2 {
-            font-size: 24px;
+        .card-header-left h2 {
+            font-size: 20px;
             font-weight: 700;
         }
 
-        .card-header p {
-            font-size: 13px;
+        .card-header-left p {
+            font-size: 12px;
             color: rgba(255,255,255,0.45);
-            margin-top: 6px;
+            margin-top: 4px;
         }
 
         .card-body {
-            padding: 32px;
+            padding: 28px 32px;
         }
 
         /* 头部导航 */
@@ -126,8 +134,8 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 20px 36px;
-            margin-bottom: 32px;
+            padding: 16px 32px;
+            margin-bottom: 28px;
             flex-wrap: wrap;
             gap: 20px;
             background: rgba(10, 15, 26, 0.5);
@@ -144,14 +152,14 @@
         }
 
         .logo-icon {
-            width: 56px;
-            height: 56px;
+            width: 48px;
+            height: 48px;
             background: linear-gradient(135deg, var(--primary), var(--cyan), var(--purple));
-            border-radius: 20px;
+            border-radius: 16px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 28px;
+            font-size: 24px;
             box-shadow: 0 8px 32px rgba(59, 130, 246, 0.3);
             animation: float 3s ease-in-out infinite;
         }
@@ -162,7 +170,7 @@
         }
 
         .logo h1 {
-            font-size: 28px;
+            font-size: 24px;
             font-weight: 700;
             background: linear-gradient(135deg, #fff, var(--cyan), var(--purple));
             -webkit-background-clip: text;
@@ -171,7 +179,7 @@
         }
 
         .logo p {
-            font-size: 12px;
+            font-size: 11px;
             color: rgba(255,255,255,0.45);
             margin-top: 4px;
         }
@@ -180,232 +188,32 @@
             display: inline-flex;
             align-items: center;
             gap: 8px;
-            padding: 8px 20px;
+            padding: 6px 16px;
             background: rgba(6, 182, 212, 0.15);
             border-radius: 40px;
             border: 1px solid rgba(6, 182, 212, 0.3);
+            font-size: 13px;
         }
 
-        .version-badge i {
-            color: var(--cyan);
-        }
-
-        /* 徽章系统 */
-        .badge {
-            padding: 5px 14px;
-            border-radius: 40px;
-            font-size: 11px;
-            font-weight: 600;
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-        }
-
-        .badge-success {
-            background: rgba(16, 185, 129, 0.12);
-            color: #34d399;
-            border: 1px solid rgba(16, 185, 129, 0.25);
-        }
-
-        .badge-warning {
-            background: rgba(245, 158, 11, 0.12);
-            color: #fbbf24;
-            border: 1px solid rgba(245, 158, 11, 0.25);
-        }
-
-        .badge-danger {
-            background: rgba(239, 68, 68, 0.12);
-            color: #f87171;
-            border: 1px solid rgba(239, 68, 68, 0.25);
-        }
-
-        .badge-info {
-            background: rgba(6, 182, 212, 0.12);
-            color: #22d3ee;
-            border: 1px solid rgba(6, 182, 212, 0.25);
-        }
-
-        .badge-purple {
-            background: rgba(139, 92, 246, 0.12);
-            color: #a78bfa;
-            border: 1px solid rgba(139, 92, 246, 0.25);
-        }
-
-        /* 功能网格 */
-        .features-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 24px;
-        }
-
-        .feature-card {
-            background: rgba(0, 0, 0, 0.3);
-            border-radius: 24px;
-            padding: 24px;
-            transition: all 0.3s ease;
-            border: 1px solid rgba(59, 130, 246, 0.1);
-        }
-
-        .feature-card:hover {
-            background: rgba(0, 0, 0, 0.4);
-            border-color: rgba(6, 182, 212, 0.3);
-            transform: translateY(-2px);
-        }
-
-        .feature-icon {
-            width: 48px;
-            height: 48px;
-            background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(6, 182, 212, 0.08));
-            border-radius: 16px;
+        /* 按钮组 */
+        .button-group {
             display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 20px;
-        }
-
-        .feature-icon i {
-            font-size: 24px;
-            color: var(--cyan);
-        }
-
-        .feature-card h3 {
-            font-size: 18px;
-            margin-bottom: 12px;
-        }
-
-        .feature-card p {
-            font-size: 13px;
-            color: rgba(255,255,255,0.5);
-            line-height: 1.5;
-        }
-
-        /* API 表格 */
-        .api-table {
-            overflow-x: auto;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-
-        th, td {
-            padding: 14px 12px;
-            text-align: left;
-            border-bottom: 1px solid rgba(59, 130, 246, 0.1);
-        }
-
-        th {
-            color: var(--cyan);
-            font-weight: 600;
-            font-size: 13px;
-        }
-
-        td {
-            font-size: 13px;
-            color: rgba(255,255,255,0.7);
-        }
-
-        code {
-            background: rgba(0, 0, 0, 0.4);
-            padding: 4px 10px;
-            border-radius: 8px;
-            font-family: 'Monaco', 'Courier New', monospace;
-            font-size: 12px;
-            color: var(--cyan);
-        }
-
-        pre {
-            background: rgba(0, 0, 0, 0.4);
-            padding: 20px;
-            border-radius: 16px;
-            overflow-x: auto;
-            font-family: 'Monaco', 'Courier New', monospace;
-            font-size: 13px;
-            line-height: 1.5;
-            border: 1px solid rgba(6, 182, 212, 0.15);
-        }
-
-        /* 更新日志 */
-        .changelog-item {
-            padding: 20px 0;
-            border-bottom: 1px solid rgba(59, 130, 246, 0.1);
-        }
-
-        .changelog-item:last-child {
-            border-bottom: none;
-        }
-
-        .changelog-header {
-            display: flex;
-            align-items: center;
-            gap: 16px;
-            margin-bottom: 16px;
             flex-wrap: wrap;
+            gap: 12px;
         }
 
-        .version-tag {
-            font-size: 18px;
-            font-weight: 700;
-            color: var(--cyan);
-        }
-
-        .date-tag {
-            font-size: 12px;
-            color: rgba(255,255,255,0.4);
-        }
-
-        .changelog-content {
-            padding-left: 20px;
-        }
-
-        .changelog-content ul {
-            list-style: none;
-        }
-
-        .changelog-content li {
-            margin-bottom: 10px;
-            font-size: 14px;
-            color: rgba(255,255,255,0.7);
-            padding-left: 24px;
-            position: relative;
-        }
-
-        .changelog-content li::before {
-            content: '▹';
-            position: absolute;
-            left: 0;
-            color: var(--cyan);
-        }
-
-        .tag {
-            display: inline-block;
-            padding: 2px 8px;
-            border-radius: 6px;
-            font-size: 10px;
-            font-weight: 600;
-            margin-right: 8px;
-        }
-
-        .tag-new { background: rgba(16, 185, 129, 0.2); color: #34d399; }
-        .tag-fix { background: rgba(239, 68, 68, 0.2); color: #f87171; }
-        .tag-update { background: rgba(6, 182, 212, 0.2); color: #22d3ee; }
-        .tag-security { background: rgba(139, 92, 246, 0.2); color: #a78bfa; }
-
-        /* 按钮 */
         .btn {
-            padding: 12px 32px;
-            border-radius: 48px;
-            font-size: 14px;
+            padding: 10px 24px;
+            border-radius: 40px;
+            font-size: 13px;
             font-weight: 500;
             border: none;
             cursor: pointer;
             transition: all 0.3s ease;
             display: inline-flex;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
             font-family: inherit;
-            text-decoration: none;
         }
 
         .btn-primary {
@@ -431,41 +239,65 @@
             background: rgba(6, 182, 212, 0.08);
         }
 
-        /* 页脚 */
-        .footer {
-            margin-top: 32px;
-            padding: 24px 36px;
-            text-align: center;
-            font-size: 12px;
-            color: rgba(255,255,255,0.4);
+        .btn-cyan {
+            background: linear-gradient(135deg, var(--cyan-dark), var(--cyan));
+            color: white;
+        }
+
+        .btn-purple {
+            background: linear-gradient(135deg, #7c3aed, var(--purple));
+            color: white;
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #dc2626, var(--danger));
+            color: white;
+        }
+
+        /* 结果区域 */
+        .result-area {
+            margin-top: 20px;
+            padding: 16px 20px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 20px;
+            font-size: 13px;
+            border-left: 3px solid var(--cyan);
+            transition: all 0.3s ease;
+        }
+
+        .speed-result, .metrics-grid {
             display: flex;
-            justify-content: space-between;
             flex-wrap: wrap;
-            gap: 16px;
-            background: rgba(10, 15, 26, 0.4);
-            backdrop-filter: blur(16px);
-            border-radius: 32px;
-            border: 1px solid rgba(59, 130, 246, 0.1);
+            gap: 12px;
+            margin-top: 12px;
         }
 
-        /* 统计卡片 */
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-            margin-bottom: 32px;
-        }
-
-        .stat-card {
+        .speed-item, .metric-card {
             background: linear-gradient(135deg, rgba(59, 130, 246, 0.08), rgba(6, 182, 212, 0.04));
-            border-radius: 24px;
-            padding: 24px;
-            text-align: center;
-            border: 1px solid rgba(6, 182, 212, 0.2);
+            border-radius: 16px;
+            padding: 10px 18px;
+            font-size: 12px;
+            border-left: 2px solid var(--cyan);
         }
 
-        .stat-number {
-            font-size: 36px;
+        /* 实时监控区域 */
+        .monitor-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 20px;
+            margin-bottom: 24px;
+        }
+
+        .monitor-card {
+            background: linear-gradient(135deg, rgba(6, 182, 212, 0.12), rgba(59, 130, 246, 0.06));
+            border-radius: 24px;
+            padding: 20px;
+            text-align: center;
+            border: 1px solid rgba(56, 189, 248, 0.2);
+        }
+
+        .monitor-value {
+            font-size: 48px;
             font-weight: 800;
             background: linear-gradient(135deg, #fff, var(--cyan));
             -webkit-background-clip: text;
@@ -473,36 +305,111 @@
             background-clip: text;
         }
 
-        .stat-label {
+        .monitor-label {
             font-size: 12px;
             color: rgba(255,255,255,0.5);
             margin-top: 8px;
         }
 
-        /* 滚动条 */
-        ::-webkit-scrollbar {
-            width: 5px;
-            height: 5px;
+        .quality-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
         }
 
-        ::-webkit-scrollbar-track {
-            background: rgba(59, 130, 246, 0.05);
-            border-radius: 10px;
+        .quality-excellent { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+        .quality-good { background: rgba(6, 182, 212, 0.2); color: #22d3ee; }
+        .quality-poor { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+        .quality-bad { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+
+        /* 图表容器 */
+        .chart-container {
+            background: rgba(0, 0, 0, 0.35);
+            border-radius: 20px;
+            padding: 20px;
+            margin-top: 20px;
         }
 
-        ::-webkit-scrollbar-thumb {
-            background: rgba(59, 130, 246, 0.4);
-            border-radius: 10px;
+        canvas {
+            width: 100%;
+            height: 200px;
+        }
+
+        /* URL 输入框 */
+        .url-input-group {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .url-input {
+            flex: 1;
+            padding: 12px 18px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            border-radius: 48px;
+            color: white;
+            font-family: monospace;
+            font-size: 13px;
+        }
+
+        .url-input:focus {
+            outline: none;
+            border-color: var(--cyan);
+        }
+
+        /* 加载动画 */
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        .loading {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(6, 182, 212, 0.3);
+            border-top-color: #06b6d4;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+
+        /* 徽章 */
+        .badge {
+            padding: 4px 12px;
+            border-radius: 40px;
+            font-size: 11px;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .badge-success { background: rgba(16, 185, 129, 0.12); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.25); }
+        .badge-warning { background: rgba(245, 158, 11, 0.12); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.25); }
+        .badge-info { background: rgba(6, 182, 212, 0.12); color: #22d3ee; border: 1px solid rgba(6, 182, 212, 0.25); }
+
+        /* 响应式 */
+        @media (max-width: 1024px) {
+            .monitor-grid { grid-template-columns: repeat(2, 1fr); }
         }
 
         @media (max-width: 768px) {
-            .container { padding: 20px 16px; }
-            .card-header { padding: 20px; }
+            .container { padding: 16px; }
+            .card-header { flex-direction: column; align-items: flex-start; }
             .card-body { padding: 20px; }
-            .header { flex-direction: column; text-align: center; }
-            .footer { flex-direction: column; text-align: center; }
-            .stats-grid { grid-template-columns: repeat(2, 1fr); }
+            .monitor-grid { grid-template-columns: 1fr; }
+            .monitor-value { font-size: 36px; }
         }
+
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
+        ::-webkit-scrollbar-track { background: rgba(59, 130, 246, 0.05); border-radius: 10px; }
+        ::-webkit-scrollbar-thumb { background: rgba(59, 130, 246, 0.4); border-radius: 10px; }
     </style>
 </head>
 <body>
@@ -526,33 +433,141 @@
             </div>
         </div>
 
-        <!-- 统计卡片 -->
-        <div class="stats-grid">
-            <div class="stat-card">
-                <div class="stat-number">8+</div>
-                <div class="stat-label">诊断工具</div>
+        <!-- ==================== 在线体验区 ==================== -->
+        <div class="glass-card">
+            <div class="card-header">
+                <div class="card-header-left">
+                    <i class="fas fa-flask"></i>
+                    <div>
+                        <h2>在线体验区</h2>
+                        <p>实时测试网络诊断功能 | 需要先部署 Worker</p>
+                    </div>
+                </div>
+                <div class="button-group">
+                    <button class="btn btn-outline" onclick="clearAllResults()">
+                        <i class="fas fa-eraser"></i> 清空结果
+                    </button>
+                </div>
             </div>
-            <div class="stat-card">
-                <div class="stat-number">3</div>
-                <div class="stat-label">多语言支持</div>
+            <div class="card-body">
+                <!-- Worker URL 配置 -->
+                <div class="url-input-group">
+                    <input type="text" id="worker-url" class="url-input" placeholder="https://your-worker.dev" value="https://netsight-pro.your-subdomain.workers.dev">
+                    <button class="btn btn-primary" onclick="saveWorkerUrl()">
+                        <i class="fas fa-save"></i> 保存地址
+                    </button>
+                    <button class="btn btn-outline" onclick="testConnection()">
+                        <i class="fas fa-plug"></i> 测试连接
+                    </button>
+                </div>
+                <div id="connection-status" style="margin-bottom: 20px;"></div>
+
+                <!-- 实时监控区域 -->
+                <div class="monitor-grid">
+                    <div class="monitor-card">
+                        <div class="monitor-value" id="live-rtt">--</div>
+                        <div class="monitor-label"><i class="fas fa-arrow-right"></i> 当前 RTT (ms)</div>
+                    </div>
+                    <div class="monitor-card">
+                        <div class="monitor-value" id="live-jitter">--</div>
+                        <div class="monitor-label"><i class="fas fa-chart-line"></i> 抖动 (ms)</div>
+                    </div>
+                    <div class="monitor-card">
+                        <div class="monitor-value" id="live-min">--</div>
+                        <div class="monitor-label"><i class="fas fa-arrow-down"></i> 最低 RTT</div>
+                    </div>
+                    <div class="monitor-card">
+                        <div class="monitor-value" id="live-max">--</div>
+                        <div class="monitor-label"><i class="fas fa-arrow-up"></i> 最高 RTT</div>
+                    </div>
+                </div>
+
+                <!-- 实时图表 -->
+                <div class="chart-container">
+                    <canvas id="rtt-chart"></canvas>
+                </div>
+
+                <!-- 质量指标 -->
+                <div class="metrics-grid" style="margin-top: 20px;">
+                    <div class="metric-card">
+                        <span>📊 连接质量</span>
+                        <strong id="quality-text" style="margin-left: 8px; color: #34d399;">优秀</strong>
+                    </div>
+                    <div class="metric-card">
+                        <span>📈 样本数量</span>
+                        <strong id="sample-count" style="margin-left: 8px;">0</strong>
+                    </div>
+                    <div class="metric-card">
+                        <span>⚠️ 丢包率</span>
+                        <strong id="loss-rate" style="margin-left: 8px; color: #34d399;">0%</strong>
+                    </div>
+                    <div class="metric-card">
+                        <span><i class="fas fa-bolt"></i> 实时监控</span>
+                        <span id="live-status" style="margin-left: 8px; color: #34d399;">● 运行中</span>
+                    </div>
+                </div>
             </div>
-            <div class="stat-card">
-                <div class="stat-number">60</div>
-                <div class="stat-label">次/分钟 限流</div>
+        </div>
+
+        <!-- 诊断工具集 -->
+        <div class="glass-card">
+            <div class="card-header">
+                <div class="card-header-left">
+                    <i class="fas fa-toolbox"></i>
+                    <div>
+                        <h2>诊断工具集</h2>
+                        <p>一键测试 · 全面诊断</p>
+                    </div>
+                </div>
             </div>
-            <div class="stat-card">
-                <div class="stat-number">10MB</div>
-                <div class="stat-label">最大测试文件</div>
+            <div class="card-body">
+                <div class="button-group">
+                    <button class="btn btn-outline" id="btn-loss" onclick="runLossTest()">
+                        <i class="fas fa-tachometer-alt"></i> 丢包率测试
+                    </button>
+                    <button class="btn btn-primary" id="btn-speed" onclick="runSpeedTest()">
+                        <i class="fas fa-gauge-high"></i> 带宽测速
+                    </button>
+                    <button class="btn btn-outline" id="btn-dns" onclick="runDnsTest()">
+                        <i class="fas fa-server"></i> DNS 解析
+                    </button>
+                    <button class="btn btn-cyan" id="btn-cpu" onclick="runCpuTest()">
+                        <i class="fas fa-microchip"></i> CPU 性能
+                    </button>
+                    <button class="btn btn-purple" id="btn-ws" onclick="runWsTest()">
+                        <i class="fas fa-bolt"></i> WebSocket
+                    </button>
+                    <button class="btn btn-cyan" id="btn-concurrent" onclick="runConcurrentTest()">
+                        <i class="fas fa-layer-group"></i> 并发测试
+                    </button>
+                    <button class="btn btn-outline" id="btn-stream" onclick="runStreamTest()">
+                        <i class="fas fa-stream"></i> 流式传输
+                    </button>
+                    <button class="btn btn-outline" id="btn-http2" onclick="runHttp2Test()">
+                        <i class="fas fa-rocket"></i> HTTP/2 检测
+                    </button>
+                </div>
+
+                <div id="loss-result" class="result-area" style="display: none;"></div>
+                <div id="speed-result" class="result-area" style="display: none;"></div>
+                <div id="dns-result" class="result-area" style="display: none;"></div>
+                <div id="cpu-result" class="result-area" style="display: none;"></div>
+                <div id="ws-result" class="result-area" style="display: none;"></div>
+                <div id="concurrent-result" class="result-area" style="display: none;"></div>
+                <div id="stream-result" class="result-area" style="display: none;"></div>
+                <div id="http2-result" class="result-area" style="display: none;"></div>
             </div>
         </div>
 
         <!-- 项目介绍 -->
         <div class="glass-card">
             <div class="card-header">
-                <i class="fas fa-info-circle"></i>
-                <div>
-                    <h2>项目介绍</h2>
-                    <p>部署在 Cloudflare Workers 边缘节点的专业级网络诊断工具</p>
+                <div class="card-header-left">
+                    <i class="fas fa-info-circle"></i>
+                    <div>
+                        <h2>项目介绍</h2>
+                        <p>部署在 Cloudflare Workers 边缘节点的专业级网络诊断工具</p>
+                    </div>
                 </div>
             </div>
             <div class="card-body">
@@ -561,372 +576,557 @@
                     提供实时网络监控、多维度性能测试和全面的安全协议检测。极光主题的现代化界面，
                     为企业级网络诊断提供了优雅的解决方案。
                 </p>
-                <div style="display: flex; gap: 16px; flex-wrap: wrap;">
-                    <a href="#" class="btn btn-primary" onclick="alert('请先部署 Worker 到 Cloudflare')">
-                        <i class="fas fa-cloud-upload-alt"></i> 部署到 Cloudflare
-                    </a>
-                    <a href="#" class="btn btn-outline" onclick="alert('GitHub 仓库地址')">
-                        <i class="fab fa-github"></i> GitHub
-                    </a>
-                </div>
-            </div>
-        </div>
-
-        <!-- 功能特性 -->
-        <div class="glass-card">
-            <div class="card-header">
-                <i class="fas fa-star-of-life"></i>
-                <div>
-                    <h2>功能特性</h2>
-                    <p>全面的网络诊断工具集</p>
-                </div>
-            </div>
-            <div class="card-body">
-                <div class="features-grid">
-                    <div class="feature-card">
-                        <div class="feature-icon"><i class="fas fa-waveform"></i></div>
-                        <h3>实时延迟监控</h3>
-                        <p>每2秒自动测量RTT，实时趋势图表，连接质量评估</p>
-                    </div>
-                    <div class="feature-card">
-                        <div class="feature-icon"><i class="fas fa-gauge-high"></i></div>
-                        <h3>带宽测速</h3>
-                        <p>多档位测试（100KB/500KB/2MB），精确计算传输速率</p>
-                    </div>
-                    <div class="feature-card">
-                        <div class="feature-icon"><i class="fas fa-microchip"></i></div>
-                        <h3>CPU性能测试</h3>
-                        <p>50万次密集计算，返回 ops/ms 性能指标</p>
-                    </div>
-                    <div class="feature-card">
-                        <div class="feature-icon"><i class="fas fa-bolt"></i></div>
-                        <h3>WebSocket测试</h3>
-                        <p>5次 ping-pong 往返延迟测试，心跳保持连接</p>
-                    </div>
-                    <div class="feature-card">
-                        <div class="feature-icon"><i class="fas fa-shield-haltered"></i></div>
-                        <h3>安全协议检测</h3>
-                        <p>TLS版本、加密套件、ECH状态、压缩算法检测</p>
-                    </div>
-                    <div class="feature-card">
-                        <div class="feature-icon"><i class="fas fa-layer-group"></i></div>
-                        <h3>并发压力测试</h3>
-                        <p>模拟 4/6/8 并发，限制器保护避免资源耗尽</p>
-                    </div>
-                    <div class="feature-card">
-                        <div class="feature-icon"><i class="fas fa-stream"></i></div>
-                        <h3>流式传输测试</h3>
-                        <p>测试 128KB/512KB/2MB 吞吐量，最大 10MB</p>
-                    </div>
-                    <div class="feature-card">
-                        <div class="feature-icon"><i class="fas fa-server"></i></div>
-                        <h3>DNS解析测试</h3>
-                        <p>测试 Cloudflare/Google/GitHub 等域名解析时间</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- API 端点 -->
-        <div class="glass-card">
-            <div class="card-header">
-                <i class="fas fa-code"></i>
-                <div>
-                    <h2>API 端点</h2>
-                    <p>RESTful API 接口文档</p>
-                </div>
-            </div>
-            <div class="card-body">
-                <div class="api-table">
-                    <table>
-                        <thead>
-                            <tr><th>端点</th><th>方法</th><th>参数限制</th><th>描述</th></tr>
-                        </thead>
-                        <tbody>
-                            <tr><td><code>/health</code></td><td>GET</td><td>-</td><td>服务健康检查</td></tr>
-                            <tr><td><code>/speedtest</code></td><td>GET</td><td><code>size</code> ≤ 5MB</td><td>带宽测速</td></tr>
-                            <tr><td><code>/cpu-test</code></td><td>GET</td><td><code>n</code> ≤ 200万</td><td>CPU性能基准测试</td></tr>
-                            <tr><td><code>/ws-test</code></td><td>WebSocket</td><td>-</td><td>WebSocket延迟测试</td></tr>
-                            <tr><td><code>/http2-test</code></td><td>GET</td><td>-</td><td>HTTP/2/3 + Early Hints检测</td></tr>
-                            <tr><td><code>/concurrent-test</code></td><td>GET</td><td><code>count</code> ≤ 16, <code>size</code> ≤ 64KB</td><td>并发压力测试</td></tr>
-                            <tr><td><code>/stream-test</code></td><td>GET</td><td><code>size</code> ≤ 10MB</td><td>流式吞吐量测试</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-
-                <h3 style="margin: 24px 0 16px; font-size: 16px;">命令行测试示例</h3>
-                <pre><code># 健康检查
-curl "https://your-worker.dev/health"
-
-# 带宽测试（100KB）
-curl "https://your-worker.dev/speedtest?size=102400"
-
-# CPU 性能测试
-curl "https://your-worker.dev/cpu-test?n=500000"
-
-# HTTP/2 检测
-curl "https://your-worker.dev/http2-test"
-
-# 并发测试
-curl "https://your-worker.dev/concurrent-test?count=4&size=2048"</code></pre>
             </div>
         </div>
 
         <!-- 更新日志 -->
         <div class="glass-card">
             <div class="card-header">
-                <i class="fas fa-history"></i>
-                <div>
-                    <h2>更新日志</h2>
-                    <p>版本迭代记录</p>
+                <div class="card-header-left">
+                    <i class="fas fa-history"></i>
+                    <div>
+                        <h2>更新日志</h2>
+                        <p>版本迭代记录</p>
+                    </div>
                 </div>
             </div>
             <div class="card-body">
-                <!-- v3.3.0 -->
-                <div class="changelog-item">
-                    <div class="changelog-header">
-                        <span class="version-tag">v3.3.0</span>
-                        <span class="date-tag"><i class="far fa-calendar-alt"></i> 2026-05-28</span>
-                        <span class="badge badge-success">Latest</span>
-                    </div>
-                    <div class="changelog-content">
-                        <ul>
-                            <li><span class="tag tag-new">新增</span>健康检查端点 <code>/health</code>，支持监控系统集成</li>
-                            <li><span class="tag tag-new">新增</span>请求限流保护 - IP 级别 60次/分钟限流</li>
-                            <li><span class="tag tag-new">新增</span>完整安全响应头（CSP、HSTS、X-Frame-Options）</li>
-                            <li><span class="tag tag-new">新增</span>WebSocket 心跳机制 - 30秒心跳保持连接</li>
-                            <li><span class="tag tag-new">新增</span>资源预连接优化 - 字体和CDN预连接</li>
-                            <li><span class="tag tag-update">优化</span>并发测试增加 4 并发限制器 <code>pLimit(4)</code></li>
-                            <li><span class="tag tag-update">优化</span>流式传输使用微任务替代 setTimeout</li>
-                            <li><span class="tag tag-update">优化</span>静态资源缓存分层（24小时/7天）</li>
-                            <li><span class="tag tag-update">优化</span>所有测试端点增加参数上限保护</li>
-                            <li><span class="tag tag-update">优化</span>地理位置服务降级方案（ip-api 失败时使用 CF 数据）</li>
-                            <li><span class="tag tag-fix">修复</span><code>event</code> 变量作用域问题</li>
-                            <li><span class="tag tag-fix">修复</span>静态资源缓存中 <code>event.waitUntil</code> 未定义错误</li>
-                            <li><span class="tag tag-fix">修复</span>WebSocket 连接超时处理</li>
-                            <li><span class="tag tag-fix">修复</span>移动端图表显示异常</li>
+                <div style="max-height: 400px; overflow-y: auto;">
+                    <!-- v3.3.0 -->
+                    <div style="padding: 16px 0; border-bottom: 1px solid rgba(59, 130, 246, 0.1);">
+                        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap;">
+                            <span style="font-size: 16px; font-weight: 700; color: var(--cyan);">v3.3.0</span>
+                            <span style="font-size: 11px; color: rgba(255,255,255,0.4);">2026-05-28</span>
+                            <span class="badge badge-success">Latest</span>
+                        </div>
+                        <ul style="list-style: none; padding-left: 0;">
+                            <li style="margin-bottom: 8px; font-size: 13px; color: rgba(255,255,255,0.7); padding-left: 20px; position: relative;">
+                                <span style="position: absolute; left: 0; color: var(--cyan);">▹</span>
+                                <span class="badge badge-info" style="margin-right: 8px;">新增</span>健康检查端点 /health
+                            </li>
+                            <li style="margin-bottom: 8px; font-size: 13px; color: rgba(255,255,255,0.7); padding-left: 20px; position: relative;">
+                                <span style="position: absolute; left: 0; color: var(--cyan);">▹</span>
+                                <span class="badge badge-info" style="margin-right: 8px;">新增</span>请求限流保护 - IP 级别 60次/分钟
+                            </li>
+                            <li style="margin-bottom: 8px; font-size: 13px; color: rgba(255,255,255,0.7); padding-left: 20px; position: relative;">
+                                <span style="position: absolute; left: 0; color: var(--cyan);">▹</span>
+                                <span class="badge badge-info" style="margin-right: 8px;">新增</span>完整安全响应头（CSP、HSTS）
+                            </li>
+                            <li style="margin-bottom: 8px; font-size: 13px; color: rgba(255,255,255,0.7); padding-left: 20px; position: relative;">
+                                <span style="position: absolute; left: 0; color: var(--cyan);">▹</span>
+                                <span class="badge badge-info" style="margin-right: 8px;">新增</span>WebSocket 心跳机制
+                            </li>
+                            <li style="margin-bottom: 8px; font-size: 13px; color: rgba(255,255,255,0.7); padding-left: 20px; position: relative;">
+                                <span style="position: absolute; left: 0; color: var(--cyan);">▹</span>
+                                <span class="badge badge-warning" style="margin-right: 8px;">优化</span>并发测试增加 4 并发限制器
+                            </li>
+                            <li style="margin-bottom: 8px; font-size: 13px; color: rgba(255,255,255,0.7); padding-left: 20px; position: relative;">
+                                <span style="position: absolute; left: 0; color: var(--cyan);">▹</span>
+                                <span class="badge badge-danger" style="margin-right: 8px;">修复</span>event 变量作用域问题
+                            </li>
                         </ul>
                     </div>
-                </div>
 
-                <!-- v3.2.0 -->
-                <div class="changelog-item">
-                    <div class="changelog-header">
-                        <span class="version-tag">v3.2.0</span>
-                        <span class="date-tag"><i class="far fa-calendar-alt"></i> 2026-05-20</span>
-                    </div>
-                    <div class="changelog-content">
-                        <ul>
-                            <li><span class="tag tag-new">新增</span>极光主题UI全面升级 - 玻璃态毛玻璃效果</li>
-                            <li><span class="tag tag-new">新增</span>实时延迟监控模块拉长 - 独占整行展示</li>
-                            <li><span class="tag tag-new">新增</span>最低/最高RTT统计 - 4列布局优化</li>
-                            <li><span class="tag tag-new">新增</span>质量指标扩展（连接质量/稳定性/丢包率）</li>
-                            <li><span class="tag tag-new">新增</span>真实IP地理位置查询（ip-api.com）</li>
-                            <li><span class="tag tag-update">优化</span>响应式布局，完美适配移动端</li>
-                            <li><span class="tag tag-update">优化</span>增强卡片悬浮动画效果</li>
-                            <li><span class="tag tag-fix">修复</span>移动端图表显示异常</li>
-                            <li><span class="tag tag-fix">修复</span>多语言切换文本更新问题</li>
+                    <!-- v3.2.0 -->
+                    <div style="padding: 16px 0; border-bottom: 1px solid rgba(59, 130, 246, 0.1);">
+                        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+                            <span style="font-size: 16px; font-weight: 700; color: var(--cyan);">v3.2.0</span>
+                            <span style="font-size: 11px; color: rgba(255,255,255,0.4);">2026-05-20</span>
+                        </div>
+                        <ul style="list-style: none; padding-left: 0;">
+                            <li style="margin-bottom: 8px; font-size: 13px; color: rgba(255,255,255,0.7); padding-left: 20px; position: relative;">
+                                <span style="position: absolute; left: 0; color: var(--cyan);">▹</span>极光主题UI全面升级 - 玻璃态毛玻璃效果
+                            </li>
+                            <li style="margin-bottom: 8px; font-size: 13px; color: rgba(255,255,255,0.7); padding-left: 20px; position: relative;">
+                                <span style="position: absolute; left: 0; color: var(--cyan);">▹</span>实时延迟监控模块拉长，独占整行展示
+                            </li>
+                            <li style="margin-bottom: 8px; font-size: 13px; color: rgba(255,255,255,0.7); padding-left: 20px; position: relative;">
+                                <span style="position: absolute; left: 0; color: var(--cyan);">▹</span>新增最低/最高RTT统计，4列布局优化
+                            </li>
+                            <li style="margin-bottom: 8px; font-size: 13px; color: rgba(255,255,255,0.7); padding-left: 20px; position: relative;">
+                                <span style="position: absolute; left: 0; color: var(--cyan);">▹</span>真实IP地理位置查询（ip-api.com）
+                            </li>
                         </ul>
                     </div>
-                </div>
 
-                <!-- v3.1.0 -->
-                <div class="changelog-item">
-                    <div class="changelog-header">
-                        <span class="version-tag">v3.1.0</span>
-                        <span class="date-tag"><i class="far fa-calendar-alt"></i> 2026-05-15</span>
-                    </div>
-                    <div class="changelog-content">
-                        <ul>
-                            <li><span class="tag tag-new">新增</span>完整多语言支持（简体中文/繁体中文/英文）</li>
-                            <li><span class="tag tag-new">新增</span>Canvas 实时延迟图表绘制</li>
-                            <li><span class="tag tag-new">新增</span>本地存储语言偏好设置</li>
-                            <li><span class="tag tag-new">新增</span>安全协议检测增强（ECH、TLS版本）</li>
-                            <li><span class="tag tag-update">优化</span>重构前端架构，模块化 JavaScript</li>
-                            <li><span class="tag tag-update">优化</span>API 响应时间优化</li>
+                    <!-- v3.1.0 -->
+                    <div style="padding: 16px 0; border-bottom: 1px solid rgba(59, 130, 246, 0.1);">
+                        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+                            <span style="font-size: 16px; font-weight: 700; color: var(--cyan);">v3.1.0</span>
+                            <span style="font-size: 11px; color: rgba(255,255,255,0.4);">2026-05-15</span>
+                        </div>
+                        <ul style="list-style: none; padding-left: 0;">
+                            <li style="margin-bottom: 8px; font-size: 13px; color: rgba(255,255,255,0.7); padding-left: 20px; position: relative;">
+                                <span style="position: absolute; left: 0; color: var(--cyan);">▹</span>完整多语言支持（简体中文/繁体中文/英文）
+                            </li>
+                            <li style="margin-bottom: 8px; font-size: 13px; color: rgba(255,255,255,0.7); padding-left: 20px; position: relative;">
+                                <span style="position: absolute; left: 0; color: var(--cyan);">▹</span>Canvas 实时延迟图表绘制
+                            </li>
+                            <li style="margin-bottom: 8px; font-size: 13px; color: rgba(255,255,255,0.7); padding-left: 20px; position: relative;">
+                                <span style="position: absolute; left: 0; color: var(--cyan);">▹</span>安全协议检测增强（ECH、TLS版本）
+                            </li>
                         </ul>
                     </div>
-                </div>
 
-                <!-- v3.0.0 -->
-                <div class="changelog-item">
-                    <div class="changelog-header">
-                        <span class="version-tag">v3.0.0</span>
-                        <span class="date-tag"><i class="far fa-calendar-alt"></i> 2026-05-10</span>
-                    </div>
-                    <div class="changelog-content">
-                        <ul>
-                            <li><span class="tag tag-new">新增</span>全新蓝色主题UI设计</li>
-                            <li><span class="tag tag-new">新增</span>实时RTT监控 - 每2秒自动测量</li>
-                            <li><span class="tag tag-new">新增</span>多档位带宽测速功能</li>
-                            <li><span class="tag tag-new">新增</span>CPU性能密集型测试</li>
-                            <li><span class="tag tag-new">新增</span>WebSocket双向延迟测试</li>
-                            <li><span class="tag tag-new">新增</span>安全协议检测（TLS/加密套件/ECH）</li>
-                            <li><span class="tag tag-update">架构</span>完全重写为 Cloudflare Worker 架构</li>
-                            <li><span class="tag tag-update">架构</span>集成 Cloudflare 机器人评分</li>
+                    <!-- v3.0.0 -->
+                    <div style="padding: 16px 0;">
+                        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+                            <span style="font-size: 16px; font-weight: 700; color: var(--cyan);">v3.0.0</span>
+                            <span style="font-size: 11px; color: rgba(255,255,255,0.4);">2026-05-10</span>
+                        </div>
+                        <ul style="list-style: none; padding-left: 0;">
+                            <li style="margin-bottom: 8px; font-size: 13px; color: rgba(255,255,255,0.7); padding-left: 20px; position: relative;">
+                                <span style="position: absolute; left: 0; color: var(--cyan);">▹</span>全新蓝色主题UI设计
+                            </li>
+                            <li style="margin-bottom: 8px; font-size: 13px; color: rgba(255,255,255,0.7); padding-left: 20px; position: relative;">
+                                <span style="position: absolute; left: 0; color: var(--cyan);">▹</span>实时RTT监控 - 每2秒自动测量
+                            </li>
+                            <li style="margin-bottom: 8px; font-size: 13px; color: rgba(255,255,255,0.7); padding-left: 20px; position: relative;">
+                                <span style="position: absolute; left: 0; color: var(--cyan);">▹</span>完全重写为 Cloudflare Worker 架构
+                            </li>
                         </ul>
                     </div>
-                </div>
-
-                <!-- v2.0.0 -->
-                <div class="changelog-item">
-                    <div class="changelog-header">
-                        <span class="version-tag">v2.0.0</span>
-                        <span class="date-tag"><i class="far fa-calendar-alt"></i> 2026-04-01</span>
-                    </div>
-                    <div class="changelog-content">
-                        <ul>
-                            <li><span class="tag tag-new">新增</span>基础网络诊断功能</li>
-                            <li><span class="tag tag-new">新增</span>Ping 测试工具</li>
-                            <li><span class="tag tag-new">新增</span>基础地理位置显示</li>
-                        </ul>
-                    </div>
-                </div>
-
-                <!-- v1.0.0 -->
-                <div class="changelog-item">
-                    <div class="changelog-header">
-                        <span class="version-tag">v1.0.0</span>
-                        <span class="date-tag"><i class="far fa-calendar-alt"></i> 2026-03-01</span>
-                    </div>
-                    <div class="changelog-content">
-                        <ul>
-                            <li><span class="tag tag-new">新增</span>首个正式版本发布</li>
-                            <li><span class="tag tag-new">新增</span>基础网络测试功能</li>
-                        </ul>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- 安全配置 -->
-        <div class="glass-card">
-            <div class="card-header">
-                <i class="fas fa-shield-haltered"></i>
-                <div>
-                    <h2>安全配置</h2>
-                    <p>企业级安全防护策略</p>
-                </div>
-            </div>
-            <div class="card-body">
-                <div class="features-grid">
-                    <div class="feature-card">
-                        <div class="feature-icon"><i class="fas fa-lock"></i></div>
-                        <h3>安全响应头</h3>
-                        <p>CSP · HSTS · X-Frame-Options · X-Content-Type-Options · X-XSS-Protection</p>
-                    </div>
-                    <div class="feature-card">
-                        <div class="feature-icon"><i class="fas fa-tachometer-alt"></i></div>
-                        <h3>限流策略</h3>
-                        <p>IP 级别 60次/分钟限流，超限返回 429 状态码</p>
-                    </div>
-                    <div class="feature-card">
-                        <div class="feature-icon"><i class="fas fa-database"></i></div>
-                        <h3>数据保护</h3>
-                        <p>参数上限保护，防止资源耗尽攻击</p>
-                    </div>
-                    <div class="feature-card">
-                        <div class="feature-icon"><i class="fas fa-chart-line"></i></div>
-                        <h3>监控集成</h3>
-                        <p>健康检查端点 /health，方便监控系统接入</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- 部署指南 -->
-        <div class="glass-card">
-            <div class="card-header">
-                <i class="fas fa-cloud-upload-alt"></i>
-                <div>
-                    <h2>部署指南</h2>
-                    <p>快速部署到 Cloudflare Workers</p>
-                </div>
-            </div>
-            <div class="card-body">
-                <h3 style="margin-bottom: 12px;">方式一：Wrangler CLI 部署</h3>
-                <pre><code># 安装 Wrangler CLI
-npm install -g wrangler
-
-# 登录 Cloudflare
-wrangler login
-
-# 部署
-wrangler deploy</code></pre>
-
-                <h3 style="margin: 20px 0 12px;">方式二：Cloudflare Dashboard 部署</h3>
-                <pre><code>1. 登录 Cloudflare Dashboard
-2. 进入 Workers & Pages > 创建应用程序
-3. 创建 Worker 并粘贴代码
-4. 保存并部署</code></pre>
-
-                <h3 style="margin: 20px 0 12px;">wrangler.toml 配置示例</h3>
-                <pre><code>name = "netsight-pro"
-main = "worker.js"
-compatibility_date = "2024-12-01"
-
-# 可选：自定义域名
-# routes = [
-#   { pattern = "your-domain.com", custom_domain = true }
-# ]</code></pre>
-            </div>
-        </div>
-
-        <!-- 技术架构 -->
-        <div class="glass-card">
-            <div class="card-header">
-                <i class="fas fa-microchip"></i>
-                <div>
-                    <h2>技术架构</h2>
-                    <p>现代化的技术栈</p>
-                </div>
-            </div>
-            <div class="card-body">
-                <div class="features-grid">
-                    <div class="feature-card">
-                        <div class="feature-icon"><i class="fab fa-cloudflare"></i></div>
-                        <h3>Cloudflare Workers</h3>
-                        <p>边缘计算运行时，全球低延迟响应</p>
-                    </div>
-                    <div class="feature-card">
-                        <div class="feature-icon"><i class="fas fa-exchange-alt"></i></div>
-                        <h3>WebSocket</h3>
-                        <p>实时双向通信，低延迟测试</p>
-                    </div>
-                    <div class="feature-card">
-                        <div class="feature-icon"><i class="fas fa-chart-line"></i></div>
-                        <h3>Canvas API</h3>
-                        <p>实时延迟图表绘制，可视化监控</p>
-                    </div>
-                    <div class="feature-card">
-                        <div class="feature-icon"><i class="fas fa-stream"></i></div>
-                        <h3>Streams API</h3>
-                        <p>流式数据传输，高效吞吐量测试</p>
-                    </div>
-                </div>
-
-                <h3 style="margin: 24px 0 12px;">浏览器兼容性</h3>
-                <div class="api-table">
-                    <table>
-                        <thead><tr><th>浏览器</th><th>最低版本</th><th>状态</th></tr></thead>
-                        <tbody>
-                            <tr><td>Chrome</td><td>80+</td><td><span class="badge badge-success">✅ 完全支持</span></td></tr>
-                            <tr><td>Firefox</td><td>75+</td><td><span class="badge badge-success">✅ 完全支持</span></td></tr>
-                            <tr><td>Safari</td><td>13.1+</td><td><span class="badge badge-success">✅ 完全支持</span></td></tr>
-                            <tr><td>Edge</td><td>80+</td><td><span class="badge badge-success">✅ 完全支持</span></td></tr>
-                        </tbody>
-                    </table>
                 </div>
             </div>
         </div>
 
         <!-- 页脚 -->
-        <div class="footer">
-            <span><i class="fab fa-github"></i> NetSight Pro</span>
-            <span><i class="fas fa-code-branch"></i> v3.3.0</span>
-            <span><i class="fas fa-balance-scale"></i> GNU General Public License v3.0</span>
-            <span><i class="fas fa-heart" style="color: #ec4899;"></i> Made with ❤️ by BlueDriftHK</span>
+        <div class="glass-card" style="margin-bottom: 0;">
+            <div style="padding: 20px 32px; text-align: center; font-size: 12px; color: rgba(255,255,255,0.4); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 16px;">
+                <span><i class="fab fa-github"></i> NetSight Pro</span>
+                <span><i class="fas fa-code-branch"></i> v3.3.0</span>
+                <span><i class="fas fa-balance-scale"></i> GNU General Public License v3.0</span>
+                <span><i class="fas fa-heart" style="color: #ec4899;"></i> Made with ❤️ by BlueDriftHK</span>
+            </div>
         </div>
     </div>
+
+    <script>
+        // ==================== 全局变量 ====================
+        let workerUrl = localStorage.getItem('netsight-worker-url') || 'https://netsight-pro.your-subdomain.workers.dev';
+        let rttData = [];
+        let rttInterval = null;
+        let chart = null;
+        let sampleCount = 0;
+        let minRtt = Infinity;
+        let maxRtt = 0;
+        let consecutiveLoss = 0;
+
+        // ==================== 初始化 ====================
+        document.addEventListener('DOMContentLoaded', function() {
+            const urlInput = document.getElementById('worker-url');
+            if (urlInput) urlInput.value = workerUrl;
+            initChart();
+            startRttMonitoring();
+        });
+
+        function saveWorkerUrl() {
+            const input = document.getElementById('worker-url');
+            if (input && input.value) {
+                workerUrl = input.value.replace(/\/$/, '');
+                localStorage.setItem('netsight-worker-url', workerUrl);
+                showToast('Worker 地址已保存', 'success');
+                startRttMonitoring();
+            }
+        }
+
+        async function testConnection() {
+            const statusDiv = document.getElementById('connection-status');
+            if (!statusDiv) return;
+            
+            statusDiv.innerHTML = '<span class="loading"></span> 正在测试连接...';
+            
+            try {
+                const res = await fetch(`${workerUrl}/health`, { timeout: 5000 });
+                if (res.ok) {
+                    const data = await res.json();
+                    statusDiv.innerHTML = `<span style="color: #34d399;">✅ 连接成功！版本: ${data.version}</span>`;
+                } else {
+                    statusDiv.innerHTML = `<span style="color: #f87171;">❌ 连接失败，请检查 Worker 地址</span>`;
+                }
+            } catch (e) {
+                statusDiv.innerHTML = `<span style="color: #f87171;">❌ 连接失败: ${e.message}</span>`;
+            }
+        }
+
+        // ==================== 图表 ====================
+        function initChart() {
+            const canvas = document.getElementById('rtt-chart');
+            if (!canvas) return;
+            canvas.width = canvas.parentElement.clientWidth;
+            canvas.height = 200;
+            chart = canvas.getContext('2d');
+        }
+
+        function drawChart() {
+            if (!chart || rttData.length < 2) return;
+            const canvas = document.getElementById('rtt-chart');
+            if (!canvas) return;
+            
+            chart.clearRect(0, 0, canvas.width, canvas.height);
+            
+            chart.beginPath();
+            chart.strokeStyle = '#06b6d4';
+            chart.lineWidth = 2.5;
+            
+            const maxRttVal = Math.max(...rttData, 100);
+            const stepX = canvas.width / (40 - 1);
+            
+            rttData.forEach((value, index) => {
+                const x = index * stepX;
+                const y = canvas.height - (Math.min(value, maxRttVal) / maxRttVal) * (canvas.height - 20) - 10;
+                if (index === 0) chart.moveTo(x, y);
+                else chart.lineTo(x, y);
+            });
+            chart.stroke();
+            
+            const gradient = chart.createLinearGradient(0, 0, 0, canvas.height);
+            gradient.addColorStop(0, 'rgba(6, 182, 212, 0.3)');
+            gradient.addColorStop(1, 'rgba(6, 182, 212, 0)');
+            chart.fillStyle = gradient;
+            chart.lineTo(canvas.width, canvas.height);
+            chart.lineTo(0, canvas.height);
+            chart.fill();
+        }
+
+        // ==================== RTT 实时监控 ====================
+        async function testRtt() {
+            const start = performance.now();
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 3000);
+                await fetch(`${workerUrl}/?_=${Date.now()}`, { 
+                    method: 'HEAD', 
+                    signal: controller.signal 
+                });
+                clearTimeout(timeoutId);
+                const diff = Math.round(performance.now() - start);
+                
+                document.getElementById('live-rtt').textContent = diff;
+                
+                sampleCount++;
+                document.getElementById('sample-count').textContent = sampleCount;
+                
+                if (diff < minRtt) {
+                    minRtt = diff;
+                    document.getElementById('live-min').textContent = minRtt;
+                }
+                if (diff > maxRtt) {
+                    maxRtt = diff;
+                    document.getElementById('live-max').textContent = maxRtt;
+                }
+                
+                if (rttData.length > 0) {
+                    const jitter = Math.abs(diff - rttData[rttData.length - 1]);
+                    document.getElementById('live-jitter').textContent = jitter;
+                    
+                    // 更新质量评估
+                    let qualityText = '', qualityClass = '';
+                    if (diff < 50) { qualityText = '优秀'; qualityClass = 'quality-excellent'; }
+                    else if (diff < 100) { qualityText = '良好'; qualityClass = 'quality-good'; }
+                    else if (diff < 150) { qualityText = '一般'; qualityClass = 'quality-good'; }
+                    else if (diff < 250) { qualityText = '较差'; qualityClass = 'quality-poor'; }
+                    else { qualityText = '极差'; qualityClass = 'quality-bad'; }
+                    
+                    const qualityEl = document.getElementById('quality-text');
+                    if (qualityEl) {
+                        qualityEl.textContent = qualityText;
+                        qualityEl.className = `quality-badge ${qualityClass}`;
+                    }
+                }
+                
+                consecutiveLoss = 0;
+                document.getElementById('loss-rate').textContent = '0%';
+                document.getElementById('loss-rate').style.color = '#34d399';
+                
+                rttData.push(diff);
+                if (rttData.length > 40) rttData.shift();
+                drawChart();
+            } catch (e) {
+                consecutiveLoss++;
+                const lossRate = Math.round((consecutiveLoss / Math.min(sampleCount + 1, 10)) * 100);
+                document.getElementById('loss-rate').textContent = lossRate + '%';
+                document.getElementById('loss-rate').style.color = lossRate === 0 ? '#34d399' : (lossRate < 5 ? '#fbbf24' : '#f87171');
+                document.getElementById('live-rtt').textContent = 'ERR';
+            }
+        }
+
+        function startRttMonitoring() {
+            if (rttInterval) clearInterval(rttInterval);
+            rttData = [];
+            sampleCount = 0;
+            minRtt = Infinity;
+            maxRtt = 0;
+            consecutiveLoss = 0;
+            testRtt();
+            rttInterval = setInterval(testRtt, 2000);
+        }
+
+        // ==================== 测试函数 ====================
+        function fetchWithTimeout(url, options = {}, timeout = 10000) {
+            const controller = new AbortController();
+            const id = setTimeout(() => controller.abort(), timeout);
+            return fetch(url, { ...options, signal: controller.signal })
+                .finally(() => clearTimeout(id));
+        }
+
+        function showResult(elementId, html, isError = false) {
+            const el = document.getElementById(elementId);
+            if (el) {
+                el.style.display = 'block';
+                el.innerHTML = html;
+                el.style.background = isError ? 'rgba(239,68,68,0.08)' : 'rgba(0,0,0,0.3)';
+                el.style.borderLeftColor = isError ? '#ef4444' : '#06b6d4';
+                setTimeout(() => {
+                    if (el.innerHTML === html) {
+                        el.style.display = 'none';
+                    }
+                }, 8000);
+            }
+        }
+
+        function showToast(message, type = 'info') {
+            // 简单实现，可以扩展
+            console.log(`[${type}] ${message}`);
+        }
+
+        async function runLossTest() {
+            showResult('loss-result', '<span class="loading"></span> 丢包率测试中...');
+            const total = 10;
+            let failed = 0;
+            for (let i = 0; i < total; i++) {
+                try {
+                    await fetchWithTimeout(`${workerUrl}/?_loss=${Date.now()}+${i}`, { method: 'HEAD' }, 3000);
+                } catch (e) {
+                    failed++;
+                }
+            }
+            const lossPercent = Math.round((failed / total) * 100);
+            if (lossPercent === 0) {
+                showResult('loss-result', '<i class="fas fa-check-circle"></i> 丢包率: 0% (无丢包)');
+            } else {
+                showResult('loss-result', `<i class="fas fa-exclamation-triangle"></i> 丢包率: ${lossPercent}% (${failed}/${total} 丢失)`, true);
+            }
+        }
+
+        async function runSpeedTest() {
+            showResult('speed-result', '<span class="loading"></span> 带宽测速中...');
+            const sizes = [102400, 512000, 2097152];
+            const results = [];
+            for (const size of sizes) {
+                const start = performance.now();
+                try {
+                    await fetchWithTimeout(`${workerUrl}/speedtest?size=${size}`, {}, 15000);
+                    const duration = performance.now() - start;
+                    const speedMbps = ((size * 8) / (duration / 1000)) / 1000000;
+                    results.push({ sizeKB: Math.round(size/1024), speed: speedMbps.toFixed(2) });
+                } catch (e) {
+                    results.push({ sizeKB: Math.round(size/1024), speed: '0' });
+                }
+            }
+            const validResults = results.filter(r => r.speed !== '0');
+            const avgSpeed = validResults.length > 0 ? validResults.reduce((sum, r) => sum + parseFloat(r.speed), 0) / validResults.length : 0;
+            let html = '<i class="fas fa-gauge-high"></i> 带宽测速结果:<br><div class="speed-result">';
+            html += results.map(r => `<div class="speed-item">${r.sizeKB} KB: ${r.speed} Mbps</div>`).join('');
+            html += `</div><div style="margin-top: 8px;"><span class="badge badge-info">平均: ${avgSpeed.toFixed(2)} Mbps</span></div>`;
+            showResult('speed-result', html);
+        }
+
+        async function runDnsTest() {
+            showResult('dns-result', '<span class="loading"></span> DNS 解析测试中...');
+            const domains = [
+                { name: 'Cloudflare', url: `${workerUrl.replace(/\/$/, '')}/health` },
+                { name: 'Google', url: 'https://google.com/generate_204' },
+                { name: 'GitHub', url: 'https://github.com/favicon.ico' }
+            ];
+            const results = [];
+            for (const domain of domains) {
+                const start = performance.now();
+                try {
+                    await fetchWithTimeout(domain.url, { method: 'HEAD' }, 5000);
+                    const dnsTime = Math.round(performance.now() - start);
+                    results.push({ domain: domain.name, time: dnsTime });
+                } catch (e) {
+                    results.push({ domain: domain.name, time: null });
+                }
+            }
+            let html = '<i class="fas fa-server"></i> DNS 解析结果:<br><div class="speed-result">';
+            results.forEach(r => {
+                if (r.time !== null) {
+                    let badgeClass = r.time < 50 ? 'badge-success' : (r.time < 150 ? 'badge-warning' : 'badge-danger');
+                    html += `<span class="badge ${badgeClass}">${r.domain}: ${r.time}ms</span>`;
+                } else {
+                    html += `<span class="badge badge-danger">${r.domain}: 超时</span>`;
+                }
+            });
+            html += '</div>';
+            showResult('dns-result', html);
+        }
+
+        async function runCpuTest() {
+            showResult('cpu-result', '<span class="loading"></span> CPU 性能测试中...');
+            try {
+                const res = await fetchWithTimeout(`${workerUrl}/cpu-test?n=500000`);
+                const data = await res.json();
+                let badgeClass = data.opsMs > 50 ? 'badge-success' : (data.opsMs > 20 ? 'badge-warning' : 'badge-danger');
+                showResult('cpu-result', `<i class="fas fa-microchip"></i> CPU 性能: <strong>${data.opsMs}</strong> 操作/毫秒 <span class="badge ${badgeClass}">${data.duration}ms</span>`);
+            } catch (e) {
+                showResult('cpu-result', '<i class="fas fa-exclamation-triangle"></i> CPU 测试失败', true);
+            }
+        }
+
+        async function runWsTest() {
+            showResult('ws-result', '<span class="loading"></span> WebSocket 测试中...');
+            try {
+                const wsProtocol = workerUrl.startsWith('https') ? 'wss:' : 'ws:';
+                const wsUrl = wsProtocol + '//' + workerUrl.replace(/^https?:\/\//, '') + '/ws-test';
+                const ws = new WebSocket(wsUrl);
+                
+                const result = await new Promise((resolve) => {
+                    const latencies = [];
+                    let testCount = 0;
+                    const maxTests = 5;
+                    let timeoutId = setTimeout(() => {
+                        ws.close();
+                        resolve({ success: false });
+                    }, 8000);
+                    
+                    ws.onopen = () => {
+                        const sendPing = () => {
+                            const pingStart = performance.now();
+                            ws.send(JSON.stringify({ type: 'ping', timestamp: pingStart }));
+                        };
+                        sendPing();
+                        
+                        ws.onmessage = (event) => {
+                            try {
+                                const pongTime = performance.now();
+                                const data = JSON.parse(event.data);
+                                if (data.type === 'pong') {
+                                    const latency = pongTime - (data.echoTime || data.timestamp);
+                                    latencies.push(latency);
+                                    testCount++;
+                                    
+                                    if (testCount < maxTests) {
+                                        setTimeout(sendPing, 200);
+                                    } else {
+                                        clearTimeout(timeoutId);
+                                        ws.close();
+                                        const avgLatency = Math.round(latencies.reduce((a,b) => a+b, 0) / latencies.length);
+                                        resolve({ success: true, avg: avgLatency, min: Math.round(Math.min(...latencies)), max: Math.round(Math.max(...latencies)) });
+                                    }
+                                }
+                            } catch (e) {
+                                resolve({ success: false });
+                            }
+                        };
+                    };
+                    
+                    ws.onerror = () => {
+                        clearTimeout(timeoutId);
+                        resolve({ success: false });
+                    };
+                });
+                
+                if (result.success) {
+                    let badgeClass = result.avg < 50 ? 'badge-success' : (result.avg < 150 ? 'badge-warning' : 'badge-danger');
+                    showResult('ws-result', `<i class="fas fa-bolt"></i> WebSocket 延迟: <strong>${result.avg}ms</strong> <span class="badge ${badgeClass}">最小: ${result.min}ms / 最大: ${result.max}ms</span>`);
+                } else {
+                    showResult('ws-result', '<i class="fas fa-exclamation-triangle"></i> WebSocket 连接失败', true);
+                }
+            } catch (e) {
+                showResult('ws-result', '<i class="fas fa-exclamation-triangle"></i> WebSocket 测试失败', true);
+            }
+        }
+
+        async function runConcurrentTest() {
+            showResult('concurrent-result', '<span class="loading"></span> 并发测试中...');
+            try {
+                const results = await Promise.all([4, 6, 8].map(count => 
+                    fetchWithTimeout(`${workerUrl}/concurrent-test?count=${count}&size=2048`, {}, 8000).then(r => r.json())
+                ));
+                let html = '<i class="fas fa-layer-group"></i> 并发测试结果:<br><div class="speed-result">';
+                results.forEach(r => {
+                    const avgDuration = Math.round(r.reduce((sum, item) => sum + (item.duration || 0), 0) / r.length);
+                    let badgeClass = avgDuration < 20 ? 'badge-success' : (avgDuration < 50 ? 'badge-warning' : 'badge-danger');
+                    html += `<span class="badge ${badgeClass}">${r.length} 请求: ${avgDuration}ms</span>`;
+                });
+                html += '</div>';
+                showResult('concurrent-result', html);
+            } catch (e) {
+                showResult('concurrent-result', '<i class="fas fa-exclamation-triangle"></i> 并发测试失败', true);
+            }
+        }
+
+        async function runStreamTest() {
+            showResult('stream-result', '<span class="loading"></span> 流式传输测试中...');
+            const sizes = [131072, 524288, 2097152];
+            const results = [];
+            for (const size of sizes) {
+                const start = performance.now();
+                try {
+                    const res = await fetchWithTimeout(`${workerUrl}/stream-test?size=${size}`, {}, 15000);
+                    const reader = res.body.getReader();
+                    let bytesRead = 0;
+                    while (true) {
+                        const {done, value} = await reader.read();
+                        if (done) break;
+                        bytesRead += value.length;
+                    }
+                    const duration = performance.now() - start;
+                    const speedMbps = ((bytesRead * 8) / (duration / 1000)) / 1000000;
+                    results.push({ sizeKB: Math.round(size/1024), speed: speedMbps.toFixed(2) });
+                } catch (e) {
+                    results.push({ sizeKB: Math.round(size/1024), speed: '0' });
+                }
+            }
+            let html = '<i class="fas fa-stream"></i> 流式吞吐量:<br><div class="speed-result">';
+            html += results.map(r => `<div class="speed-item">${r.sizeKB} KB: ${r.speed} Mbps</div>`).join('');
+            html += '</div>';
+            showResult('stream-result', html);
+        }
+
+        async function runHttp2Test() {
+            showResult('http2-result', '<span class="loading"></span> HTTP/2 检测中...');
+            try {
+                const res = await fetchWithTimeout(`${workerUrl}/http2-test`);
+                const data = await res.json();
+                let html = '<i class="fas fa-rocket"></i> HTTP/2/3 检测结果:<br><div class="speed-result">';
+                if (data.http3) {
+                    html += `<div class="speed-item">✅ HTTP/3 (QUIC) 已启用</div>`;
+                } else if (data.http2) {
+                    html += `<div class="speed-item">✅ HTTP/2 已启用</div>`;
+                } else {
+                    html += `<div class="speed-item">⚠️ HTTP/1.1 (未启用 HTTP/2)</div>`;
+                }
+                if (data.earlyHints) {
+                    html += `<div class="speed-item">🚀 Early Hints 已支持</div>`;
+                }
+                html += `<div class="speed-item">🔐 TLS 版本: ${data.tlsVersion}</div>`;
+                html += `<div class="speed-item">📡 协议: ${data.protocol}</div>`;
+                html += '</div>';
+                showResult('http2-result', html);
+            } catch (e) {
+                showResult('http2-result', '<i class="fas fa-exclamation-triangle"></i> HTTP/2 检测失败', true);
+            }
+        }
+
+        function clearAllResults() {
+            const resultIds = ['loss-result', 'speed-result', 'dns-result', 'cpu-result', 'ws-result', 'concurrent-result', 'stream-result', 'http2-result'];
+            resultIds.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.style.display = 'none';
+            });
+        }
+
+        // 窗口大小改变时重新绘制图表
+        window.addEventListener('resize', () => {
+            const canvas = document.getElementById('rtt-chart');
+            if (canvas) {
+                canvas.width = canvas.parentElement.clientWidth;
+                drawChart();
+            }
+        });
+    </script>
 </body>
 </html>
