@@ -579,7 +579,7 @@ let defaultLang = 'zh-CN';
 </p>
 
 <p align="center">
-  <sub>Made with ❤️ by NetSight Pro Team</sub>
+  <sub>Made with ❤️ by  BlueDriftHK</sub>
 </p>
 
 <p align="center">
