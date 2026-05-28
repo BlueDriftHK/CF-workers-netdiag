@@ -26,40 +26,56 @@
 
 ---
 
-## 🎯 v3.3 版本亮点
+## 📚 目录
+
+- [项目概述](#项目概述)
+- [功能特性](#功能特性)
+- [快速开始](#快速开始)
+- [API 文档](#api-文档)
+- [部署指南](#部署指南)
+- [配置说明](#配置说明)
+- [安全特性](#安全特性)
+- [技术架构](#技术架构)
+- [更新日志](#更新日志)
+- [常见问题](#常见问题)
+- [贡献指南](#贡献指南)
+- [许可证](#许可证)
+
+---
+
+## 项目概述
+
+### 简介
+
+**NetSight Pro** 是一款部署在 Cloudflare Workers 边缘节点的专业级网络诊断工具。利用 Cloudflare 全球分布的边缘网络，提供实时网络监控、多维度性能测试和全面的安全协议检测能力。
+
+### 核心特性
 
 | 特性 | 说明 |
 |------|------|
-| 🔒 **请求限流** | IP 级别限流保护（60次/分钟），防止 API 滥用 |
-| 🛡️ **完整安全头** | CSP、HSTS、X-Frame-Options 等企业级安全配置 |
-| ⚡ **并发优化** | 并发测试增加 4 并发限制器，避免资源耗尽 |
-| 🏥 **健康检查** | `/health` 端点，方便监控系统集成 |
-| 🔗 **预连接优化** | 字体/CDN 预连接，页面加载速度提升 20%+ |
-| 📊 **流式传输优化** | 使用微任务替代 setTimeout，解决背压问题 |
-| 🌍 **地理位置降级** | ip-api 失败时自动使用 Cloudflare 数据 |
-| 💓 **WebSocket 心跳** | 30秒心跳保持连接，更稳定的长连接测试 |
-| 📈 **数据上限保护** | 所有测试端点增加最大参数限制 |
+| ⚡ **边缘部署** | 基于 Cloudflare Workers，全球低延迟响应 |
+| 📡 **实时监控** | 每2秒自动测量 RTT，实时趋势图表 |
+| 🛠️ **8+ 诊断工具** | 带宽测速、CPU性能、WebSocket、并发测试等 |
+| 🔒 **安全检测** | TLS版本、加密套件、ECH状态、HSTS |
+| 🌍 **地理位置** | 边缘节点与客户端位置追踪 |
+| 🎨 **极光主题** | 玻璃态毛玻璃效果，现代化 UI |
+| 🌐 **多语言** | 简体中文、繁体中文、英文 |
+| 🛡️ **企业安全** | 限流保护、CSP、HSTS、安全响应头 |
+
+### 技术栈
+
+| 技术 | 用途 | 版本 |
+|------|------|------|
+| Cloudflare Workers | 边缘计算运行时 | 2024-12-01 |
+| WebSocket API | 实时双向通信 | RFC 6455 |
+| Canvas API | 实时图表绘制 | HTML5 |
+| Web Crypto API | 随机数据生成 | W3C |
+| ReadableStream | 流式数据传输 | WHATWG |
+| Fetch API | HTTP 请求处理 | WHATWG |
 
 ---
 
-## 📊 界面预览
-
-| 模块 | 展示内容 |
-|------|----------|
-| 🎯 **英雄区** | IPv4/IPv6 地址、边缘节点信息、Worker 耗时 |
-| 📡 **实时延迟监控** | 当前 RTT、抖动、最低/最高 RTT、实时图表、质量评估 |
-| 🔒 **安全与协议** | TLS 版本、加密套件、ECH 状态、压缩算法、机器人评分 |
-| 📍 **地理位置** | 边缘节点位置、真实 IP 位置、距离计算、运营商信息 |
-| 🛠️ **诊断工具集** | 8+ 种测试工具，一键运行 |
-| 💻 **硬件信息** | CPU 核心、屏幕分辨率、时区、语言、平台 |
-
----
-
-## ✨ 功能特性
-
-<table>
-<tr>
-<td width="50%">
+## 功能特性
 
 ### 📡 网络质量检测
 - **实时延迟监控** - 每2秒自动测量RTT，实时趋势图表
@@ -72,9 +88,6 @@
 - **CPU性能测试** - 50万次密集计算，返回 ops/ms
 - **并发请求测试** - 模拟 4/6/8 并发（同时限制为 4）
 - **流式传输测试** - 测试 128KB/512KB/2MB 吞吐量，最大 10MB
-
-</td>
-<td width="50%">
 
 ### 🔒 安全与协议检测
 - **TLS版本检测** - 识别 TLS 1.0/1.1/1.2/1.3
@@ -95,67 +108,105 @@
 - **HSTS 强制** - HTTP 严格传输安全
 - **安全响应头** - XSS/点击劫持/内容嗅探防护
 
-</td>
-</tr>
-</table>
-
 ---
 
-## 🚀 快速开始
+## 快速开始
 
 ### 在线体验
 
-部署后直接访问 Worker 域名即可使用完整的网络诊断界面。
+#### 方式一：演示站点（纯前端模拟）
 
-### 命令行快速测试
+```bash
+# 下载演示 HTML 文件
+wget https://raw.githubusercontent.com/your-repo/netsight-pro/demo/index.html
+
+# 直接在浏览器中打开
+open index.html
+```
+
+#### 方式二：部署到 Cloudflare Workers
+
+```bash
+# 1. 安装 Wrangler CLI
+npm install -g wrangler
+
+# 2. 登录 Cloudflare
+wrangler login
+
+# 3. 创建项目
+mkdir netsight-pro && cd netsight-pro
+
+# 4. 复制 worker.js 代码
+
+# 5. 部署
+wrangler deploy
+```
+
+### 最小化部署
+
+**wrangler.toml**
+```toml
+name = "netsight-pro"
+main = "worker.js"
+compatibility_date = "2024-12-01"
+
+# 可选：自定义域名
+# routes = [
+#   { pattern = "your-domain.com", custom_domain = true }
+# ]
+
+# 可选：KV 命名空间配置
+# kv_namespaces = [
+#   { binding = "CACHE_KV", id = "your-kv-id" }
+# ]
+```
+
+### 命令行测试
 
 ```bash
 # 健康检查
-curl "https://your-worker.dev/health"
+curl https://your-worker.dev/health
 
 # 带宽测试（100KB）
-curl "https://your-worker.dev/speedtest?size=102400"
+curl https://your-worker.dev/speedtest?size=102400
 
 # 带宽测试（1MB）
-curl "https://your-worker.dev/speedtest?size=1048576"
+curl https://your-worker.dev/speedtest?size=1048576
 
 # CPU 性能测试（50万次迭代）
-curl "https://your-worker.dev/cpu-test?n=500000"
+curl https://your-worker.dev/cpu-test?n=500000
+
+# HTTP/2 检测
+curl https://your-worker.dev/http2-test
 
 # 并发测试（4个并发，2KB数据）
-curl "https://your-worker.dev/concurrent-test?count=4&size=2048"
+curl https://your-worker.dev/concurrent-test?count=4&size=2048
 
 # 流式传输测试（1MB）
-curl "https://your-worker.dev/stream-test?size=1048576"
-
-# HTTP/2 + Early Hints 检测
-curl "https://your-worker.dev/http2-test"
-
-# WebSocket 连接测试
-wss://your-worker.dev/ws-test
+curl https://your-worker.dev/stream-test?size=1048576
 ```
 
 ---
 
-## 📡 API 端点
+## API 文档
 
-### 端点概览
+### 端点汇总
 
-| 端点 | 方法 | 参数限制 | 返回类型 | 限流 | 描述 |
-|------|------|----------|----------|------|------|
-| `/health` | GET | - | `application/json` | ❌ | 服务健康检查 |
-| `/speedtest` | GET | `size` ≤ 5MB | `application/octet-stream` | ✅ | 带宽测速 |
-| `/cpu-test` | GET | `n` ≤ 200万 | `application/json` | ✅ | CPU 性能基准测试 |
-| `/ws-test` | WebSocket | - | WebSocket 消息 | ✅ | WebSocket 延迟测试 |
-| `/http2-test` | GET | - | `application/json` | ✅ | HTTP/2/3 + Early Hints |
-| `/concurrent-test` | GET | `count` ≤ 16, `size` ≤ 64KB | `application/json` | ✅ | 并发压力测试 |
-| `/stream-test` | GET | `size` ≤ 10MB | `application/octet-stream` | ✅ | 流式吞吐量测试 |
+| 端点 | 方法 | 参数限制 | 限流 | 描述 |
+|------|------|----------|------|------|
+| `/health` | GET | - | ❌ | 健康检查 |
+| `/speedtest` | GET | `size` ≤ 5MB | ✅ | 带宽测速 |
+| `/cpu-test` | GET | `n` ≤ 200万 | ✅ | CPU 性能基准测试 |
+| `/ws-test` | WebSocket | - | ✅ | WebSocket 延迟测试 |
+| `/http2-test` | GET | - | ✅ | HTTP/2/3 + Early Hints |
+| `/concurrent-test` | GET | `count` ≤ 16, `size` ≤ 64KB | ✅ | 并发压力测试 |
+| `/stream-test` | GET | `size` ≤ 10MB | ✅ | 流式吞吐量测试 |
 
-### API 响应示例
+### 详细规范
 
-<details>
-<summary><b>🏥 健康检查响应</b></summary>
+#### GET /health
 
+**响应**
 ```json
 {
   "status": "ok",
@@ -164,11 +215,28 @@ wss://your-worker.dev/ws-test
   "uptime": "unknown"
 }
 ```
-</details>
 
-<details>
-<summary><b>⚙️ CPU 测试响应</b></summary>
+#### GET /speedtest
 
+**请求参数**
+
+| 参数 | 类型 | 默认值 | 最大值 | 描述 |
+|------|------|--------|--------|------|
+| size | number | 102400 | 5242880 | 数据大小(字节) |
+
+**响应**
+- Content-Type: `application/octet-stream`
+- Body: 随机二进制数据
+
+#### GET /cpu-test
+
+**请求参数**
+
+| 参数 | 类型 | 默认值 | 最大值 | 描述 |
+|------|------|--------|--------|------|
+| n | number | 500000 | 2000000 | 迭代次数 |
+
+**响应**
 ```json
 {
   "duration": 45,
@@ -177,11 +245,28 @@ wss://your-worker.dev/ws-test
   "result": "12345678"
 }
 ```
-</details>
 
-<details>
-<summary><b>🌐 HTTP/2 测试响应</b></summary>
+#### WebSocket /ws-test
 
+**协议**
+
+```javascript
+// 客户端发送 ping
+ws.send(JSON.stringify({ type: 'ping', timestamp: Date.now() }));
+
+// 服务端响应 pong
+ws.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+  // { type: 'pong', timestamp: 1704067200000, echoTime: 1704067200000 }
+};
+
+// 客户端关闭连接
+ws.send(JSON.stringify({ type: 'close' }));
+```
+
+#### GET /http2-test
+
+**响应**
 ```json
 {
   "http2": true,
@@ -193,35 +278,178 @@ wss://your-worker.dev/ws-test
   "alpn": "h2"
 }
 ```
-</details>
-
-<details>
-<summary><b>📦 并发测试响应</b></summary>
-
-```json
-[
-  {"index": 0, "size": 2048, "duration": 12},
-  {"index": 1, "size": 2048, "duration": 14},
-  {"index": 2, "size": 2048, "duration": 11},
-  {"index": 3, "size": 2048, "duration": 13}
-]
-```
-</details>
-
-<details>
-<summary><b>🚫 限流响应 (429)</b></summary>
-
-```json
-{
-  "error": "Too Many Requests",
-  "message": "请稍后再试 / Please try again later"
-}
-```
-</details>
 
 ---
 
-## 📋 更新日志
+## 部署指南
+
+### 前置条件
+
+- [x] Cloudflare 账号
+- [x] 域名（可选，可使用 workers.dev 子域名）
+
+### 方式一：Wrangler CLI 部署（推荐）
+
+```bash
+# 安装 Wrangler CLI
+npm install -g wrangler
+
+# 登录 Cloudflare
+wrangler login
+
+# 创建项目并部署
+mkdir netsight-pro && cd netsight-pro
+# 将 worker.js 放入当前目录
+
+# 部署
+wrangler deploy
+```
+
+### 方式二：Cloudflare Dashboard 部署
+
+1. 登录 [Cloudflare Dashboard](https://dash.cloudflare.com/)
+2. 进入 **Workers & Pages** > **创建应用程序** > **创建 Worker**
+3. 将 `worker.js` 代码粘贴到编辑器
+4. 点击 **保存并部署**
+5. 可选：绑定自定义域名
+
+### 方式三：一键部署
+
+[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/)
+
+### 自定义域名
+
+```toml
+# wrangler.toml
+routes = [
+  { pattern = "diagnostics.your-domain.com", custom_domain = true }
+]
+```
+
+---
+
+## 配置说明
+
+### 可配置参数
+
+| 参数 | 位置 | 默认值 | 说明 |
+|------|------|--------|------|
+| 默认语言 | `defaultLang` | `'zh-CN'` | 可选 `'en'`, `'zh-TW'` |
+| RTT 间隔 | `setTimeout(testRtt, ...)` | `2000` ms | 监控频率 |
+| 图表点数 | `MAX_RTT_POINTS` | `40` | 历史数据点数 |
+| 限流阈值 | `maxRequests` | `60` | 每分钟请求数 |
+| 限流窗口 | `windowMs` | `60000` ms | 时间窗口 |
+
+### 环境变量
+
+| 变量 | 类型 | 描述 |
+|------|------|------|
+| `CACHE_KV` | KV Namespace | 静态资源缓存 |
+| `ENVIRONMENT` | String | 运行环境 |
+
+### 限流配置
+
+```javascript
+// 修改限流参数
+function isRateLimited(ip, maxRequests = 100, windowMs = 60000) {
+  // maxRequests 改为所需值
+}
+```
+
+### 安全头配置
+
+```javascript
+const SECURITY_HEADERS = {
+  'content-security-policy': "default-src 'self' ...",
+  'strict-transport-security': 'max-age=31536000; includeSubDomains',
+  'x-frame-options': 'DENY',
+  'x-content-type-options': 'nosniff',
+  'x-xss-protection': '1; mode=block'
+};
+```
+
+---
+
+## 安全特性
+
+### 限流保护
+
+- **粒度**: IP 级别（基于 `cf-connecting-ip`）
+- **阈值**: 60 次/分钟
+- **超限响应**: 429 Too Many Requests
+- **重试头**: `Retry-After: 60`
+
+### 安全响应头
+
+| 头名称 | 值 | 防护目标 |
+|--------|-----|----------|
+| Content-Security-Policy | 完整策略 | XSS、数据注入 |
+| Strict-Transport-Security | max-age=31536000 | HTTPS 降级 |
+| X-Frame-Options | DENY | 点击劫持 |
+| X-Content-Type-Options | nosniff | MIME 混淆 |
+| X-XSS-Protection | 1; mode=block | XSS 攻击 |
+| Referrer-Policy | strict-origin-when-cross-origin | 信息泄露 |
+
+### 参数限制
+
+| 端点 | 参数 | 限制 |
+|------|------|------|
+| `/speedtest` | size | ≤ 5MB |
+| `/cpu-test` | n | ≤ 2,000,000 |
+| `/concurrent-test` | count | ≤ 16 |
+| `/concurrent-test` | size | ≤ 64KB |
+| `/stream-test` | size | ≤ 10MB |
+
+### CSP 策略
+
+```http
+Content-Security-Policy: default-src 'self'; 
+  script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com;
+  style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+  font-src 'self' https://fonts.gstatic.com;
+  connect-src 'self' https://api4.ipify.org https://api6.ipify.org https://ipv4.icanhazip.com https://ipv6.icanhazip.com https://ip4.seeip.org;
+```
+
+---
+
+## 技术架构
+
+### 系统架构图
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                        用户浏览器                            │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐ │
+│  │  极光 UI    │  │  Canvas图表  │  │  8个诊断工具按钮    │ │
+│  └─────────────┘  └─────────────┘  └─────────────────────┘ │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼ HTTP/WebSocket
+┌─────────────────────────────────────────────────────────────┐
+│                   Cloudflare Workers 边缘节点                │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │                   路由处理器                          │   │
+│  │  /health │ /speedtest │ /cpu-test │ /ws-test │ ...  │   │
+│  └─────────────────────────────────────────────────────┘   │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐ │
+│  │  限流中间件  │  │  安全头中间件 │  │    CORS 中间件      │ │
+│  └─────────────┘  └─────────────┘  └─────────────────────┘ │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 浏览器兼容性
+
+| 浏览器 | 最低版本 | 状态 |
+|--------|----------|------|
+| Chrome | 80+ | ✅ 完全支持 |
+| Firefox | 75+ | ✅ 完全支持 |
+| Safari | 13.1+ | ✅ 完全支持 |
+| Edge | 80+ | ✅ 完全支持 |
+| Opera | 67+ | ✅ 完全支持 |
+
+---
+
+## 更新日志
 
 ### v3.3.0 (2026-05-28) - 企业级安全与性能优化
 
@@ -322,146 +550,63 @@ wss://your-worker.dev/ws-test
 
 ---
 
-## 📦 部署指南
+## 常见问题
 
-### 方式一：Wrangler CLI 部署（推荐）
+### Q1: 部署后访问显示 404？
 
-```bash
-# 1. 安装 Wrangler CLI
-npm install -g wrangler
+**A**: 检查 Worker 路由配置。确保 `wrangler.toml` 中正确设置了路由，或直接使用 Worker 默认域名。
 
-# 2. 登录 Cloudflare
-wrangler login
+### Q2: WebSocket 连接失败？
 
-# 3. 创建项目
-mkdir netsight-pro && cd netsight-pro
+**A**: 
+1. 确认 Worker 已正确部署
+2. 检查防火墙是否允许 WebSocket 连接
+3. 查看浏览器控制台错误信息
 
-# 4. 创建 worker.js 文件（粘贴完整代码）
+### Q3: 带宽测速结果不稳定？
 
-# 5. 配置 wrangler.toml
+**A**: 
+1. 网络状况会影响测速结果
+2. 建议多次测试取平均值
+3. 确保没有其他大流量应用占用带宽
+
+### Q4: 如何修改限流阈值？
+
+**A**: 编辑 `worker.js` 中的 `isRateLimited` 函数：
+```javascript
+function isRateLimited(ip, maxRequests = 100, windowMs = 60000) {
+  // maxRequests 改为所需值
+}
 ```
 
-**wrangler.toml 配置：**
-```toml
-name = "netsight-pro"
-main = "worker.js"
-compatibility_date = "2024-12-01"
+### Q5: 支持 IPv6 吗？
 
-# 可选：自定义域名路由
-# routes = [
-#   { pattern = "your-domain.com", custom_domain = true }
-# ]
+**A**: 完全支持。Cloudflare Workers 原生支持 IPv6，前端会同时检测 IPv4 和 IPv6 地址。
 
-# 可选：KV 命名空间配置（用于静态资源缓存）
-# kv_namespaces = [
-#   { binding = "CACHE_KV", id = "your-kv-id" }
-# ]
+### Q6: 如何自定义 UI 主题颜色？
 
-[env.production]
-vars = { ENVIRONMENT = "production" }
+**A**: 修改 CSS 变量：
+```css
+:root {
+  --primary: #3b82f6;    /* 主色调 */
+  --cyan: #06b6d4;       /* 青色强调 */
+  --purple: #8b5cf6;     /* 紫色点缀 */
+}
 ```
 
-```bash
-# 部署
-wrangler deploy
-```
+### Q7: 纯前端演示版和真实版有什么区别？
 
-### 方式二：Cloudflare Dashboard 部署
-
-1. 登录 [Cloudflare Dashboard](https://dash.cloudflare.com/)
-2. 进入 **Workers & Pages** > **创建应用程序** > **创建 Worker**
-3. 将 `worker.js` 代码粘贴到编辑器
-4. 点击 **保存并部署**
-5. 可选：绑定自定义域名
-
-### 方式三：一键部署
-
-[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/)
+**A**: 
+| 特性 | 演示版 | 真实版 |
+|------|--------|--------|
+| 部署要求 | 无 | Cloudflare Worker |
+| 数据来源 | 模拟生成 | 真实测量 |
+| RTT 监控 | 模拟延迟 | 真实网络延迟 |
+| 地理位置 | 无 | 边缘节点位置 |
 
 ---
 
-## 🛠️ 技术架构
-
-| 技术 | 用途 | 版本 |
-|------|------|------|
-| **Cloudflare Workers** | 边缘计算运行时 | 2024-12-01 |
-| **WebSocket API** | 实时双向通信测试 | RFC 6455 |
-| **Canvas API** | 实时延迟图表绘制 | HTML5 |
-| **Fetch API** | HTTP 请求处理 | WHATWG |
-| **Web Crypto API** | 随机数据生成 | W3C |
-| **ReadableStream API** | 流式数据传输 | WHATWG |
-| **Web Locks API** | 并发控制 | W3C |
-
-### 浏览器兼容性
-
-| 浏览器 | 最低版本 | 状态 |
-|--------|----------|------|
-| Chrome | 80+ | ✅ 完全支持 |
-| Firefox | 75+ | ✅ 完全支持 |
-| Safari | 13.1+ | ✅ 完全支持 |
-| Edge | 80+ | ✅ 完全支持 |
-| Opera | 67+ | ✅ 完全支持 |
-
----
-
-## 🔧 配置说明
-
-### 自定义修改指南
-
-| 修改项 | 位置 | 默认值 | 说明 |
-|--------|------|--------|------|
-| 默认语言 | `defaultLang` | `'zh-CN'` | 改为 `'en'` 或 `'zh-TW'` |
-| RTT测试间隔 | `setTimeout(testRtt, ...)` | `2000` 毫秒 | 调整监控频率 |
-| 图表数据点 | `MAX_RTT_POINTS` | `40` | 图表显示的历史点数 |
-| 测试超时 | 各测试函数的 `timeout` | `3000` 毫秒 | 单个测试超时时间 |
-| 限流阈值 | `maxRequests` | `60` | 每分钟最大请求数 |
-| 限流窗口 | `windowMs` | `60000` 毫秒 | 限流时间窗口 |
-
-### 环境变量
-
-| 变量名 | 类型 | 描述 | 必需 |
-|--------|------|------|------|
-| `CACHE_KV` | KV Namespace | 静态资源缓存 | ❌ |
-| `ENVIRONMENT` | String | 运行环境（production/staging） | ❌ |
-
----
-
-## 🛡️ 安全配置
-
-### 安全响应头
-
-| 响应头 | 值 | 说明 |
-|--------|-----|------|
-| `Content-Security-Policy` | 完整策略 | 防止 XSS 和数据注入 |
-| `Strict-Transport-Security` | `max-age=31536000; includeSubDomains; preload` | 强制 HTTPS |
-| `X-Frame-Options` | `DENY` | 防止点击劫持 |
-| `X-Content-Type-Options` | `nosniff` | 防止 MIME 类型混淆 |
-| `X-XSS-Protection` | `1; mode=block` | 浏览器 XSS 过滤器 |
-| `Referrer-Policy` | `strict-origin-when-cross-origin` | 控制 Referer 传递 |
-
-### 限流策略
-
-- **限流粒度**: IP 级别（基于 `cf-connecting-ip`）
-- **限流阈值**: 60 次/分钟
-- **超限处理**: 返回 429 状态码，包含 `Retry-After: 60` 头
-- **自动清理**: 超过 1000 条记录时自动清理过期数据
-
----
-
-## 📁 项目结构
-
-```
-netsight-pro/
-├── worker.js              # Cloudflare Worker 主文件 (~1200行)
-├── wrangler.toml          # Wrangler 配置文件
-├── README.md              # 项目文档
-├── LICENSE                # GPLv3 许可证
-└── .gitignore             # Git 忽略文件
-```
-
----
-
-## 🤝 贡献指南
+## 贡献指南
 
 ### 贡献流程
 
@@ -482,19 +627,32 @@ git push origin feature/AmazingFeature
 
 ### 提交信息格式
 
-- `feat`: 新功能
-- `fix`: 修复问题
-- `docs`: 文档更新
-- `style`: 代码格式
-- `refactor`: 代码重构
-- `perf`: 性能优化
-- `test`: 测试相关
-- `chore`: 构建/工具
-- `security`: 安全相关
+| 类型 | 说明 | 示例 |
+|------|------|------|
+| ✨ feat | 新功能 | `feat: add health check endpoint` |
+| 🐛 fix | 修复问题 | `fix: websocket timeout issue` |
+| 📝 docs | 文档更新 | `docs: update API documentation` |
+| 🎨 style | 代码格式 | `style: update card hover effect` |
+| ♻️ refactor | 代码重构 | `refactor: extract common functions` |
+| ⚡ perf | 性能优化 | `perf: optimize concurrent test` |
+| 🔒 security | 安全相关 | `security: add rate limiting` |
+
+### 代码规范
+
+- 使用 ES2020+ 语法
+- 添加必要的注释
+- 保持函数单一职责
+- 错误处理使用 try-catch
+
+### 测试要求
+
+- 新功能需通过本地测试
+- 不影响现有功能
+- WebSocket 连接测试通过
 
 ---
 
-## 🙏 致谢
+## 致谢
 
 ### 开源项目与服务
 
@@ -507,16 +665,7 @@ git push origin feature/AmazingFeature
 
 ---
 
-## 📞 联系方式
-
-| 渠道 | 链接 |
-|------|------|
-| **GitHub Issues** | [提交问题](https://github.com/your-repo/netsight-pro/issues) |
-| **GitHub Discussions** | [讨论区](https://github.com/your-repo/netsight-pro/discussions) |
-
----
-
-## 📄 许可证
+## 许可证
 
 本项目使用 **GNU General Public License v3.0** 许可证。
 
@@ -532,6 +681,15 @@ git push origin feature/AmazingFeature
 | **私人使用** | ✅ 允许 |
 
 > 完整许可证文本请查看 [LICENSE](./LICENSE) 文件
+
+---
+
+## 联系方式
+
+| 渠道 | 链接 |
+|------|------|
+| **GitHub Issues** | [提交问题](https://github.com/your-repo/netsight-pro/issues) |
+| **GitHub Discussions** | [讨论区](https://github.com/your-repo/netsight-pro/discussions) |
 
 ---
 
@@ -552,3 +710,25 @@ git push origin feature/AmazingFeature
 <p align="center">
   <a href="#netsight-pro-">⬆️ 返回顶部</a>
 </p>
+```
+
+这个完整的 README.md 包含了：
+
+## 📋 完整内容结构
+
+1. **项目概述** - 简介、核心特性、技术栈
+2. **功能特性** - 网络质量、性能测试、安全检测、企业安全
+3. **快速开始** - 在线体验、部署、命令行测试
+4. **API 文档** - 端点汇总、详细规范、响应示例
+5. **部署指南** - 三种部署方式、前置条件、自定义域名
+6. **配置说明** - 可配置参数、环境变量、限流配置
+7. **安全特性** - 限流保护、安全响应头、参数限制、CSP策略
+8. **技术架构** - 系统架构图、浏览器兼容性
+9. **更新日志** - v1.0.0 到 v3.3.0 完整版本记录
+10. **常见问题** - 7个常见问题解答
+11. **贡献指南** - 贡献流程、提交格式、代码规范
+12. **致谢** - 开源项目与服务
+13. **许可证** - GPLv3 许可说明
+14. **联系方式** - Issues、Discussions
+
+这是一个完整的、可直接使用的项目文档，涵盖了从入门到精通的全部内容！
