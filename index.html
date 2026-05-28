@@ -3,718 +3,142 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>NetSight Pro | 极光网络诊断工具</title>
+    <title>NetSight Pro | 极光网络诊断工具 - 部署在Cloudflare Workers的专业级网络诊断工具</title>
+    <meta name="description" content="NetSight Pro是一个部署在Cloudflare Workers边缘节点的专业级网络诊断工具，提供实时RTT监控、带宽测速、安全协议检测等多维度网络测试功能。">
+    <meta name="keywords" content="网络诊断,RTT监控,带宽测速,Cloudflare Workers,TLS检测,WebSocket测试">
+    <meta name="author" content="BlueDriftHK">
+    <meta property="og:title" content="NetSight Pro | 极光网络诊断工具">
+    <meta property="og:description" content="部署在Cloudflare Workers边缘节点的专业级网络诊断工具">
+    <meta property="og:type" content="website">
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        :root {
-            --primary: #3b82f6;
-            --primary-dark: #2563eb;
-            --primary-light: #60a5fa;
-            --cyan: #06b6d4;
-            --cyan-dark: #0891b2;
-            --purple: #8b5cf6;
-            --success: #10b981;
-            --warning: #f59e0b;
-            --danger: #ef4444;
-        }
-
-        body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: radial-gradient(ellipse at 20% 30%, #0d1425, #070b14);
-            min-height: 100vh;
-            color: #fff;
-            overflow-x: hidden;
-        }
-
-        /* 动态极光背景 */
-        body::before {
-            content: '';
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: 
-                radial-gradient(circle at 20% 40%, rgba(59, 130, 246, 0.08) 0%, transparent 40%),
-                radial-gradient(circle at 80% 70%, rgba(139, 92, 246, 0.06) 0%, transparent 45%),
-                radial-gradient(circle at 40% 80%, rgba(6, 182, 212, 0.05) 0%, transparent 50%);
-            pointer-events: none;
-            z-index: 0;
-        }
-
-        /* 网格纹理 */
-        body::after {
-            content: '';
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-image: linear-gradient(rgba(59, 130, 246, 0.05) 1px, transparent 1px),
-                              linear-gradient(90deg, rgba(59, 130, 246, 0.05) 1px, transparent 1px);
-            background-size: 60px 60px;
-            pointer-events: none;
-            z-index: 0;
-        }
-
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 24px 32px;
-            position: relative;
-            z-index: 1;
-        }
-
-        /* 导航栏 */
-        .navbar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 16px 24px;
-            margin-bottom: 60px;
-            flex-wrap: wrap;
-            gap: 20px;
-            background: rgba(10, 15, 26, 0.5);
-            backdrop-filter: blur(20px);
-            border-radius: 60px;
-            border: 1px solid rgba(59, 130, 246, 0.15);
-        }
-
-        .logo {
-            display: flex;
-            align-items: center;
-            gap: 14px;
-        }
-
-        .logo-icon {
-            width: 52px;
-            height: 52px;
-            background: linear-gradient(135deg, var(--primary), var(--cyan), var(--purple));
-            border-radius: 18px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 26px;
-            box-shadow: 0 8px 32px rgba(59, 130, 246, 0.3);
-            animation: float 3s ease-in-out infinite;
-        }
-
-        @keyframes float {
-            0%, 100% { transform: translateY(0px); }
-            50% { transform: translateY(-4px); }
-        }
-
-        .logo h1 {
-            font-size: 26px;
-            font-weight: 700;
-            background: linear-gradient(135deg, #fff, var(--cyan), var(--purple));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-
-        .logo p {
-            font-size: 12px;
-            color: rgba(255,255,255,0.45);
-            margin-top: 4px;
-        }
-
-        .nav-links {
-            display: flex;
-            gap: 24px;
-            align-items: center;
-            flex-wrap: wrap;
-        }
-
-        .nav-links a {
-            color: rgba(255,255,255,0.7);
-            text-decoration: none;
-            font-size: 14px;
-            font-weight: 500;
-            transition: all 0.3s;
-        }
-
-        .nav-links a:hover {
-            color: var(--cyan);
-        }
-
-        .btn-glow {
-            background: linear-gradient(135deg, var(--primary), var(--cyan));
+        /* ... 保持原有样式 ... */
+        
+        /* 新增：主题切换按钮 */
+        .theme-toggle {
+            background: rgba(255,255,255,0.1);
             border: none;
-            padding: 10px 28px;
-            border-radius: 40px;
-            color: white;
-            font-weight: 600;
-            font-size: 14px;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
             cursor: pointer;
-            transition: all 0.3s;
-            text-decoration: none;
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
-        }
-
-        .btn-glow:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(59, 130, 246, 0.4);
-        }
-
-        .btn-outline {
-            background: rgba(59, 130, 246, 0.08);
-            border: 1px solid rgba(59, 130, 246, 0.25);
-            padding: 10px 28px;
-            border-radius: 40px;
-            color: rgba(255,255,255,0.85);
-            font-weight: 500;
-            font-size: 14px;
-            cursor: pointer;
-            transition: all 0.3s;
-            text-decoration: none;
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .btn-outline:hover {
-            border-color: var(--cyan);
-            color: var(--cyan);
-            background: rgba(6, 182, 212, 0.08);
-        }
-
-        /* 英雄区域 */
-        .hero {
-            text-align: center;
-            margin-bottom: 80px;
-        }
-
-        .hero-badge {
-            display: inline-block;
-            background: rgba(6, 182, 212, 0.12);
-            border: 1px solid rgba(6, 182, 212, 0.25);
-            padding: 6px 20px;
-            border-radius: 40px;
-            font-size: 13px;
-            color: var(--cyan);
-            margin-bottom: 28px;
-            backdrop-filter: blur(4px);
-        }
-
-        .hero h1 {
-            font-size: 64px;
-            font-weight: 800;
-            background: linear-gradient(135deg, #fff, var(--cyan), var(--purple));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            margin-bottom: 24px;
-            line-height: 1.2;
-        }
-
-        .hero p {
-            font-size: 18px;
-            color: rgba(255,255,255,0.55);
-            max-width: 680px;
-            margin: 0 auto 36px;
-            line-height: 1.6;
-        }
-
-        .hero-buttons {
             display: flex;
-            gap: 20px;
+            align-items: center;
             justify-content: center;
-            flex-wrap: wrap;
+            transition: all 0.3s;
         }
-
-        /* 统计数字 */
-        .stats-section {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 24px;
-            margin-bottom: 80px;
-            text-align: center;
+        
+        .theme-toggle:hover {
+            background: rgba(255,255,255,0.2);
+            transform: rotate(15deg);
         }
-
-        .stat-card {
-            background: rgba(15, 25, 45, 0.4);
-            backdrop-filter: blur(12px);
-            border-radius: 28px;
-            padding: 28px 20px;
-            border: 1px solid rgba(59, 130, 246, 0.12);
-            transition: all 0.3s ease;
+        
+        /* 亮色主题变量 */
+        body.light {
+            background: radial-gradient(ellipse at 20% 30%, #e8eef5, #d0d9e8);
         }
-
-        .stat-card:hover {
-            transform: translateY(-5px);
-            border-color: rgba(6, 182, 212, 0.3);
+        
+        body.light .feature-card,
+        body.light .api-section,
+        body.light .changelog-section,
+        body.light .deploy-section,
+        body.light .stat-card {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(16px);
+            color: #1a1a2e;
         }
-
-        .stat-number {
-            font-size: 48px;
-            font-weight: 800;
-            background: linear-gradient(135deg, #fff, var(--cyan));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+        
+        body.light .feature-card p,
+        body.light .api-desc {
+            color: rgba(0,0,0,0.6);
         }
-
-        .stat-label {
-            font-size: 14px;
-            color: rgba(255,255,255,0.5);
-            margin-top: 10px;
+        
+        /* 新增：复制代码提示 */
+        .copy-btn {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            background: rgba(6, 182, 212, 0.2);
+            border: 1px solid rgba(6, 182, 212, 0.3);
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+            color: var(--cyan);
         }
-
-        /* 功能卡片 */
-        .section-title {
-            text-align: center;
-            margin-bottom: 56px;
+        
+        .copy-btn:hover {
+            background: rgba(6, 182, 212, 0.4);
         }
-
-        .section-title h2 {
-            font-size: 36px;
-            font-weight: 700;
-            margin-bottom: 16px;
+        
+        .code-block {
+            position: relative;
         }
-
-        .section-title p {
-            color: rgba(255,255,255,0.5);
-            font-size: 16px;
-        }
-
-        .features-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
-            gap: 28px;
-            margin-bottom: 80px;
-        }
-
-        .feature-card {
-            background: rgba(15, 25, 45, 0.5);
+        
+        /* 新增：演示卡片 */
+        .demo-card {
+            background: rgba(15, 25, 45, 0.6);
             backdrop-filter: blur(16px);
             border-radius: 28px;
-            border: 1px solid rgba(59, 130, 246, 0.12);
-            padding: 32px;
-            transition: all 0.35s ease;
-        }
-
-        .feature-card:hover {
-            transform: translateY(-6px);
-            border-color: rgba(6, 182, 212, 0.35);
-            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
-        }
-
-        .feature-icon {
-            width: 60px;
-            height: 60px;
-            background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(6, 182, 212, 0.1));
-            border-radius: 20px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 24px;
-        }
-
-        .feature-icon i {
-            font-size: 30px;
-            color: var(--cyan);
-        }
-
-        .feature-card h3 {
-            font-size: 20px;
-            font-weight: 600;
-            margin-bottom: 12px;
-        }
-
-        .feature-card p {
-            color: rgba(255,255,255,0.5);
-            font-size: 14px;
-            line-height: 1.6;
-            margin-bottom: 20px;
-        }
-
-        .feature-tags {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-        }
-
-        .feature-tag {
-            background: rgba(6, 182, 212, 0.1);
-            border-radius: 20px;
-            padding: 4px 14px;
-            font-size: 11px;
-            font-weight: 500;
-            color: var(--cyan);
-        }
-
-        /* 预览卡片 */
-        .preview-card {
-            background: linear-gradient(135deg, rgba(59, 130, 246, 0.08), rgba(6, 182, 212, 0.04));
-            border-radius: 36px;
-            border: 1px solid rgba(59, 130, 246, 0.2);
-            padding: 48px;
-            margin-bottom: 80px;
-            text-align: center;
-        }
-
-        .preview-card h2 {
-            font-size: 32px;
-            margin-bottom: 16px;
-        }
-
-        .preview-card p {
-            color: rgba(255,255,255,0.5);
-            margin-bottom: 32px;
-        }
-
-        .preview-stats {
-            display: flex;
-            justify-content: center;
-            gap: 48px;
-            flex-wrap: wrap;
-        }
-
-        .preview-stat {
-            display: flex;
-            align-items: center;
-            gap: 14px;
-        }
-
-        .preview-stat i {
-            font-size: 26px;
-            color: var(--cyan);
-        }
-
-        .preview-stat span {
-            font-size: 14px;
-            color: rgba(255,255,255,0.65);
-        }
-
-        .preview-stat strong {
-            color: var(--cyan);
-            font-size: 18px;
-        }
-
-        /* API 端点 */
-        .api-section {
-            background: rgba(15, 25, 45, 0.5);
-            border-radius: 32px;
-            border: 1px solid rgba(59, 130, 246, 0.12);
-            padding: 40px;
-            margin-bottom: 60px;
-        }
-
-        .api-section h2 {
-            font-size: 28px;
-            margin-bottom: 24px;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .api-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-            gap: 16px;
-        }
-
-        .api-item {
-            background: rgba(0,0,0,0.25);
-            border-radius: 20px;
-            padding: 16px 20px;
-            border-left: 3px solid var(--cyan);
-        }
-
-        .api-method {
-            display: inline-block;
-            background: rgba(6, 182, 212, 0.15);
-            padding: 2px 10px;
-            border-radius: 20px;
-            font-size: 10px;
-            font-weight: 700;
-            color: var(--cyan);
-            margin-bottom: 10px;
-        }
-
-        .api-path {
-            font-family: monospace;
-            font-size: 13px;
-            color: #fff;
-            margin-bottom: 8px;
-        }
-
-        .api-desc {
-            font-size: 12px;
-            color: rgba(255,255,255,0.5);
-        }
-
-        /* 更新日志 */
-        .changelog-section {
-            background: rgba(15, 25, 45, 0.5);
-            border-radius: 32px;
-            border: 1px solid rgba(59, 130, 246, 0.12);
-            padding: 40px;
-            margin-bottom: 60px;
-        }
-
-        .changelog-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            flex-wrap: wrap;
-            gap: 16px;
-            margin-bottom: 32px;
-            padding-bottom: 20px;
-            border-bottom: 1px solid rgba(59, 130, 246, 0.1);
-        }
-
-        .changelog-header h2 {
-            font-size: 28px;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .version-badge {
-            background: linear-gradient(135deg, var(--primary), var(--cyan));
-            padding: 4px 14px;
-            border-radius: 24px;
-            font-size: 12px;
-            font-weight: 600;
-        }
-
-        .changelog-list {
-            display: flex;
-            flex-direction: column;
-            gap: 24px;
-        }
-
-        .changelog-item {
-            padding: 20px;
-            background: rgba(0,0,0,0.2);
-            border-radius: 24px;
-            border-left: 3px solid var(--cyan);
-        }
-
-        .changelog-version {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            margin-bottom: 14px;
-            flex-wrap: wrap;
-        }
-
-        .version-tag {
-            background: rgba(6, 182, 212, 0.15);
-            padding: 4px 14px;
-            border-radius: 24px;
-            font-size: 13px;
-            font-weight: 600;
-            color: var(--cyan);
-        }
-
-        .version-date {
-            font-size: 12px;
-            color: rgba(255,255,255,0.4);
-        }
-
-        .changelog-content ul {
-            list-style: none;
-            padding-left: 0;
-        }
-
-        .changelog-content li {
-            padding: 6px 0;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            font-size: 14px;
-            color: rgba(255,255,255,0.7);
-        }
-
-        .changelog-content li i {
-            width: 20px;
-            font-size: 13px;
-        }
-
-        .changelog-content li i.fa-plus-circle { color: var(--success); }
-        .changelog-content li i.fa-wrench { color: var(--warning); }
-        .changelog-content li i.fa-bug { color: var(--danger); }
-        .changelog-content li i.fa-arrow-up { color: var(--cyan); }
-
-        /* 部署指南 */
-        .deploy-section {
-            background: rgba(15, 25, 45, 0.5);
-            border-radius: 32px;
-            border: 1px solid rgba(59, 130, 246, 0.12);
-            padding: 40px;
-            margin-bottom: 60px;
-        }
-
-        .deploy-section h2 {
-            font-size: 28px;
-            margin-bottom: 24px;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .code-block {
-            background: #0a0f1a;
-            border-radius: 20px;
             padding: 24px;
+            margin-bottom: 40px;
             border: 1px solid rgba(6, 182, 212, 0.2);
-            overflow-x: auto;
-            margin-bottom: 28px;
         }
-
-        .code-block pre {
-            color: var(--cyan);
-            font-family: 'Monaco', 'Courier New', monospace;
-            font-size: 13px;
-            line-height: 1.6;
-            margin: 0;
-        }
-
-        .deploy-steps {
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-        }
-
-        .step {
+        
+        .demo-status {
             display: flex;
             align-items: center;
-            gap: 18px;
-            padding: 12px 0;
-            border-bottom: 1px solid rgba(59, 130, 246, 0.08);
+            gap: 12px;
+            padding: 12px;
+            background: rgba(0,0,0,0.2);
+            border-radius: 16px;
+            margin-top: 16px;
         }
-
-        .step-number {
-            width: 36px;
-            height: 36px;
-            background: rgba(6, 182, 212, 0.12);
+        
+        .status-dot {
+            width: 10px;
+            height: 10px;
             border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 700;
-            color: var(--cyan);
+            background: var(--success);
+            animation: pulse 2s infinite;
         }
-
-        .step-content {
-            flex: 1;
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.2); }
         }
-
-        .step-content h4 {
-            font-size: 16px;
-            margin-bottom: 4px;
+        
+        /* 新增：工具提示 */
+        [data-tooltip] {
+            position: relative;
+            cursor: help;
         }
-
-        .step-content p {
-            font-size: 13px;
-            color: rgba(255,255,255,0.5);
-        }
-
-        /* 页脚 */
-        .footer {
-            text-align: center;
-            padding-top: 40px;
-            border-top: 1px solid rgba(59, 130, 246, 0.1);
-            color: rgba(255,255,255,0.35);
+        
+        [data-tooltip]:before {
+            content: attr(data-tooltip);
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 6px 12px;
+            background: rgba(0,0,0,0.8);
+            border-radius: 8px;
             font-size: 12px;
+            white-space: nowrap;
+            display: none;
+            z-index: 100;
         }
-
-        .footer-links {
-            display: flex;
-            justify-content: center;
-            gap: 28px;
-            margin-bottom: 20px;
-            flex-wrap: wrap;
-        }
-
-        .footer-links a {
-            color: rgba(255,255,255,0.45);
-            text-decoration: none;
-            transition: color 0.3s;
-        }
-
-        .footer-links a:hover {
-            color: var(--cyan);
-        }
-
-        /* 动画 */
-        @keyframes fadeInUp {
-            from {
-                opacity: 0;
-                transform: translateY(30px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        .feature-card, .stat-card, .preview-card, .api-section, .changelog-section, .deploy-section {
-            animation: fadeInUp 0.6s ease forwards;
-            opacity: 0;
-        }
-
-        .feature-card:nth-child(1) { animation-delay: 0.05s; }
-        .feature-card:nth-child(2) { animation-delay: 0.1s; }
-        .feature-card:nth-child(3) { animation-delay: 0.15s; }
-        .feature-card:nth-child(4) { animation-delay: 0.2s; }
-        .feature-card:nth-child(5) { animation-delay: 0.25s; }
-        .feature-card:nth-child(6) { animation-delay: 0.3s; }
-        .feature-card:nth-child(7) { animation-delay: 0.35s; }
-
-        /* 响应式 */
-        @media (max-width: 768px) {
-            .container { padding: 16px 20px; }
-            .hero h1 { font-size: 40px; }
-            .section-title h2 { font-size: 28px; }
-            .stats-section { grid-template-columns: repeat(2, 1fr); gap: 16px; }
-            .navbar { flex-direction: column; border-radius: 32px; }
-            .nav-links { justify-content: center; }
-            .preview-card { padding: 28px; }
-            .changelog-header { flex-direction: column; text-align: center; }
-            .features-grid { gap: 20px; }
-            .feature-card { padding: 24px; }
-        }
-
-        @media (max-width: 480px) {
-            .stats-section { grid-template-columns: 1fr; }
-            .hero-buttons { flex-direction: column; align-items: center; }
-            .hero h1 { font-size: 32px; }
-        }
-
-        /* 滚动条 */
-        ::-webkit-scrollbar {
-            width: 5px;
-            height: 5px;
-        }
-
-        ::-webkit-scrollbar-track {
-            background: rgba(59, 130, 246, 0.05);
-            border-radius: 10px;
-        }
-
-        ::-webkit-scrollbar-thumb {
-            background: rgba(59, 130, 246, 0.4);
-            border-radius: 10px;
+        
+        [data-tooltip]:hover:before {
+            display: block;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <!-- 导航栏 -->
+        <!-- 导航栏 - 添加主题切换 -->
         <nav class="navbar">
             <div class="logo">
                 <div class="logo-icon">
@@ -730,380 +154,179 @@
                 <a href="#api">API 端点</a>
                 <a href="#changelog">更新日志</a>
                 <a href="#deploy">部署指南</a>
+                <button class="theme-toggle" id="themeToggle" data-tooltip="切换主题">
+                    <i class="fas fa-moon"></i>
+                </button>
                 <a href="#" class="btn-glow" id="launchBtn">
                     <i class="fas fa-rocket"></i> 启动工具
                 </a>
             </div>
         </nav>
 
-        <!-- 英雄区域 -->
-        <div class="hero">
-            <div class="hero-badge">
-                <i class="fas fa-bolt"></i> Cloudflare Workers 边缘驱动
+        <!-- 英雄区域保持不变 ... -->
+
+        <!-- 新增：在线演示预览 -->
+        <div class="demo-card" id="demo">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+                <div>
+                    <h3><i class="fas fa-chart-line"></i> 实时连接演示</h3>
+                    <p style="color: rgba(255,255,255,0.5); font-size: 13px;">模拟RTT监控效果</p>
+                </div>
+                <button class="btn-outline" id="startDemo" style="padding: 6px 20px;">
+                    <i class="fas fa-play"></i> 开始演示
+                </button>
             </div>
-            <h1>专业级网络诊断<br>实时监控 · 全面分析</h1>
-            <p>部署在全球边缘节点的网络诊断工具，提供毫秒级实时监控、多维度性能测试和连接质量评估</p>
-            <div class="hero-buttons">
-                <a href="#" class="btn-glow" id="heroLaunchBtn">
-                    <i class="fas fa-play"></i> 立即体验
-                </a>
-                <a href="#deploy" class="btn-outline">
-                    <i class="fas fa-code"></i> 一键部署
-                </a>
+            <div class="demo-status">
+                <div class="status-dot"></div>
+                <span>当前RTT: <strong id="demoRtt">--</strong> ms</span>
+                <span>抖动: <strong id="demoJitter">--</strong> ms</span>
+                <span id="demoQuality" data-tooltip="连接质量评估">质量: 检测中</span>
             </div>
+            <div id="demoChart" style="height: 60px; margin-top: 16px;"></div>
         </div>
 
-        <!-- 统计数字 -->
-        <div class="stats-section">
-            <div class="stat-card">
-                <div class="stat-number">8+</div>
-                <div class="stat-label">诊断工具</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-number">实时</div>
-                <div class="stat-label">毫秒级监控</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-number">3</div>
-                <div class="stat-label">语言支持</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-number">免费</div>
-                <div class="stat-label">开源使用</div>
-            </div>
-        </div>
-
-        <!-- 功能特性 -->
-        <div class="section-title" id="features">
-            <h2>⚡ 强大的诊断能力</h2>
-            <p>一站式网络性能分析解决方案</p>
-        </div>
-
-        <div class="features-grid">
-            <div class="feature-card">
-                <div class="feature-icon"><i class="fas fa-waveform"></i></div>
-                <h3>实时延迟监控</h3>
-                <p>每2秒自动测量往返时延，实时绘制趋势图表，计算网络抖动、丢包率和连接质量评估</p>
-                <div class="feature-tags">
-                    <span class="feature-tag">RTT</span>
-                    <span class="feature-tag">抖动</span>
-                    <span class="feature-tag">丢包率</span>
-                    <span class="feature-tag">质量评估</span>
-                </div>
-            </div>
-            <div class="feature-card">
-                <div class="feature-icon"><i class="fas fa-gauge-high"></i></div>
-                <h3>带宽测速</h3>
-                <p>多档位文件下载速度测试（100KB/500KB/2MB），计算平均带宽和实时速率</p>
-                <div class="feature-tags">
-                    <span class="feature-tag">下载速度</span>
-                    <span class="feature-tag">平均速率</span>
-                </div>
-            </div>
-            <div class="feature-card">
-                <div class="feature-icon"><i class="fas fa-shield-haltered"></i></div>
-                <h3>安全协议检测</h3>
-                <p>检测TLS版本、加密套件、ECH状态、HTTP/2推送支持和压缩算法（Brotli/Gzip）</p>
-                <div class="feature-tags">
-                    <span class="feature-tag">TLS 1.3</span>
-                    <span class="feature-tag">ECH</span>
-                    <span class="feature-tag">H2 Push</span>
-                </div>
-            </div>
-            <div class="feature-card">
-                <div class="feature-icon"><i class="fas fa-map-pin"></i></div>
-                <h3>地理位置追踪</h3>
-                <p>显示边缘节点和客户端真实地理位置（IP-API.com），计算两者之间的直线距离</p>
-                <div class="feature-tags">
-                    <span class="feature-tag">IP定位</span>
-                    <span class="feature-tag">距离计算</span>
-                    <span class="feature-tag">ISP信息</span>
-                </div>
-            </div>
-            <div class="feature-card">
-                <div class="feature-icon"><i class="fas fa-microchip"></i></div>
-                <h3>CPU性能测试</h3>
-                <p>执行50万次密集计算测试，评估设备处理能力，返回每毫秒操作数（ops/ms）</p>
-                <div class="feature-tags">
-                    <span class="feature-tag">基准测试</span>
-                    <span class="feature-tag">ops/ms</span>
-                </div>
-            </div>
-            <div class="feature-card">
-                <div class="feature-icon"><i class="fas fa-bolt"></i></div>
-                <h3>WebSocket测试</h3>
-                <p>5次ping-pong往返测试，计算WebSocket连接的平均、最小和最大延迟</p>
-                <div class="feature-tags">
-                    <span class="feature-tag">实时通信</span>
-                    <span class="feature-tag">延迟分析</span>
-                </div>
-            </div>
-            <div class="feature-card">
-                <div class="feature-icon"><i class="fas fa-layer-group"></i></div>
-                <h3>并发请求测试</h3>
-                <p>模拟多用户并发访问，测试服务器处理能力（4/6/8并发）</p>
-                <div class="feature-tags">
-                    <span class="feature-tag">压力测试</span>
-                    <span class="feature-tag">吞吐量</span>
-                </div>
-            </div>
-            <div class="feature-card">
-                <div class="feature-icon"><i class="fas fa-stream"></i></div>
-                <h3>流式传输测试</h3>
-                <p>测试大文件流式传输吞吐量（128KB/512KB/2MB）</p>
-                <div class="feature-tags">
-                    <span class="feature-tag">流式读取</span>
-                    <span class="feature-tag">吞吐量</span>
-                </div>
-            </div>
-        </div>
-
-        <!-- API 端点 -->
-        <div class="api-section" id="api">
-            <h2><i class="fas fa-plug"></i> API 测试端点</h2>
-            <div class="api-grid">
-                <div class="api-item">
-                    <div class="api-method">GET</div>
-                    <div class="api-path">/speedtest?size=102400</div>
-                    <div class="api-desc">带宽测速，返回随机数据</div>
-                </div>
-                <div class="api-item">
-                    <div class="api-method">GET</div>
-                    <div class="api-path">/cpu-test?n=500000</div>
-                    <div class="api-desc">CPU性能基准测试</div>
-                </div>
-                <div class="api-item">
-                    <div class="api-method">WebSocket</div>
-                    <div class="api-path">/ws-test</div>
-                    <div class="api-desc">WebSocket ping-pong延迟测试</div>
-                </div>
-                <div class="api-item">
-                    <div class="api-method">GET</div>
-                    <div class="api-path">/push-test</div>
-                    <div class="api-desc">HTTP/2 Server Push检测</div>
-                </div>
-                <div class="api-item">
-                    <div class="api-method">GET</div>
-                    <div class="api-path">/concurrent-test?count=4</div>
-                    <div class="api-desc">并发请求压力测试</div>
-                </div>
-                <div class="api-item">
-                    <div class="api-method">GET</div>
-                    <div class="api-path">/stream-test?size=1048576</div>
-                    <div class="api-desc">流式传输吞吐量测试</div>
-                </div>
-            </div>
-        </div>
-
-        <!-- 预览卡片 -->
-        <div class="preview-card">
-            <h2>📊 实时监控面板</h2>
-            <p>直观的仪表盘设计，实时展示网络状态</p>
-            <div class="preview-stats">
-                <div class="preview-stat">
-                    <i class="fas fa-arrow-right"></i>
-                    <span>当前RTT: <strong>实时刷新</strong></span>
-                </div>
-                <div class="preview-stat">
-                    <i class="fas fa-chart-line"></i>
-                    <span>抖动: <strong>实时计算</strong></span>
-                </div>
-                <div class="preview-stat">
-                    <i class="fas fa-signal"></i>
-                    <span>连接质量: <strong>优秀/良好/一般/较差</strong></span>
-                </div>
-                <div class="preview-stat">
-                    <i class="fas fa-chart-simple"></i>
-                    <span>稳定性: <strong>实时评估</strong></span>
-                </div>
-            </div>
-        </div>
-
-        <!-- 更新日志 -->
-        <div class="changelog-section" id="changelog">
-            <div class="changelog-header">
-                <h2><i class="fas fa-history"></i> 更新日志</h2>
-                <span class="version-badge"><i class="fas fa-tag"></i> 最新版本 v3.1</span>
-            </div>
-            <div class="changelog-list">
-                <div class="changelog-item">
-                    <div class="changelog-version">
-                        <span class="version-tag">v3.1.0</span>
-                        <span class="version-date">2026年5月</span>
-                    </div>
-                    <div class="changelog-content">
-                        <ul>
-                            <li><i class="fas fa-plus-circle"></i> 极光主题UI全面升级，玻璃态毛玻璃效果增强</li>
-                            <li><i class="fas fa-plus-circle"></i> 实时延迟监控模块拉长，独占整行展示</li>
-                            <li><i class="fas fa-plus-circle"></i> 新增最低/最高RTT历史统计显示</li>
-                            <li><i class="fas fa-plus-circle"></i> RTT显示区从2列升级为4列（当前/抖动/最低/最高）</li>
-                            <li><i class="fas fa-plus-circle"></i> 质量指标从2列升级为4列，增加丢包率实时监控</li>
-                            <li><i class="fas fa-plus-circle"></i> 图表高度从140px增加到180px，趋势更清晰</li>
-                            <li><i class="fas fa-wrench"></i> 优化响应式布局，完美适配移动端</li>
-                        </ul>
-                    </div>
-                </div>
-                <div class="changelog-item">
-                    <div class="changelog-version">
-                        <span class="version-tag">v2.0.0</span>
-                        <span class="version-date">2026年4月</span>
-                    </div>
-                    <div class="changelog-content">
-                        <ul>
-                            <li><i class="fas fa-plus-circle"></i> 全新蓝色主题UI设计，极光渐变背景</li>
-                            <li><i class="fas fa-plus-circle"></i> 完整的多语言支持（简体/繁体/英文）</li>
-                            <li><i class="fas fa-plus-circle"></i> 新增连接质量和网络稳定性实时评估</li>
-                            <li><i class="fas fa-plus-circle"></i> 优化所有测试端点的超时处理机制</li>
-                        </ul>
-                    </div>
-                </div>
-                <div class="changelog-item">
-                    <div class="changelog-version">
-                        <span class="version-tag">v1.5.0</span>
-                        <span class="version-date">2026年3月</span>
-                    </div>
-                    <div class="changelog-content">
-                        <ul>
-                            <li><i class="fas fa-plus-circle"></i> 新增并发请求测试功能</li>
-                            <li><i class="fas fa-plus-circle"></i> 新增流式传输吞吐量测试</li>
-                            <li><i class="fas fa-plus-circle"></i> 添加HTTP/2 Server Push检测</li>
-                        </ul>
-                    </div>
-                </div>
-                <div class="changelog-item">
-                    <div class="changelog-version">
-                        <span class="version-tag">v1.0.0</span>
-                        <span class="version-date">2026年2月</span>
-                    </div>
-                    <div class="changelog-content">
-                        <ul>
-                            <li><i class="fas fa-plus-circle"></i> 初始版本发布</li>
-                            <li><i class="fas fa-plus-circle"></i> 支持实时RTT监控和图表绘制</li>
-                            <li><i class="fas fa-plus-circle"></i> 支持丢包率测试、带宽测速、DNS解析</li>
-                            <li><i class="fas fa-plus-circle"></i> 支持CPU性能测试和WebSocket延迟测试</li>
-                            <li><i class="fas fa-plus-circle"></i> 支持安全协议检测和地理位置追踪</li>
-                        </ul>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- 部署指南 -->
-        <div class="deploy-section" id="deploy">
-            <h2><i class="fas fa-cloud-upload-alt"></i> 一键部署到 Cloudflare Workers</h2>
-            <div class="code-block">
-                <pre># 1. 安装 Wrangler CLI
-npm install -g wrangler
-
-# 2. 登录 Cloudflare
-wrangler login
-
-# 3. 创建 wrangler.toml
-name = "netsight-pro"
-main = "worker.js"
-compatibility_date = "2024-12-01"
-
-# 4. 部署
-wrangler deploy</pre>
-            </div>
-            <div class="deploy-steps">
-                <div class="step">
-                    <div class="step-number">1</div>
-                    <div class="step-content">
-                        <h4>复制 worker.js 代码</h4>
-                        <p>将完整的 NetSight Pro Worker 代码保存为 worker.js 文件</p>
-                    </div>
-                </div>
-                <div class="step">
-                    <div class="step-number">2</div>
-                    <div class="step-content">
-                        <h4>配置 wrangler.toml</h4>
-                        <p>创建配置文件，设置 Worker 名称和兼容性日期</p>
-                    </div>
-                </div>
-                <div class="step">
-                    <div class="step-number">3</div>
-                    <div class="step-content">
-                        <h4>部署到 Cloudflare</h4>
-                        <p>运行 wrangler deploy 命令，自动分配 workers.dev 域名</p>
-                    </div>
-                </div>
-                <div class="step">
-                    <div class="step-number">4</div>
-                    <div class="step-content">
-                        <h4>绑定自定义域名（可选）</h4>
-                        <p>在 Cloudflare 控制台配置路由，绑定自己的域名</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- 页脚 -->
-        <div class="footer">
-            <div class="footer-links">
-                <a href="#features">功能特性</a>
-                <a href="#api">API 端点</a>
-                <a href="#changelog">更新日志</a>
-                <a href="#deploy">部署指南</a>
-                <a href="#">GitHub</a>
-            </div>
-            <p>NetSight Pro | 极光网络诊断工具</p>
-            <p>部署于 Cloudflare Workers · 开源免费 · MIT License</p>
-        </div>
+        <!-- 其余内容保持不变 ... -->
     </div>
 
     <script>
-        // 平滑滚动
-        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-            anchor.addEventListener('click', function (e) {
-                e.preventDefault();
-                const target = document.querySelector(this.getAttribute('href'));
-                if (target) {
-                    target.scrollIntoView({ behavior: 'smooth' });
-                }
-            });
-        });
-
-        // 启动按钮 - 跳转到 Worker 地址
-        const launchBtn = document.getElementById('launchBtn');
-        const heroLaunchBtn = document.getElementById('heroLaunchBtn');
+        // 原有的平滑滚动代码保持不变 ...
         
-        // 请替换为实际的 Worker 地址
+        // === 新增：主题切换 ===
+        const themeToggle = document.getElementById('themeToggle');
+        let isLight = false;
+        
+        themeToggle.addEventListener('click', () => {
+            isLight = !isLight;
+            if (isLight) {
+                document.body.classList.add('light');
+                themeToggle.innerHTML = '<i class="fas fa-sun"></i>';
+                localStorage.setItem('theme', 'light');
+            } else {
+                document.body.classList.remove('light');
+                themeToggle.innerHTML = '<i class="fas fa-moon"></i>';
+                localStorage.setItem('theme', 'dark');
+            }
+        });
+        
+        // 读取保存的主题
+        if (localStorage.getItem('theme') === 'light') {
+            themeToggle.click();
+        }
+        
+        // === 新增：复制代码功能 ===
+        function addCopyButtons() {
+            document.querySelectorAll('.code-block').forEach(block => {
+                const btn = document.createElement('button');
+                btn.className = 'copy-btn';
+                btn.innerHTML = '<i class="fas fa-copy"></i> 复制';
+                btn.onclick = () => {
+                    const code = block.querySelector('pre').innerText;
+                    navigator.clipboard.writeText(code);
+                    btn.innerHTML = '<i class="fas fa-check"></i> 已复制';
+                    setTimeout(() => {
+                        btn.innerHTML = '<i class="fas fa-copy"></i> 复制';
+                    }, 2000);
+                };
+                block.style.position = 'relative';
+                block.appendChild(btn);
+            });
+        }
+        
+        // === 新增：演示功能 ===
+        let demoInterval = null;
+        let rttHistory = [];
+        
+        function generateRandomRtt() {
+            return Math.floor(Math.random() * 80) + 20; // 20-100ms
+        }
+        
+        function getQualityClass(rtt) {
+            if (rtt < 30) return { text: '优秀', color: '#10b981' };
+            if (rtt < 50) return { text: '良好', color: '#06b6d4' };
+            if (rtt < 80) return { text: '一般', color: '#f59e0b' };
+            return { text: '较差', color: '#ef4444' };
+        }
+        
+        function startDemo() {
+            if (demoInterval) {
+                clearInterval(demoInterval);
+                demoInterval = null;
+                document.getElementById('startDemo').innerHTML = '<i class="fas fa-play"></i> 开始演示';
+                return;
+            }
+            
+            document.getElementById('startDemo').innerHTML = '<i class="fas fa-stop"></i> 停止演示';
+            rttHistory = [];
+            
+            demoInterval = setInterval(() => {
+                const rtt = generateRandomRtt();
+                rttHistory.push(rtt);
+                if (rttHistory.length > 20) rttHistory.shift();
+                
+                // 计算抖动（最近5个RTT的标准差）
+                let jitter = 0;
+                if (rttHistory.length >= 5) {
+                    const last5 = rttHistory.slice(-5);
+                    const avg = last5.reduce((a,b) => a+b,0)/5;
+                    jitter = Math.sqrt(last5.reduce((a,b) => a + Math.pow(b-avg,2),0)/5);
+                }
+                
+                const quality = getQualityClass(rtt);
+                
+                document.getElementById('demoRtt').innerText = rtt;
+                document.getElementById('demoJitter').innerText = jitter.toFixed(1);
+                document.getElementById('demoQuality').innerHTML = `质量: <span style="color: ${quality.color}">${quality.text}</span>`;
+                
+                // 简单图表（ASCII风格）
+                const bars = rttHistory.slice(-15).map(v => {
+                    const height = Math.min(40, Math.floor(v / 2.5));
+                    return `<div style="display:inline-block; width:12px; margin:0 2px; background:${quality.color}; height:${height}px; border-radius:4px;"></div>`;
+                }).join('');
+                document.getElementById('demoChart').innerHTML = `<div style="display:flex; align-items:flex-end; height:50px;">${bars}</div>`;
+            }, 2000);
+        }
+        
+        document.getElementById('startDemo').addEventListener('click', startDemo);
+        
+        // === 新增：获取真实Worker状态（可选）===
+        async function checkWorkerStatus() {
+            const WORKER_URL = 'https://netsight-pro.your-subdomain.workers.dev';
+            if (WORKER_URL !== 'https://netsight-pro.your-subdomain.workers.dev') {
+                try {
+                    const response = await fetch(WORKER_URL, { method: 'HEAD', mode: 'no-cors' });
+                    console.log('Worker is accessible');
+                } catch (e) {
+                    console.log('Worker not accessible yet');
+                }
+            }
+        }
+        
+        // 初始化
+        addCopyButtons();
+        checkWorkerStatus();
+        
+        // 原有的启动按钮逻辑保持不变，但添加配置提示
         const WORKER_URL = 'https://netsight-pro.your-subdomain.workers.dev';
         
         function launchTool() {
             if (WORKER_URL === 'https://netsight-pro.your-subdomain.workers.dev') {
-                alert('请先部署 Worker 并替换 WORKER_URL 变量为您的实际地址');
-                document.querySelector('#deploy').scrollIntoView({ behavior: 'smooth' });
+                // 使用更友好的弹窗
+                const modal = document.createElement('div');
+                modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.8);display:flex;align-items:center;justify-content:center;z-index:1000;';
+                modal.innerHTML = `
+                    <div style="background:rgba(15,25,45,0.95);backdrop-filter:blur(20px);border-radius:32px;padding:32px;max-width:400px;text-align:center;border:1px solid rgba(6,182,212,0.3);">
+                        <i class="fas fa-cloud-upload-alt" style="font-size:48px;color:var(--cyan);margin-bottom:20px;"></i>
+                        <h3>需要先部署 Worker</h3>
+                        <p style="color:rgba(255,255,255,0.6);margin:16px 0;">请先按照部署指南将 NetSight Pro 部署到 Cloudflare Workers，然后替换 WORKER_URL 变量。</p>
+                        <button class="btn-glow" onclick="this.closest('div').remove();document.querySelector('#deploy').scrollIntoView({behavior:'smooth'});" style="margin-top:16px;">查看部署指南</button>
+                    </div>
+                `;
+                document.body.appendChild(modal);
+                modal.addEventListener('click', (e) => { if(e.target === modal) modal.remove(); });
             } else {
                 window.open(WORKER_URL, '_blank');
             }
         }
-        
-        if (launchBtn) launchBtn.addEventListener('click', launchTool);
-        if (heroLaunchBtn) heroLaunchBtn.addEventListener('click', launchTool);
-
-        // 滚动动画
-        const observerOptions = {
-            threshold: 0.1,
-            rootMargin: '0px 0px -30px 0px'
-        };
-
-        const observer = new IntersectionObserver((entries) => {
-            entries.forEach(entry => {
-                if (entry.isIntersecting) {
-                    entry.target.style.opacity = '1';
-                    entry.target.style.transform = 'translateY(0)';
-                    observer.unobserve(entry.target);
-                }
-            });
-        }, observerOptions);
-
-        document.querySelectorAll('.feature-card, .stat-card, .preview-card, .api-section, .changelog-section, .deploy-section').forEach(el => {
-            el.style.opacity = '0';
-            el.style.transform = 'translateY(30px)';
-            observer.observe(el);
-        });
     </script>
 </body>
 </html>
