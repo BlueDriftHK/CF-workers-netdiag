@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>NetSight Pro - 极光网络诊断工具 | 在线体验</title>
+    <title>NetSight Pro - 极光网络诊断工具 | 纯前端演示版</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -75,7 +75,6 @@
             z-index: 1;
         }
 
-        /* 玻璃态卡片 */
         .glass-card {
             background: var(--bg-card);
             backdrop-filter: blur(20px);
@@ -93,7 +92,7 @@
         }
 
         .card-header {
-            padding: 24px 32px;
+            padding: 20px 28px;
             background: linear-gradient(135deg, rgba(59, 130, 246, 0.06), rgba(6, 182, 212, 0.02));
             border-bottom: 1px solid rgba(59, 130, 246, 0.1);
             display: flex;
@@ -126,15 +125,14 @@
         }
 
         .card-body {
-            padding: 28px 32px;
+            padding: 24px 28px;
         }
 
-        /* 头部导航 */
         .header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 16px 32px;
+            padding: 16px 28px;
             margin-bottom: 28px;
             flex-wrap: wrap;
             gap: 20px;
@@ -195,7 +193,14 @@
             font-size: 13px;
         }
 
-        /* 按钮组 */
+        .demo-badge {
+            background: linear-gradient(135deg, #f59e0b, #ef4444);
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
         .button-group {
             display: flex;
             flex-wrap: wrap;
@@ -203,7 +208,7 @@
         }
 
         .btn {
-            padding: 10px 24px;
+            padding: 10px 22px;
             border-radius: 40px;
             font-size: 13px;
             font-weight: 500;
@@ -249,38 +254,6 @@
             color: white;
         }
 
-        .btn-danger {
-            background: linear-gradient(135deg, #dc2626, var(--danger));
-            color: white;
-        }
-
-        /* 结果区域 */
-        .result-area {
-            margin-top: 20px;
-            padding: 16px 20px;
-            background: rgba(0, 0, 0, 0.3);
-            border-radius: 20px;
-            font-size: 13px;
-            border-left: 3px solid var(--cyan);
-            transition: all 0.3s ease;
-        }
-
-        .speed-result, .metrics-grid {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 12px;
-            margin-top: 12px;
-        }
-
-        .speed-item, .metric-card {
-            background: linear-gradient(135deg, rgba(59, 130, 246, 0.08), rgba(6, 182, 212, 0.04));
-            border-radius: 16px;
-            padding: 10px 18px;
-            font-size: 12px;
-            border-left: 2px solid var(--cyan);
-        }
-
-        /* 实时监控区域 */
         .monitor-grid {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
@@ -311,20 +284,6 @@
             margin-top: 8px;
         }
 
-        .quality-badge {
-            display: inline-block;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: 600;
-        }
-
-        .quality-excellent { background: rgba(16, 185, 129, 0.2); color: #34d399; }
-        .quality-good { background: rgba(6, 182, 212, 0.2); color: #22d3ee; }
-        .quality-poor { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
-        .quality-bad { background: rgba(239, 68, 68, 0.2); color: #f87171; }
-
-        /* 图表容器 */
         .chart-container {
             background: rgba(0, 0, 0, 0.35);
             border-radius: 20px;
@@ -337,31 +296,61 @@
             height: 200px;
         }
 
-        /* URL 输入框 */
-        .url-input-group {
+        .metrics-grid {
             display: flex;
-            gap: 12px;
-            margin-bottom: 20px;
             flex-wrap: wrap;
+            gap: 12px;
+            margin-top: 20px;
         }
 
-        .url-input {
-            flex: 1;
-            padding: 12px 18px;
+        .metric-card {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.08), rgba(6, 182, 212, 0.04));
+            border-radius: 16px;
+            padding: 10px 18px;
+            font-size: 12px;
+            border-left: 2px solid var(--cyan);
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .result-area {
+            margin-top: 20px;
+            padding: 16px 20px;
             background: rgba(0, 0, 0, 0.3);
-            border: 1px solid rgba(59, 130, 246, 0.2);
-            border-radius: 48px;
-            color: white;
-            font-family: monospace;
+            border-radius: 20px;
             font-size: 13px;
+            border-left: 3px solid var(--cyan);
+            transition: all 0.3s ease;
         }
 
-        .url-input:focus {
-            outline: none;
-            border-color: var(--cyan);
+        .speed-result {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-top: 12px;
         }
 
-        /* 加载动画 */
+        .badge {
+            padding: 4px 12px;
+            border-radius: 40px;
+            font-size: 11px;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .badge-success { background: rgba(16, 185, 129, 0.12); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.25); }
+        .badge-warning { background: rgba(245, 158, 11, 0.12); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.25); }
+        .badge-info { background: rgba(6, 182, 212, 0.12); color: #22d3ee; border: 1px solid rgba(6, 182, 212, 0.25); }
+        .badge-danger { background: rgba(239, 68, 68, 0.12); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.25); }
+
+        .quality-excellent { background: rgba(16, 185, 129, 0.2); color: #34d399; padding: 4px 12px; border-radius: 20px; }
+        .quality-good { background: rgba(6, 182, 212, 0.2); color: #22d3ee; padding: 4px 12px; border-radius: 20px; }
+        .quality-poor { background: rgba(245, 158, 11, 0.2); color: #fbbf24; padding: 4px 12px; border-radius: 20px; }
+        .quality-bad { background: rgba(239, 68, 68, 0.2); color: #f87171; padding: 4px 12px; border-radius: 20px; }
+
         @keyframes spin {
             from { transform: rotate(0deg); }
             to { transform: rotate(360deg); }
@@ -379,22 +368,15 @@
             vertical-align: middle;
         }
 
-        /* 徽章 */
-        .badge {
-            padding: 4px 12px;
-            border-radius: 40px;
-            font-size: 11px;
-            font-weight: 600;
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
+        .info-note {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(6, 182, 212, 0.05));
+            border-radius: 16px;
+            padding: 16px 20px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(6, 182, 212, 0.2);
+            font-size: 13px;
         }
 
-        .badge-success { background: rgba(16, 185, 129, 0.12); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.25); }
-        .badge-warning { background: rgba(245, 158, 11, 0.12); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.25); }
-        .badge-info { background: rgba(6, 182, 212, 0.12); color: #22d3ee; border: 1px solid rgba(6, 182, 212, 0.25); }
-
-        /* 响应式 */
         @media (max-width: 1024px) {
             .monitor-grid { grid-template-columns: repeat(2, 1fr); }
         }
@@ -407,7 +389,7 @@
             .monitor-value { font-size: 36px; }
         }
 
-        ::-webkit-scrollbar { width: 5px; height: 5px; }
+        ::-webkit-scrollbar { width: 5px; }
         ::-webkit-scrollbar-track { background: rgba(59, 130, 246, 0.05); border-radius: 10px; }
         ::-webkit-scrollbar-thumb { background: rgba(59, 130, 246, 0.4); border-radius: 10px; }
     </style>
@@ -422,45 +404,44 @@
                 </div>
                 <div>
                     <h1>NetSight Pro</h1>
-                    <p><i class="fas fa-bolt"></i> 极光诊断 · 实时网络分析 · 企业级安全防护</p>
+                    <p><i class="fas fa-bolt"></i> 极光诊断 · 实时网络分析 · 纯前端演示版</p>
                 </div>
             </div>
-            <div class="version-badge">
-                <i class="fas fa-code-branch"></i>
-                <span>v3.3.0</span>
-                <i class="fas fa-calendar-alt"></i>
-                <span>2026-05-28</span>
+            <div style="display: flex; gap: 12px; align-items: center;">
+                <span class="demo-badge"><i class="fas fa-laptop-code"></i> 纯前端演示 · 无需后端</span>
+                <div class="version-badge">
+                    <i class="fas fa-code-branch"></i>
+                    <span>v3.3.0</span>
+                </div>
             </div>
         </div>
 
-        <!-- ==================== 在线体验区 ==================== -->
+        <!-- 在线体验区 -->
         <div class="glass-card">
             <div class="card-header">
                 <div class="card-header-left">
                     <i class="fas fa-flask"></i>
                     <div>
                         <h2>在线体验区</h2>
-                        <p>实时测试网络诊断功能 | 需要先部署 Worker</p>
+                        <p>纯前端模拟 · 完整功能演示 · 无需部署</p>
                     </div>
                 </div>
                 <div class="button-group">
                     <button class="btn btn-outline" onclick="clearAllResults()">
                         <i class="fas fa-eraser"></i> 清空结果
                     </button>
+                    <button class="btn btn-outline" onclick="resetSimulation()">
+                        <i class="fas fa-sync-alt"></i> 重置监控
+                    </button>
                 </div>
             </div>
             <div class="card-body">
-                <!-- Worker URL 配置 -->
-                <div class="url-input-group">
-                    <input type="text" id="worker-url" class="url-input" placeholder="https://your-worker.dev" value="https://netsight-pro.your-subdomain.workers.dev">
-                    <button class="btn btn-primary" onclick="saveWorkerUrl()">
-                        <i class="fas fa-save"></i> 保存地址
-                    </button>
-                    <button class="btn btn-outline" onclick="testConnection()">
-                        <i class="fas fa-plug"></i> 测试连接
-                    </button>
+                <div class="info-note">
+                    <i class="fas fa-info-circle" style="color: var(--cyan); margin-right: 8px;"></i>
+                    <strong>🎮 演示模式说明</strong><br>
+                    本页面为纯前端演示版本，所有数据均为模拟生成，展示 NetSight Pro 的完整功能和界面效果。<br>
+                    真实部署后，可获得基于 Cloudflare Workers 的边缘节点实时网络诊断能力。
                 </div>
-                <div id="connection-status" style="margin-bottom: 20px;"></div>
 
                 <!-- 实时监控区域 -->
                 <div class="monitor-grid">
@@ -488,22 +469,22 @@
                 </div>
 
                 <!-- 质量指标 -->
-                <div class="metrics-grid" style="margin-top: 20px;">
+                <div class="metrics-grid">
                     <div class="metric-card">
                         <span>📊 连接质量</span>
-                        <strong id="quality-text" style="margin-left: 8px; color: #34d399;">优秀</strong>
+                        <strong id="quality-text" style="margin-left: 8px;">优秀</strong>
                     </div>
                     <div class="metric-card">
                         <span>📈 样本数量</span>
-                        <strong id="sample-count" style="margin-left: 8px;">0</strong>
+                        <strong id="sample-count">0</strong>
                     </div>
                     <div class="metric-card">
                         <span>⚠️ 丢包率</span>
-                        <strong id="loss-rate" style="margin-left: 8px; color: #34d399;">0%</strong>
+                        <strong id="loss-rate" style="color: #34d399;">0%</strong>
                     </div>
                     <div class="metric-card">
-                        <span><i class="fas fa-bolt"></i> 实时监控</span>
-                        <span id="live-status" style="margin-left: 8px; color: #34d399;">● 运行中</span>
+                        <span><i class="fas fa-bolt"></i> 监控状态</span>
+                        <span id="live-status" style="color: #34d399;">● 模拟运行中</span>
                     </div>
                 </div>
             </div>
@@ -516,34 +497,34 @@
                     <i class="fas fa-toolbox"></i>
                     <div>
                         <h2>诊断工具集</h2>
-                        <p>一键测试 · 全面诊断</p>
+                        <p>一键测试 · 全面诊断 · 演示模式模拟真实数据</p>
                     </div>
                 </div>
             </div>
             <div class="card-body">
                 <div class="button-group">
-                    <button class="btn btn-outline" id="btn-loss" onclick="runLossTest()">
+                    <button class="btn btn-outline" onclick="runLossTest()">
                         <i class="fas fa-tachometer-alt"></i> 丢包率测试
                     </button>
-                    <button class="btn btn-primary" id="btn-speed" onclick="runSpeedTest()">
+                    <button class="btn btn-primary" onclick="runSpeedTest()">
                         <i class="fas fa-gauge-high"></i> 带宽测速
                     </button>
-                    <button class="btn btn-outline" id="btn-dns" onclick="runDnsTest()">
+                    <button class="btn btn-outline" onclick="runDnsTest()">
                         <i class="fas fa-server"></i> DNS 解析
                     </button>
-                    <button class="btn btn-cyan" id="btn-cpu" onclick="runCpuTest()">
+                    <button class="btn btn-cyan" onclick="runCpuTest()">
                         <i class="fas fa-microchip"></i> CPU 性能
                     </button>
-                    <button class="btn btn-purple" id="btn-ws" onclick="runWsTest()">
+                    <button class="btn btn-purple" onclick="runWsTest()">
                         <i class="fas fa-bolt"></i> WebSocket
                     </button>
-                    <button class="btn btn-cyan" id="btn-concurrent" onclick="runConcurrentTest()">
+                    <button class="btn btn-cyan" onclick="runConcurrentTest()">
                         <i class="fas fa-layer-group"></i> 并发测试
                     </button>
-                    <button class="btn btn-outline" id="btn-stream" onclick="runStreamTest()">
+                    <button class="btn btn-outline" onclick="runStreamTest()">
                         <i class="fas fa-stream"></i> 流式传输
                     </button>
-                    <button class="btn btn-outline" id="btn-http2" onclick="runHttp2Test()">
+                    <button class="btn btn-outline" onclick="runHttp2Test()">
                         <i class="fas fa-rocket"></i> HTTP/2 检测
                     </button>
                 </div>
@@ -559,23 +540,40 @@
             </div>
         </div>
 
-        <!-- 项目介绍 -->
+        <!-- 功能特性 -->
         <div class="glass-card">
             <div class="card-header">
                 <div class="card-header-left">
-                    <i class="fas fa-info-circle"></i>
+                    <i class="fas fa-star-of-life"></i>
                     <div>
-                        <h2>项目介绍</h2>
-                        <p>部署在 Cloudflare Workers 边缘节点的专业级网络诊断工具</p>
+                        <h2>功能特性</h2>
+                        <p>NetSight Pro 完整功能列表</p>
                     </div>
                 </div>
             </div>
             <div class="card-body">
-                <p style="margin-bottom: 20px; line-height: 1.6; color: rgba(255,255,255,0.7);">
-                    NetSight Pro 是一款功能强大的网络诊断工具，利用 Cloudflare Workers 的边缘计算能力，
-                    提供实时网络监控、多维度性能测试和全面的安全协议检测。极光主题的现代化界面，
-                    为企业级网络诊断提供了优雅的解决方案。
-                </p>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px;">
+                    <div style="background: rgba(0,0,0,0.2); border-radius: 20px; padding: 16px;">
+                        <i class="fas fa-waveform" style="color: var(--cyan); font-size: 24px; margin-bottom: 12px; display: inline-block;"></i>
+                        <h3 style="font-size: 16px; margin-bottom: 8px;">实时延迟监控</h3>
+                        <p style="font-size: 12px; color: rgba(255,255,255,0.6);">每2秒自动测量RTT，实时趋势图表，连接质量评估</p>
+                    </div>
+                    <div style="background: rgba(0,0,0,0.2); border-radius: 20px; padding: 16px;">
+                        <i class="fas fa-gauge-high" style="color: var(--cyan); font-size: 24px; margin-bottom: 12px; display: inline-block;"></i>
+                        <h3 style="font-size: 16px; margin-bottom: 8px;">带宽测速</h3>
+                        <p style="font-size: 12px; color: rgba(255,255,255,0.6);">多档位测试，精确计算传输速率</p>
+                    </div>
+                    <div style="background: rgba(0,0,0,0.2); border-radius: 20px; padding: 16px;">
+                        <i class="fas fa-microchip" style="color: var(--cyan); font-size: 24px; margin-bottom: 12px; display: inline-block;"></i>
+                        <h3 style="font-size: 16px; margin-bottom: 8px;">CPU性能测试</h3>
+                        <p style="font-size: 12px; color: rgba(255,255,255,0.6);">密集计算基准测试</p>
+                    </div>
+                    <div style="background: rgba(0,0,0,0.2); border-radius: 20px; padding: 16px;">
+                        <i class="fas fa-shield-haltered" style="color: var(--cyan); font-size: 24px; margin-bottom: 12px; display: inline-block;"></i>
+                        <h3 style="font-size: 16px; margin-bottom: 8px;">安全协议检测</h3>
+                        <p style="font-size: 12px; color: rgba(255,255,255,0.6);">TLS版本、加密套件、ECH状态检测</p>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -620,10 +618,6 @@
                                 <span style="position: absolute; left: 0; color: var(--cyan);">▹</span>
                                 <span class="badge badge-warning" style="margin-right: 8px;">优化</span>并发测试增加 4 并发限制器
                             </li>
-                            <li style="margin-bottom: 8px; font-size: 13px; color: rgba(255,255,255,0.7); padding-left: 20px; position: relative;">
-                                <span style="position: absolute; left: 0; color: var(--cyan);">▹</span>
-                                <span class="badge badge-danger" style="margin-right: 8px;">修复</span>event 变量作用域问题
-                            </li>
                         </ul>
                     </div>
 
@@ -641,10 +635,10 @@
                                 <span style="position: absolute; left: 0; color: var(--cyan);">▹</span>实时延迟监控模块拉长，独占整行展示
                             </li>
                             <li style="margin-bottom: 8px; font-size: 13px; color: rgba(255,255,255,0.7); padding-left: 20px; position: relative;">
-                                <span style="position: absolute; left: 0; color: var(--cyan);">▹</span>新增最低/最高RTT统计，4列布局优化
+                                <span style="position: absolute; left: 0; color: var(--cyan);">▹</span>新增最低/最高RTT统计
                             </li>
                             <li style="margin-bottom: 8px; font-size: 13px; color: rgba(255,255,255,0.7); padding-left: 20px; position: relative;">
-                                <span style="position: absolute; left: 0; color: var(--cyan);">▹</span>真实IP地理位置查询（ip-api.com）
+                                <span style="position: absolute; left: 0; color: var(--cyan);">▹</span>真实IP地理位置查询
                             </li>
                         </ul>
                     </div>
@@ -657,13 +651,13 @@
                         </div>
                         <ul style="list-style: none; padding-left: 0;">
                             <li style="margin-bottom: 8px; font-size: 13px; color: rgba(255,255,255,0.7); padding-left: 20px; position: relative;">
-                                <span style="position: absolute; left: 0; color: var(--cyan);">▹</span>完整多语言支持（简体中文/繁体中文/英文）
+                                <span style="position: absolute; left: 0; color: var(--cyan);">▹</span>完整多语言支持（简体/繁体/英文）
                             </li>
                             <li style="margin-bottom: 8px; font-size: 13px; color: rgba(255,255,255,0.7); padding-left: 20px; position: relative;">
                                 <span style="position: absolute; left: 0; color: var(--cyan);">▹</span>Canvas 实时延迟图表绘制
                             </li>
                             <li style="margin-bottom: 8px; font-size: 13px; color: rgba(255,255,255,0.7); padding-left: 20px; position: relative;">
-                                <span style="position: absolute; left: 0; color: var(--cyan);">▹</span>安全协议检测增强（ECH、TLS版本）
+                                <span style="position: absolute; left: 0; color: var(--cyan);">▹</span>安全协议检测增强
                             </li>
                         </ul>
                     </div>
@@ -679,9 +673,6 @@
                                 <span style="position: absolute; left: 0; color: var(--cyan);">▹</span>全新蓝色主题UI设计
                             </li>
                             <li style="margin-bottom: 8px; font-size: 13px; color: rgba(255,255,255,0.7); padding-left: 20px; position: relative;">
-                                <span style="position: absolute; left: 0; color: var(--cyan);">▹</span>实时RTT监控 - 每2秒自动测量
-                            </li>
-                            <li style="margin-bottom: 8px; font-size: 13px; color: rgba(255,255,255,0.7); padding-left: 20px; position: relative;">
                                 <span style="position: absolute; left: 0; color: var(--cyan);">▹</span>完全重写为 Cloudflare Worker 架构
                             </li>
                         </ul>
@@ -692,7 +683,7 @@
 
         <!-- 页脚 -->
         <div class="glass-card" style="margin-bottom: 0;">
-            <div style="padding: 20px 32px; text-align: center; font-size: 12px; color: rgba(255,255,255,0.4); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 16px;">
+            <div style="padding: 20px 28px; text-align: center; font-size: 12px; color: rgba(255,255,255,0.4); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 16px;">
                 <span><i class="fab fa-github"></i> NetSight Pro</span>
                 <span><i class="fas fa-code-branch"></i> v3.3.0</span>
                 <span><i class="fas fa-balance-scale"></i> GNU General Public License v3.0</span>
@@ -703,7 +694,6 @@
 
     <script>
         // ==================== 全局变量 ====================
-        let workerUrl = localStorage.getItem('netsight-worker-url') || 'https://netsight-pro.your-subdomain.workers.dev';
         let rttData = [];
         let rttInterval = null;
         let chart = null;
@@ -714,46 +704,14 @@
 
         // ==================== 初始化 ====================
         document.addEventListener('DOMContentLoaded', function() {
-            const urlInput = document.getElementById('worker-url');
-            if (urlInput) urlInput.value = workerUrl;
             initChart();
             startRttMonitoring();
         });
 
-        function saveWorkerUrl() {
-            const input = document.getElementById('worker-url');
-            if (input && input.value) {
-                workerUrl = input.value.replace(/\/$/, '');
-                localStorage.setItem('netsight-worker-url', workerUrl);
-                showToast('Worker 地址已保存', 'success');
-                startRttMonitoring();
-            }
-        }
-
-        async function testConnection() {
-            const statusDiv = document.getElementById('connection-status');
-            if (!statusDiv) return;
-            
-            statusDiv.innerHTML = '<span class="loading"></span> 正在测试连接...';
-            
-            try {
-                const res = await fetch(`${workerUrl}/health`, { timeout: 5000 });
-                if (res.ok) {
-                    const data = await res.json();
-                    statusDiv.innerHTML = `<span style="color: #34d399;">✅ 连接成功！版本: ${data.version}</span>`;
-                } else {
-                    statusDiv.innerHTML = `<span style="color: #f87171;">❌ 连接失败，请检查 Worker 地址</span>`;
-                }
-            } catch (e) {
-                statusDiv.innerHTML = `<span style="color: #f87171;">❌ 连接失败: ${e.message}</span>`;
-            }
-        }
-
-        // ==================== 图表 ====================
         function initChart() {
             const canvas = document.getElementById('rtt-chart');
             if (!canvas) return;
-            canvas.width = canvas.parentElement.clientWidth;
+            canvas.width = canvas.parentElement?.clientWidth || 800;
             canvas.height = 200;
             chart = canvas.getContext('2d');
         }
@@ -789,66 +747,58 @@
             chart.fill();
         }
 
-        // ==================== RTT 实时监控 ====================
+        // 模拟真实网络延迟
+        function generateDemoRtt() {
+            const baseRtt = 45;
+            const variation = Math.random() * 40 - 20;
+            return Math.max(20, Math.min(200, Math.round(baseRtt + variation)));
+        }
+
         async function testRtt() {
-            const start = performance.now();
-            try {
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 3000);
-                await fetch(`${workerUrl}/?_=${Date.now()}`, { 
-                    method: 'HEAD', 
-                    signal: controller.signal 
-                });
-                clearTimeout(timeoutId);
-                const diff = Math.round(performance.now() - start);
-                
-                document.getElementById('live-rtt').textContent = diff;
-                
-                sampleCount++;
-                document.getElementById('sample-count').textContent = sampleCount;
-                
-                if (diff < minRtt) {
-                    minRtt = diff;
-                    document.getElementById('live-min').textContent = minRtt;
-                }
-                if (diff > maxRtt) {
-                    maxRtt = diff;
-                    document.getElementById('live-max').textContent = maxRtt;
-                }
-                
-                if (rttData.length > 0) {
-                    const jitter = Math.abs(diff - rttData[rttData.length - 1]);
-                    document.getElementById('live-jitter').textContent = jitter;
-                    
-                    // 更新质量评估
-                    let qualityText = '', qualityClass = '';
-                    if (diff < 50) { qualityText = '优秀'; qualityClass = 'quality-excellent'; }
-                    else if (diff < 100) { qualityText = '良好'; qualityClass = 'quality-good'; }
-                    else if (diff < 150) { qualityText = '一般'; qualityClass = 'quality-good'; }
-                    else if (diff < 250) { qualityText = '较差'; qualityClass = 'quality-poor'; }
-                    else { qualityText = '极差'; qualityClass = 'quality-bad'; }
-                    
-                    const qualityEl = document.getElementById('quality-text');
-                    if (qualityEl) {
-                        qualityEl.textContent = qualityText;
-                        qualityEl.className = `quality-badge ${qualityClass}`;
-                    }
-                }
-                
-                consecutiveLoss = 0;
-                document.getElementById('loss-rate').textContent = '0%';
-                document.getElementById('loss-rate').style.color = '#34d399';
-                
-                rttData.push(diff);
-                if (rttData.length > 40) rttData.shift();
-                drawChart();
-            } catch (e) {
-                consecutiveLoss++;
-                const lossRate = Math.round((consecutiveLoss / Math.min(sampleCount + 1, 10)) * 100);
-                document.getElementById('loss-rate').textContent = lossRate + '%';
-                document.getElementById('loss-rate').style.color = lossRate === 0 ? '#34d399' : (lossRate < 5 ? '#fbbf24' : '#f87171');
-                document.getElementById('live-rtt').textContent = 'ERR';
+            const diff = generateDemoRtt();
+            await new Promise(resolve => setTimeout(resolve, 30));
+            
+            document.getElementById('live-rtt').textContent = diff;
+            
+            sampleCount++;
+            document.getElementById('sample-count').textContent = sampleCount;
+            
+            if (diff < minRtt) {
+                minRtt = diff;
+                document.getElementById('live-min').textContent = minRtt;
             }
+            if (diff > maxRtt) {
+                maxRtt = diff;
+                document.getElementById('live-max').textContent = maxRtt;
+            }
+            
+            if (rttData.length > 0) {
+                const jitter = Math.abs(diff - rttData[rttData.length - 1]);
+                document.getElementById('live-jitter').textContent = jitter;
+                
+                let qualityText = '', qualityClass = '';
+                if (diff < 50) { qualityText = '优秀'; qualityClass = 'quality-excellent'; }
+                else if (diff < 100) { qualityText = '良好'; qualityClass = 'quality-good'; }
+                else if (diff < 150) { qualityText = '一般'; qualityClass = 'quality-good'; }
+                else if (diff < 250) { qualityText = '较差'; qualityClass = 'quality-poor'; }
+                else { qualityText = '极差'; qualityClass = 'quality-bad'; }
+                
+                const qualityEl = document.getElementById('quality-text');
+                if (qualityEl) {
+                    qualityEl.textContent = qualityText;
+                    qualityEl.className = qualityClass;
+                }
+            }
+            
+            consecutiveLoss = 0;
+            document.getElementById('loss-rate').textContent = '0%';
+            document.getElementById('loss-rate').style.color = '#34d399';
+            
+            rttData.push(diff);
+            if (rttData.length > 40) rttData.shift();
+            drawChart();
+            
+            setTimeout(testRtt, 2000);
         }
 
         function startRttMonitoring() {
@@ -859,17 +809,14 @@
             maxRtt = 0;
             consecutiveLoss = 0;
             testRtt();
-            rttInterval = setInterval(testRtt, 2000);
+        }
+
+        function resetSimulation() {
+            startRttMonitoring();
+            clearAllResults();
         }
 
         // ==================== 测试函数 ====================
-        function fetchWithTimeout(url, options = {}, timeout = 10000) {
-            const controller = new AbortController();
-            const id = setTimeout(() => controller.abort(), timeout);
-            return fetch(url, { ...options, signal: controller.signal })
-                .finally(() => clearTimeout(id));
-        }
-
         function showResult(elementId, html, isError = false) {
             const el = document.getElementById(elementId);
             if (el) {
@@ -881,234 +828,129 @@
                     if (el.innerHTML === html) {
                         el.style.display = 'none';
                     }
-                }, 8000);
+                }, 5000);
             }
         }
 
-        function showToast(message, type = 'info') {
-            // 简单实现，可以扩展
-            console.log(`[${type}] ${message}`);
-        }
-
-        async function runLossTest() {
+        function runLossTest() {
             showResult('loss-result', '<span class="loading"></span> 丢包率测试中...');
-            const total = 10;
-            let failed = 0;
-            for (let i = 0; i < total; i++) {
-                try {
-                    await fetchWithTimeout(`${workerUrl}/?_loss=${Date.now()}+${i}`, { method: 'HEAD' }, 3000);
-                } catch (e) {
-                    failed++;
+            
+            setTimeout(() => {
+                const lossPercent = Math.random() > 0.7 ? Math.floor(Math.random() * 15) : 0;
+                if (lossPercent === 0) {
+                    showResult('loss-result', '<i class="fas fa-check-circle"></i> 丢包率: 0% (无丢包)');
+                } else {
+                    showResult('loss-result', `<i class="fas fa-exclamation-triangle"></i> 丢包率: ${lossPercent}% (模拟数据)`, true);
                 }
-            }
-            const lossPercent = Math.round((failed / total) * 100);
-            if (lossPercent === 0) {
-                showResult('loss-result', '<i class="fas fa-check-circle"></i> 丢包率: 0% (无丢包)');
-            } else {
-                showResult('loss-result', `<i class="fas fa-exclamation-triangle"></i> 丢包率: ${lossPercent}% (${failed}/${total} 丢失)`, true);
-            }
+            }, 1500);
         }
 
-        async function runSpeedTest() {
+        function runSpeedTest() {
             showResult('speed-result', '<span class="loading"></span> 带宽测速中...');
-            const sizes = [102400, 512000, 2097152];
-            const results = [];
-            for (const size of sizes) {
-                const start = performance.now();
-                try {
-                    await fetchWithTimeout(`${workerUrl}/speedtest?size=${size}`, {}, 15000);
-                    const duration = performance.now() - start;
-                    const speedMbps = ((size * 8) / (duration / 1000)) / 1000000;
-                    results.push({ sizeKB: Math.round(size/1024), speed: speedMbps.toFixed(2) });
-                } catch (e) {
-                    results.push({ sizeKB: Math.round(size/1024), speed: '0' });
-                }
-            }
-            const validResults = results.filter(r => r.speed !== '0');
-            const avgSpeed = validResults.length > 0 ? validResults.reduce((sum, r) => sum + parseFloat(r.speed), 0) / validResults.length : 0;
-            let html = '<i class="fas fa-gauge-high"></i> 带宽测速结果:<br><div class="speed-result">';
-            html += results.map(r => `<div class="speed-item">${r.sizeKB} KB: ${r.speed} Mbps</div>`).join('');
-            html += `</div><div style="margin-top: 8px;"><span class="badge badge-info">平均: ${avgSpeed.toFixed(2)} Mbps</span></div>`;
-            showResult('speed-result', html);
+            
+            setTimeout(() => {
+                const results = [
+                    { sizeKB: 100, speed: (Math.random() * 50 + 30).toFixed(2) },
+                    { sizeKB: 500, speed: (Math.random() * 45 + 35).toFixed(2) },
+                    { sizeKB: 2048, speed: (Math.random() * 40 + 40).toFixed(2) }
+                ];
+                const avgSpeed = (results.reduce((sum, r) => sum + parseFloat(r.speed), 0) / 3).toFixed(2);
+                let html = '<i class="fas fa-gauge-high"></i> 带宽测速结果 (模拟数据):<br><div class="speed-result">';
+                html += results.map(r => `<div class="speed-item">${r.sizeKB} KB: ${r.speed} Mbps</div>`).join('');
+                html += `</div><div style="margin-top: 8px;"><span class="badge badge-info">平均: ${avgSpeed} Mbps</span></div>`;
+                showResult('speed-result', html);
+            }, 2000);
         }
 
-        async function runDnsTest() {
+        function runDnsTest() {
             showResult('dns-result', '<span class="loading"></span> DNS 解析测试中...');
-            const domains = [
-                { name: 'Cloudflare', url: `${workerUrl.replace(/\/$/, '')}/health` },
-                { name: 'Google', url: 'https://google.com/generate_204' },
-                { name: 'GitHub', url: 'https://github.com/favicon.ico' }
-            ];
-            const results = [];
-            for (const domain of domains) {
-                const start = performance.now();
-                try {
-                    await fetchWithTimeout(domain.url, { method: 'HEAD' }, 5000);
-                    const dnsTime = Math.round(performance.now() - start);
-                    results.push({ domain: domain.name, time: dnsTime });
-                } catch (e) {
-                    results.push({ domain: domain.name, time: null });
-                }
-            }
-            let html = '<i class="fas fa-server"></i> DNS 解析结果:<br><div class="speed-result">';
-            results.forEach(r => {
-                if (r.time !== null) {
+            
+            setTimeout(() => {
+                const results = [
+                    { domain: 'Cloudflare', time: Math.floor(Math.random() * 60 + 20) },
+                    { domain: 'Google', time: Math.floor(Math.random() * 50 + 15) },
+                    { domain: 'GitHub', time: Math.floor(Math.random() * 80 + 30) }
+                ];
+                let html = '<i class="fas fa-server"></i> DNS 解析结果 (模拟数据):<br><div class="speed-result">';
+                results.forEach(r => {
                     let badgeClass = r.time < 50 ? 'badge-success' : (r.time < 150 ? 'badge-warning' : 'badge-danger');
                     html += `<span class="badge ${badgeClass}">${r.domain}: ${r.time}ms</span>`;
-                } else {
-                    html += `<span class="badge badge-danger">${r.domain}: 超时</span>`;
-                }
-            });
-            html += '</div>';
-            showResult('dns-result', html);
-        }
-
-        async function runCpuTest() {
-            showResult('cpu-result', '<span class="loading"></span> CPU 性能测试中...');
-            try {
-                const res = await fetchWithTimeout(`${workerUrl}/cpu-test?n=500000`);
-                const data = await res.json();
-                let badgeClass = data.opsMs > 50 ? 'badge-success' : (data.opsMs > 20 ? 'badge-warning' : 'badge-danger');
-                showResult('cpu-result', `<i class="fas fa-microchip"></i> CPU 性能: <strong>${data.opsMs}</strong> 操作/毫秒 <span class="badge ${badgeClass}">${data.duration}ms</span>`);
-            } catch (e) {
-                showResult('cpu-result', '<i class="fas fa-exclamation-triangle"></i> CPU 测试失败', true);
-            }
-        }
-
-        async function runWsTest() {
-            showResult('ws-result', '<span class="loading"></span> WebSocket 测试中...');
-            try {
-                const wsProtocol = workerUrl.startsWith('https') ? 'wss:' : 'ws:';
-                const wsUrl = wsProtocol + '//' + workerUrl.replace(/^https?:\/\//, '') + '/ws-test';
-                const ws = new WebSocket(wsUrl);
-                
-                const result = await new Promise((resolve) => {
-                    const latencies = [];
-                    let testCount = 0;
-                    const maxTests = 5;
-                    let timeoutId = setTimeout(() => {
-                        ws.close();
-                        resolve({ success: false });
-                    }, 8000);
-                    
-                    ws.onopen = () => {
-                        const sendPing = () => {
-                            const pingStart = performance.now();
-                            ws.send(JSON.stringify({ type: 'ping', timestamp: pingStart }));
-                        };
-                        sendPing();
-                        
-                        ws.onmessage = (event) => {
-                            try {
-                                const pongTime = performance.now();
-                                const data = JSON.parse(event.data);
-                                if (data.type === 'pong') {
-                                    const latency = pongTime - (data.echoTime || data.timestamp);
-                                    latencies.push(latency);
-                                    testCount++;
-                                    
-                                    if (testCount < maxTests) {
-                                        setTimeout(sendPing, 200);
-                                    } else {
-                                        clearTimeout(timeoutId);
-                                        ws.close();
-                                        const avgLatency = Math.round(latencies.reduce((a,b) => a+b, 0) / latencies.length);
-                                        resolve({ success: true, avg: avgLatency, min: Math.round(Math.min(...latencies)), max: Math.round(Math.max(...latencies)) });
-                                    }
-                                }
-                            } catch (e) {
-                                resolve({ success: false });
-                            }
-                        };
-                    };
-                    
-                    ws.onerror = () => {
-                        clearTimeout(timeoutId);
-                        resolve({ success: false });
-                    };
                 });
-                
-                if (result.success) {
-                    let badgeClass = result.avg < 50 ? 'badge-success' : (result.avg < 150 ? 'badge-warning' : 'badge-danger');
-                    showResult('ws-result', `<i class="fas fa-bolt"></i> WebSocket 延迟: <strong>${result.avg}ms</strong> <span class="badge ${badgeClass}">最小: ${result.min}ms / 最大: ${result.max}ms</span>`);
-                } else {
-                    showResult('ws-result', '<i class="fas fa-exclamation-triangle"></i> WebSocket 连接失败', true);
-                }
-            } catch (e) {
-                showResult('ws-result', '<i class="fas fa-exclamation-triangle"></i> WebSocket 测试失败', true);
-            }
+                html += '</div>';
+                showResult('dns-result', html);
+            }, 1500);
         }
 
-        async function runConcurrentTest() {
+        function runCpuTest() {
+            showResult('cpu-result', '<span class="loading"></span> CPU 性能测试中...');
+            
+            setTimeout(() => {
+                const opsMs = Math.floor(Math.random() * 80 + 40);
+                const duration = Math.floor(500000 / opsMs);
+                let badgeClass = opsMs > 50 ? 'badge-success' : (opsMs > 20 ? 'badge-warning' : 'badge-danger');
+                showResult('cpu-result', `<i class="fas fa-microchip"></i> CPU 性能 (模拟数据): <strong>${opsMs}</strong> 操作/毫秒 <span class="badge ${badgeClass}">${duration}ms</span>`);
+            }, 1000);
+        }
+
+        function runWsTest() {
+            showResult('ws-result', '<span class="loading"></span> WebSocket 测试中...');
+            
+            setTimeout(() => {
+                const avg = Math.floor(Math.random() * 60 + 25);
+                const min = avg - Math.floor(Math.random() * 15);
+                const max = avg + Math.floor(Math.random() * 25);
+                let badgeClass = avg < 50 ? 'badge-success' : (avg < 150 ? 'badge-warning' : 'badge-danger');
+                showResult('ws-result', `<i class="fas fa-bolt"></i> WebSocket 延迟 (模拟数据): <strong>${avg}ms</strong> <span class="badge ${badgeClass}">最小: ${min}ms / 最大: ${max}ms</span>`);
+            }, 2000);
+        }
+
+        function runConcurrentTest() {
             showResult('concurrent-result', '<span class="loading"></span> 并发测试中...');
-            try {
-                const results = await Promise.all([4, 6, 8].map(count => 
-                    fetchWithTimeout(`${workerUrl}/concurrent-test?count=${count}&size=2048`, {}, 8000).then(r => r.json())
-                ));
-                let html = '<i class="fas fa-layer-group"></i> 并发测试结果:<br><div class="speed-result">';
+            
+            setTimeout(() => {
+                const results = [
+                    { count: 4, avg: Math.floor(Math.random() * 25 + 10) },
+                    { count: 6, avg: Math.floor(Math.random() * 35 + 15) },
+                    { count: 8, avg: Math.floor(Math.random() * 45 + 20) }
+                ];
+                let html = '<i class="fas fa-layer-group"></i> 并发测试结果 (模拟数据):<br><div class="speed-result">';
                 results.forEach(r => {
-                    const avgDuration = Math.round(r.reduce((sum, item) => sum + (item.duration || 0), 0) / r.length);
-                    let badgeClass = avgDuration < 20 ? 'badge-success' : (avgDuration < 50 ? 'badge-warning' : 'badge-danger');
-                    html += `<span class="badge ${badgeClass}">${r.length} 请求: ${avgDuration}ms</span>`;
+                    let badgeClass = r.avg < 20 ? 'badge-success' : (r.avg < 50 ? 'badge-warning' : 'badge-danger');
+                    html += `<span class="badge ${badgeClass}">${r.count} 请求: ${r.avg}ms</span>`;
                 });
                 html += '</div>';
                 showResult('concurrent-result', html);
-            } catch (e) {
-                showResult('concurrent-result', '<i class="fas fa-exclamation-triangle"></i> 并发测试失败', true);
-            }
+            }, 1500);
         }
 
-        async function runStreamTest() {
+        function runStreamTest() {
             showResult('stream-result', '<span class="loading"></span> 流式传输测试中...');
-            const sizes = [131072, 524288, 2097152];
-            const results = [];
-            for (const size of sizes) {
-                const start = performance.now();
-                try {
-                    const res = await fetchWithTimeout(`${workerUrl}/stream-test?size=${size}`, {}, 15000);
-                    const reader = res.body.getReader();
-                    let bytesRead = 0;
-                    while (true) {
-                        const {done, value} = await reader.read();
-                        if (done) break;
-                        bytesRead += value.length;
-                    }
-                    const duration = performance.now() - start;
-                    const speedMbps = ((bytesRead * 8) / (duration / 1000)) / 1000000;
-                    results.push({ sizeKB: Math.round(size/1024), speed: speedMbps.toFixed(2) });
-                } catch (e) {
-                    results.push({ sizeKB: Math.round(size/1024), speed: '0' });
-                }
-            }
-            let html = '<i class="fas fa-stream"></i> 流式吞吐量:<br><div class="speed-result">';
-            html += results.map(r => `<div class="speed-item">${r.sizeKB} KB: ${r.speed} Mbps</div>`).join('');
-            html += '</div>';
-            showResult('stream-result', html);
+            
+            setTimeout(() => {
+                const results = [
+                    { sizeKB: 128, speed: (Math.random() * 40 + 30).toFixed(2) },
+                    { sizeKB: 512, speed: (Math.random() * 45 + 35).toFixed(2) },
+                    { sizeKB: 2048, speed: (Math.random() * 50 + 40).toFixed(2) }
+                ];
+                let html = '<i class="fas fa-stream"></i> 流式吞吐量 (模拟数据):<br><div class="speed-result">';
+                html += results.map(r => `<div class="speed-item">${r.sizeKB} KB: ${r.speed} Mbps</div>`).join('');
+                html += '</div>';
+                showResult('stream-result', html);
+            }, 2000);
         }
 
-        async function runHttp2Test() {
+        function runHttp2Test() {
             showResult('http2-result', '<span class="loading"></span> HTTP/2 检测中...');
-            try {
-                const res = await fetchWithTimeout(`${workerUrl}/http2-test`);
-                const data = await res.json();
-                let html = '<i class="fas fa-rocket"></i> HTTP/2/3 检测结果:<br><div class="speed-result">';
-                if (data.http3) {
-                    html += `<div class="speed-item">✅ HTTP/3 (QUIC) 已启用</div>`;
-                } else if (data.http2) {
-                    html += `<div class="speed-item">✅ HTTP/2 已启用</div>`;
-                } else {
-                    html += `<div class="speed-item">⚠️ HTTP/1.1 (未启用 HTTP/2)</div>`;
-                }
-                if (data.earlyHints) {
-                    html += `<div class="speed-item">🚀 Early Hints 已支持</div>`;
-                }
-                html += `<div class="speed-item">🔐 TLS 版本: ${data.tlsVersion}</div>`;
-                html += `<div class="speed-item">📡 协议: ${data.protocol}</div>`;
+            
+            setTimeout(() => {
+                let html = '<i class="fas fa-rocket"></i> HTTP/2/3 检测结果 (模拟数据):<br><div class="speed-result">';
+                html += `<div class="speed-item">✅ HTTP/2 已启用</div>`;
+                html += `<div class="speed-item">🚀 Early Hints 已支持</div>`;
+                html += `<div class="speed-item">🔐 TLS 版本: TLSv1.3</div>`;
+                html += `<div class="speed-item">📡 协议: HTTP/2</div>`;
                 html += '</div>';
                 showResult('http2-result', html);
-            } catch (e) {
-                showResult('http2-result', '<i class="fas fa-exclamation-triangle"></i> HTTP/2 检测失败', true);
-            }
+            }, 800);
         }
 
         function clearAllResults() {
@@ -1119,11 +961,10 @@
             });
         }
 
-        // 窗口大小改变时重新绘制图表
         window.addEventListener('resize', () => {
             const canvas = document.getElementById('rtt-chart');
             if (canvas) {
-                canvas.width = canvas.parentElement.clientWidth;
+                canvas.width = canvas.parentElement?.clientWidth || 800;
                 drawChart();
             }
         });
