@@ -1,16 +1,137 @@
 // ============================================================
 // NetSight Pro - 蓝色极速网络诊断工具
 // Cloudflare Worker 完整优化版
-// 版本: 3.2 | 替换 H2 Push 为 HTTP/2 + Early Hints 检测
+// 版本: 3.3 | 修复所有已知问题 + 性能增强
 // ============================================================
 
-addEventListener('fetch', event => {
-  event.respondWith(handleRequest(event.request))
-})
+// ==================== 常量定义 ====================
+const CORS_HEADERS = {
+  'access-control-allow-origin': '*',
+  'cache-control': 'no-store'
+};
 
-async function handleRequest(request) {
+const SECURITY_HEADERS = {
+  'x-content-type-options': 'nosniff',
+  'x-frame-options': 'DENY',
+  'x-xss-protection': '1; mode=block',
+  'referrer-policy': 'strict-origin-when-cross-origin',
+  'strict-transport-security': 'max-age=31536000; includeSubDomains; preload'
+};
+
+// 简单的限流实现
+const rateLimit = new Map();
+
+function isRateLimited(ip, maxRequests = 60, windowMs = 60000) {
+  const now = Date.now();
+  const requests = rateLimit.get(ip) || [];
+  const recent = requests.filter(t => now - t < windowMs);
+  
+  if (recent.length >= maxRequests) return true;
+  
+  recent.push(now);
+  rateLimit.set(ip, recent);
+  
+  // 清理过期记录
+  if (rateLimit.size > 1000) {
+    for (const [key, timestamps] of rateLimit.entries()) {
+      const valid = timestamps.filter(t => now - t < windowMs);
+      if (valid.length === 0) {
+        rateLimit.delete(key);
+      } else {
+        rateLimit.set(key, valid);
+      }
+    }
+  }
+  
+  return false;
+}
+
+function escapeForJS(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/"/g, '\\"')
+    .replace(/\n/g, '\\n')
+    .replace(/\r/g, '\\r')
+    .replace(/\t/g, '\\t');
+}
+
+// 并发限制器
+function pLimit(concurrency) {
+  const queue = [];
+  let activeCount = 0;
+  
+  const next = () => {
+    activeCount--;
+    if (queue.length > 0) {
+      queue.shift()();
+    }
+  };
+  
+  const run = async (fn, resolve) => {
+    activeCount++;
+    const result = await fn();
+    resolve(result);
+    next();
+  };
+  
+  const enqueue = (fn, resolve) => {
+    queue.push(() => run(fn, resolve));
+    if (activeCount < concurrency && queue.length > 0) {
+      queue.shift()();
+    }
+  };
+  
+  return (fn) => new Promise((resolve) => {
+    enqueue(fn, resolve);
+  });
+}
+
+addEventListener('fetch', event => {
+  event.respondWith(handleRequest(event));
+});
+
+async function handleRequest(event) {
+  const request = event.request;
   const url = new URL(request.url);
   const cache = caches.default;
+  const clientIp = request.headers.get('cf-connecting-ip') || 
+                   request.headers.get('x-forwarded-for') || 
+                   'unknown';
+  
+  // 限流检查（跳过静态资源和主页面）
+  if (!url.pathname.startsWith('/static/') && url.pathname !== '/') {
+    if (isRateLimited(clientIp)) {
+      return new Response(JSON.stringify({
+        error: 'Too Many Requests',
+        message: '请稍后再试 / Please try again later'
+      }), {
+        status: 429,
+        headers: {
+          'content-type': 'application/json',
+          'retry-after': '60',
+          ...CORS_HEADERS,
+          ...SECURITY_HEADERS
+        }
+      });
+    }
+  }
+  
+  // ==================== 健康检查端点 ====================
+  if (url.pathname === '/health') {
+    return new Response(JSON.stringify({
+      status: 'ok',
+      timestamp: Date.now(),
+      version: '3.3',
+      uptime: performance.timeOrigin ? Date.now() - performance.timeOrigin : 'unknown'
+    }), {
+      headers: {
+        'content-type': 'application/json',
+        ...SECURITY_HEADERS
+      }
+    });
+  }
   
   // ==================== 静态资源缓存 ====================
   if (url.pathname.startsWith('/static/')) {
@@ -18,35 +139,51 @@ async function handleRequest(request) {
     const cachedResponse = await cache.match(cacheKey);
     if (cachedResponse) return cachedResponse;
     
+    // 确定内容类型
+    let contentType = 'text/plain';
+    if (url.pathname.endsWith('.css')) contentType = 'text/css';
+    else if (url.pathname.endsWith('.js')) contentType = 'application/javascript';
+    else if (url.pathname.endsWith('.png')) contentType = 'image/png';
+    else if (url.pathname.endsWith('.jpg') || url.pathname.endsWith('.jpeg')) contentType = 'image/jpeg';
+    else if (url.pathname.endsWith('.svg')) contentType = 'image/svg+xml';
+    
     if (typeof CACHE_KV !== 'undefined' && CACHE_KV) {
       const kvValue = await CACHE_KV.get(url.pathname);
       if (kvValue) {
         const response = new Response(kvValue, {
-          headers: { 'content-type': 'text/css' }
+          headers: {
+            'content-type': contentType,
+            'cache-control': 'public, max-age=86400', // 24小时
+            'cdn-cache-control': 'public, max-age=604800', // CDN 7天
+            ...SECURITY_HEADERS
+          }
         });
+        // 注意：这里需要传入 event 对象，但已在闭包中
         event.waitUntil(cache.put(cacheKey, response.clone()));
         return response;
       }
     }
+    
+    return new Response('Not Found', { status: 404 });
   }
-
+  
   // ==================== 速度测试端点 ====================
   if (url.pathname === '/speedtest') {
-    const size = parseInt(url.searchParams.get('size')) || 102400;
+    const size = Math.min(parseInt(url.searchParams.get('size')) || 102400, 5242880); // 最大 5MB
     const data = new Uint8Array(size);
     crypto.getRandomValues(data);
     return new Response(data, {
       headers: {
         'content-type': 'application/octet-stream',
-        'cache-control': 'no-store',
-        'access-control-allow-origin': '*'
+        ...CORS_HEADERS,
+        ...SECURITY_HEADERS
       }
     });
   }
-
+  
   // ==================== CPU 密集型测试端点 ====================
   if (url.pathname === '/cpu-test') {
-    const iterations = parseInt(url.searchParams.get('n')) || 500000;
+    const iterations = Math.min(parseInt(url.searchParams.get('n')) || 500000, 2000000);
     const start = Date.now();
     let result = 0;
     for (let i = 0; i < iterations; i++) {
@@ -59,15 +196,15 @@ async function handleRequest(request) {
       opsMs: Math.round(iterations / duration * 100) / 100,
       result: result.toString().substring(0, 8)
     }), {
-      headers: { 
-        'content-type': 'application/json', 
-        'cache-control': 'no-store',
-        'access-control-allow-origin': '*'
+      headers: {
+        'content-type': 'application/json',
+        ...CORS_HEADERS,
+        ...SECURITY_HEADERS
       }
     });
   }
-
-  // ==================== WebSocket 测试端点 ====================
+  
+  // ==================== WebSocket 测试端点（增强版） ====================
   if (url.pathname === '/ws-test') {
     const upgradeHeader = request.headers.get('Upgrade');
     if (!upgradeHeader || upgradeHeader !== 'websocket') {
@@ -78,6 +215,25 @@ async function handleRequest(request) {
     const [client, server] = Object.values(webSocketPair);
     
     server.accept();
+    
+    let pingInterval;
+    let isAlive = true;
+    
+    // 心跳保持
+    const startHeartbeat = () => {
+      pingInterval = setInterval(() => {
+        if (server.readyState === 1 && isAlive) {
+          try {
+            server.send(JSON.stringify({ type: 'ping', timestamp: Date.now() }));
+          } catch (e) {
+            clearInterval(pingInterval);
+          }
+        } else {
+          clearInterval(pingInterval);
+        }
+      }, 30000);
+    };
+    
     server.addEventListener('message', event => {
       try {
         const data = JSON.parse(event.data);
@@ -85,20 +241,33 @@ async function handleRequest(request) {
           server.send(JSON.stringify({ 
             type: 'pong', 
             timestamp: Date.now(),
-            serverTime: Date.now()
+            echoTime: data.timestamp
           }));
+          isAlive = true;
+        } else if (data.type === 'close') {
+          server.close(1000, 'Client requested close');
         }
       } catch (e) {
         server.send(JSON.stringify({ type: 'error', message: '无效消息格式' }));
       }
     });
     
+    server.addEventListener('close', () => {
+      if (pingInterval) clearInterval(pingInterval);
+    });
+    
+    server.addEventListener('error', () => {
+      if (pingInterval) clearInterval(pingInterval);
+    });
+    
+    startHeartbeat();
+    
     return new Response(null, {
       status: 101,
       webSocket: client
     });
   }
-
+  
   // ==================== HTTP/2 + Early Hints 检测端点 ====================
   if (url.pathname === '/http2-test') {
     const cf = request.cf || {};
@@ -107,7 +276,6 @@ async function handleRequest(request) {
     const isHttp3 = protocol.toUpperCase().includes('HTTP/3');
     const acceptEarlyHints = request.headers.get('Accept-Early-Hints');
     
-    // 检测 ALPN 协商的协议
     let tlsProtocol = 'N/A';
     if (cf.tlsVersion) {
       tlsProtocol = cf.tlsVersion;
@@ -119,72 +287,99 @@ async function handleRequest(request) {
       protocol: protocol,
       tlsVersion: tlsProtocol,
       earlyHints: acceptEarlyHints === 'early-hints',
-      supportsEarlyHints: acceptEarlyHints !== null
+      supportsEarlyHints: acceptEarlyHints !== null,
+      alpn: cf.tlsClientAlpn || 'N/A'
     }), {
       headers: {
         'content-type': 'application/json',
-        'cache-control': 'no-store',
-        'access-control-allow-origin': '*'
+        ...CORS_HEADERS,
+        ...SECURITY_HEADERS
       }
     });
   }
-
-  // ==================== 多文件并发下载测试 ====================
+  
+  // ==================== 多文件并发下载测试（优化版） ====================
   if (url.pathname === '/concurrent-test') {
-    const count = parseInt(url.searchParams.get('count')) || 4;
-    const size = parseInt(url.searchParams.get('size')) || 1024;
+    const count = Math.min(parseInt(url.searchParams.get('count')) || 4, 16);
+    const size = Math.min(parseInt(url.searchParams.get('size')) || 1024, 65536);
+    
+    const limit = pLimit(4); // 限制并发数为4
     const promises = [];
-    const results = [];
     
     for (let i = 0; i < count; i++) {
       promises.push(
-        (async () => {
+        limit(async () => {
           const start = Date.now();
           const data = new Uint8Array(size);
           crypto.getRandomValues(data);
-          results.push({
+          // 模拟轻微处理延迟
+          await new Promise(resolve => setTimeout(resolve, 0));
+          return {
             index: i,
             size: size,
             duration: Date.now() - start
-          });
-        })()
+          };
+        })
       );
     }
     
-    await Promise.all(promises);
+    const results = await Promise.all(promises);
     return new Response(JSON.stringify(results), {
-      headers: { 
-        'content-type': 'application/json', 
-        'cache-control': 'no-store',
-        'access-control-allow-origin': '*'
+      headers: {
+        'content-type': 'application/json',
+        ...CORS_HEADERS,
+        ...SECURITY_HEADERS
       }
     });
   }
-
-  // ==================== 大文件流式传输测试 ====================
+  
+  // ==================== 大文件流式传输测试（优化版） ====================
   if (url.pathname === '/stream-test') {
-    const size = parseInt(url.searchParams.get('size')) || 1048576;
+    const size = Math.min(parseInt(url.searchParams.get('size')) || 1048576, 10485760); // 最大 10MB
     const chunkSize = 65536;
     
+    let controllerRef;
     const stream = new ReadableStream({
       start(controller) {
+        controllerRef = controller;
         let sent = 0;
+        
         const pushChunk = () => {
-          if (sent < size) {
-            const remaining = size - sent;
-            const currentChunk = Math.min(remaining, chunkSize);
-            const chunk = new Uint8Array(currentChunk);
-            crypto.getRandomValues(chunk);
+          if (sent >= size) {
+            controller.close();
+            return;
+          }
+          
+          const remaining = size - sent;
+          const currentChunk = Math.min(remaining, chunkSize);
+          const chunk = new Uint8Array(currentChunk);
+          crypto.getRandomValues(chunk);
+          
+          try {
             controller.enqueue(chunk);
             sent += currentChunk;
+            
+            // 使用 promise 微任务代替 setTimeout，避免背压问题
             if (sent < size) {
-              setTimeout(pushChunk, 0);
+              Promise.resolve().then(pushChunk);
             } else {
               controller.close();
             }
+          } catch (e) {
+            controller.error(e);
           }
         };
+        
         pushChunk();
+      },
+      
+      cancel() {
+        // 处理取消操作
+        if (controllerRef) {
+          try {
+            controllerRef.close();
+          } catch (e) {}
+        }
       }
     });
     
@@ -193,25 +388,15 @@ async function handleRequest(request) {
         'content-type': 'application/octet-stream',
         'cache-control': 'no-store',
         'content-length': size.toString(),
-        'access-control-allow-origin': '*'
+        ...CORS_HEADERS,
+        ...SECURITY_HEADERS
       }
     });
   }
-
+  
   // ==================== 主诊断页面 ====================
   const workerStart = Date.now();
   const cf = request.cf || {};
-  
-  function escapeForJS(str) {
-    if (str === null || str === undefined) return '';
-    return String(str)
-      .replace(/\\/g, '\\\\')
-      .replace(/'/g, "\\'")
-      .replace(/"/g, '\\"')
-      .replace(/\n/g, '\\n')
-      .replace(/\r/g, '\\r')
-      .replace(/\t/g, '\\t');
-  }
   
   const lat = parseFloat(cf.latitude) || 0;
   const lon = parseFloat(cf.longitude) || 0;
@@ -234,7 +419,7 @@ async function handleRequest(request) {
     tlsVersion: escapeForJS(cf.tlsVersion || 'N/A'),
     tlsCipher: escapeForJS(cf.tlsCipher || 'N/A'),
     botScore: cf.botManagement?.score ?? 100,
-    clientIp: escapeForJS(request.headers.get('cf-connecting-ip') || 'N/A'),
+    clientIp: escapeForJS(clientIp),
     httpProtocolRaw: cf.httpProtocol || 'N/A',
     latNum: lat,
     lonNum: lon,
@@ -251,33 +436,35 @@ async function handleRequest(request) {
   else if (acceptLang.match(/en/i)) defaultLang = 'en';
   
   const workerDuration = Date.now() - workerStart;
-
-  // 服务端直接查询真实客户端 IP 的地理位置
+  
+  // 服务端直接查询真实客户端 IP 的地理位置（带降级）
   let realGeoData = null;
-  const realClientIp = request.headers.get('cf-connecting-ip') || '';
-  if (realClientIp) {
+  if (clientIp && clientIp !== 'unknown') {
     try {
-      const geoRes = await fetch(`http://ip-api.com/json/${realClientIp}?fields=city,regionName,country,countryCode,lat,lon,org,query`, {
+      const geoRes = await fetch(`http://ip-api.com/json/${clientIp}?fields=city,regionName,country,countryCode,lat,lon,org,query`, {
         headers: { 'User-Agent': 'Cloudflare-Worker/1.0' }
       });
       if (geoRes.ok) {
         realGeoData = await geoRes.json();
       }
-    } catch (e) {}
+    } catch (e) {
+      // 静默失败，使用 Cloudflare 数据作为降级
+    }
   }
-
+  
+  // 降级方案：使用 Cloudflare 的数据
   const realGeo = realGeoData || {};
   const realGeoJS = {
-    city: escapeForJS(realGeo.city || ''),
-    region: escapeForJS(realGeo.regionName || ''),
-    country: escapeForJS(realGeo.country || ''),
+    city: escapeForJS(realGeo.city || cf.city || ''),
+    region: escapeForJS(realGeo.regionName || cf.region || ''),
+    country: escapeForJS(realGeo.country || cf.country || ''),
     countryCode: escapeForJS(realGeo.countryCode || ''),
-    lat: realGeo.lat || 0,
-    lon: realGeo.lon || 0,
-    org: escapeForJS(realGeo.org || ''),
-    ip: escapeForJS(realGeo.query || realClientIp)
+    lat: realGeo.lat || cf.latitude || 0,
+    lon: realGeo.lon || cf.longitude || 0,
+    org: escapeForJS(realGeo.org || cf.asOrganization || ''),
+    ip: escapeForJS(realGeo.query || clientIp)
   };
-
+  
   // 检测接受的编码格式
   const acceptEncoding = request.headers.get('accept-encoding') || '';
   const supportsBrotli = acceptEncoding.includes('br');
@@ -288,12 +475,18 @@ async function handleRequest(request) {
     zstd: acceptEncoding.includes('zstd')
   };
   
+  // CSP 头
+  const cspHeader = "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://ipapi.co https://api4.ipify.org https://api6.ipify.org https://ipv4.icanhazip.com https://ipv6.icanhazip.com https://ip4.seeip.org; img-src 'self' data:;";
+  
   const html = `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>NetSight Pro | 极光网络诊断</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -329,7 +522,6 @@ async function handleRequest(request) {
             position: relative;
         }
 
-        /* 动态极光背景 */
         body::before {
             content: '';
             position: fixed;
@@ -345,7 +537,6 @@ async function handleRequest(request) {
             z-index: 0;
         }
 
-        /* 网格纹理 */
         body::after {
             content: '';
             position: fixed;
@@ -367,7 +558,6 @@ async function handleRequest(request) {
             z-index: 1;
         }
 
-        /* 玻璃态卡片 */
         .glass {
             background: var(--bg-card);
             backdrop-filter: blur(20px);
@@ -375,7 +565,6 @@ async function handleRequest(request) {
             border-radius: 32px;
         }
 
-        /* 头部导航 - 升级版 */
         .header {
             display: flex;
             justify-content: space-between;
@@ -463,7 +652,6 @@ async function handleRequest(request) {
             background: rgba(59, 130, 246, 0.15);
         }
 
-        /* IP 信息卡片 - 英雄区 */
         .hero-card {
             background: linear-gradient(135deg, rgba(59, 130, 246, 0.08), rgba(6, 182, 212, 0.04));
             border-radius: 40px;
@@ -558,7 +746,6 @@ async function handleRequest(request) {
             50% { opacity: 0.4; transform: scale(1.2); }
         }
 
-        /* 网格布局 - 实时延迟卡片占满整行 */
         .grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
@@ -566,7 +753,6 @@ async function handleRequest(request) {
             margin-bottom: 32px;
         }
 
-        /* 实时延迟监控卡片 - 拉长版，单独占整行 */
         .rtt-card {
             grid-column: 1 / -1;
             min-height: 580px;
@@ -584,7 +770,6 @@ async function handleRequest(request) {
             padding: 28px 32px;
         }
 
-        /* 卡片样式 */
         .card {
             background: rgba(15, 25, 45, 0.5);
             backdrop-filter: blur(16px);
@@ -629,7 +814,6 @@ async function handleRequest(request) {
             padding: 24px 28px;
         }
 
-        /* 信息行 */
         .info-row {
             display: flex;
             justify-content: space-between;
@@ -662,7 +846,6 @@ async function handleRequest(request) {
             font-family: 'Monaco', 'Courier New', monospace;
         }
 
-        /* 徽章系统 */
         .badge {
             padding: 5px 14px;
             border-radius: 40px;
@@ -703,7 +886,6 @@ async function handleRequest(request) {
             border: 1px solid rgba(139, 92, 246, 0.25);
         }
 
-        /* 实时延迟区域 - 拉长版内容 */
         .rtt-display {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
@@ -756,7 +938,6 @@ async function handleRequest(request) {
             height: 180px;
         }
 
-        /* 质量指标 - 拉长版增加更多指标 */
         .quality-grid {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
@@ -800,7 +981,6 @@ async function handleRequest(request) {
             font-weight: 700;
         }
 
-        /* 按钮组 - 渐变风格 */
         .button-group {
             display: flex;
             flex-wrap: wrap;
@@ -866,7 +1046,6 @@ async function handleRequest(request) {
             box-shadow: 0 8px 20px rgba(139, 92, 246, 0.3);
         }
 
-        /* 结果区域 */
         .result-area {
             margin-top: 20px;
             padding: 16px 20px;
@@ -892,7 +1071,6 @@ async function handleRequest(request) {
             border-left: 2px solid var(--cyan);
         }
 
-        /* 硬件信息卡片内布局 */
         .hw-grid {
             display: flex;
             flex-wrap: wrap;
@@ -915,7 +1093,6 @@ async function handleRequest(request) {
             font-size: 12px;
         }
 
-        /* 页脚 */
         .footer {
             margin-top: 32px;
             padding: 20px 36px;
@@ -947,7 +1124,6 @@ async function handleRequest(request) {
             border-color: var(--cyan);
         }
 
-        /* 动画 */
         @keyframes spin {
             from { transform: rotate(0deg); }
             to { transform: rotate(360deg); }
@@ -965,7 +1141,6 @@ async function handleRequest(request) {
             vertical-align: middle;
         }
 
-        /* 响应式 */
         @media (max-width: 1024px) {
             .rtt-display {
                 grid-template-columns: repeat(2, 1fr);
@@ -990,7 +1165,6 @@ async function handleRequest(request) {
             .rtt-card .card-body { padding: 20px; }
         }
 
-        /* 滚动条美化 */
         ::-webkit-scrollbar {
             width: 5px;
             height: 5px;
@@ -1013,7 +1187,6 @@ async function handleRequest(request) {
 </head>
 <body>
     <div class="container">
-        <!-- 头部导航 -->
         <div class="header">
             <div class="logo">
                 <div class="logo-icon">
@@ -1031,7 +1204,6 @@ async function handleRequest(request) {
             </div>
         </div>
 
-        <!-- 英雄区 IP 信息 -->
         <div class="hero-card">
             <div class="ip-row">
                 <span class="ip-label"><i class="fas fa-globe"></i> IPv4</span>
@@ -1048,7 +1220,6 @@ async function handleRequest(request) {
             </div>
         </div>
 
-        <!-- 实时延迟监控卡片 - 拉长版，独占一行 -->
         <div class="card rtt-card">
             <div class="card-header">
                 <i class="fas fa-waveform"></i>
@@ -1103,7 +1274,6 @@ async function handleRequest(request) {
         </div>
 
         <div class="grid">
-            <!-- 安全与协议卡片 -->
             <div class="card">
                 <div class="card-header">
                     <i class="fas fa-shield-haltered"></i>
@@ -1156,7 +1326,6 @@ async function handleRequest(request) {
                 </div>
             </div>
 
-            <!-- 边缘节点位置卡片 -->
             <div class="card">
                 <div class="card-header">
                     <i class="fas fa-map-pin"></i>
@@ -1184,7 +1353,6 @@ async function handleRequest(request) {
                 </div>
             </div>
 
-            <!-- 真实 IP 位置卡片 -->
             <div class="card">
                 <div class="card-header">
                     <i class="fas fa-user-secret"></i>
@@ -1201,7 +1369,6 @@ async function handleRequest(request) {
             </div>
         </div>
 
-        <!-- 诊断工具集 -->
         <div class="card" style="margin-bottom: 28px;">
             <div class="card-header">
                 <i class="fas fa-flask"></i>
@@ -1231,7 +1398,6 @@ async function handleRequest(request) {
             </div>
         </div>
 
-        <!-- 硬件信息卡片 -->
         <div class="card">
             <div class="card-header">
                 <i class="fas fa-desktop"></i>
@@ -1247,7 +1413,6 @@ async function handleRequest(request) {
             </div>
         </div>
 
-        <!-- 页脚 -->
         <div class="footer">
             <span><i class="fas fa-fingerprint"></i> RAY ID: <span style="font-family: monospace;">${data.rayId}</span></span>
             <span><i class="fas fa-ip"></i> 客户端: ${data.clientIp}</span>
@@ -1257,7 +1422,6 @@ async function handleRequest(request) {
 
     <script>
         (function(){
-            // ==================== 国际化语言包 ====================
             const i18n = {
                 'en': { 
                     sec: 'Security & Protocol', geo: 'Edge Location', userGeo: 'Client Location',
@@ -1312,7 +1476,6 @@ async function handleRequest(request) {
                 }
             };
             
-            // ==================== 服务端数据 ====================
             const BACKEND_DATA = {
                 asOrg: "${data.asOrg}", asn: "${data.asn}", colo: "${data.colo}",
                 city: "${data.city}", region: "${data.region}", country: "${data.country}",
@@ -1328,7 +1491,6 @@ async function handleRequest(request) {
                 realGeoOrg: "${realGeoJS.org}", realGeoIp: "${realGeoJS.ip}"
             };
             
-            // ==================== DOM 元素 ====================
             const elements = {
                 v4: document.getElementById('v4'), v6: document.getElementById('v6'),
                 rttNum: document.getElementById('rtt-num'), chart: document.getElementById('chart'),
@@ -1348,7 +1510,6 @@ async function handleRequest(request) {
                 streamResult: document.getElementById('stream-result')
             };
             
-            // ==================== 全局变量 ====================
             let currentLang = localStorage.getItem('pref-lang') || '${defaultLang}';
             const rttData = [];
             const MAX_RTT_POINTS = 40;
@@ -1361,7 +1522,6 @@ async function handleRequest(request) {
             let minRtt = Infinity;
             let maxRtt = 0;
             
-            // ==================== 工具函数 ====================
             function isDataCenter() {
                 const patterns = /data center|hosting|cloud|akamai|google|amazon|microsoft|aliyun|tencent|fastly|cloudflare|incapsula|leaseweb|ovh|digitalocean|vultr|linode/i;
                 return patterns.test(BACKEND_DATA.asOrg);
@@ -1405,7 +1565,6 @@ async function handleRequest(request) {
                 }
             }
             
-            // ==================== UI 更新 ====================
             function updateUI() {
                 const t = i18n[currentLang];
                 const textIds = {
@@ -1480,7 +1639,6 @@ async function handleRequest(request) {
                 updateUI();
             };
             
-            // ==================== 图表 ====================
             function resizeCanvas() {
                 const canvas = elements.chart;
                 if (!canvas || !canvas.parentElement) return;
@@ -1522,7 +1680,6 @@ async function handleRequest(request) {
                 ctx.fill();
             }
             
-            // ==================== IP 检测 ====================
             async function getIP(version) {
                 const el = version === 'v4' ? elements.v4 : elements.v6;
                 if (!el) return;
@@ -1545,7 +1702,6 @@ async function handleRequest(request) {
                 el.style.opacity = '0.5';
             }
             
-            // ==================== 连接质量评估 ====================
             function updateQuality(currentRtt) {
                 const qualityEl = document.getElementById('quality-badge');
                 const stabilityEl = document.getElementById('stability-badge');
@@ -1596,7 +1752,6 @@ async function handleRequest(request) {
                 }
             }
             
-            // ==================== RTT 测试 ====================
             async function testRtt() {
                 const start = performance.now();
                 try {
@@ -1635,7 +1790,6 @@ async function handleRequest(request) {
                 setTimeout(testRtt, 2000);
             }
             
-            // ==================== HTTP/2 + Early Hints 检测 ====================
             async function testHttp2() {
                 if (!elements.http2Val) return;
                 const t = i18n[currentLang];
@@ -1664,7 +1818,6 @@ async function handleRequest(request) {
                 }
             }
             
-            // ==================== 真实 IP 位置 ====================
             async function fetchUserGeo() {
                 if (!elements.userGeoInfo) return;
                 
@@ -1737,7 +1890,6 @@ async function handleRequest(request) {
                 }
             }
             
-            // ==================== 硬件信息 ====================
             function updateHardwareInfo() {
                 if (!elements.hwInfo) return;
                 const cores = navigator.hardwareConcurrency || 'N/A';
@@ -1754,7 +1906,6 @@ async function handleRequest(request) {
                 \`;
             }
 
-            // ==================== CPU 测试 ====================
             let cpuTestRunning = false;
             async function runCpuTest() {
                 if (cpuTestRunning) return;
@@ -1776,7 +1927,6 @@ async function handleRequest(request) {
                 cpuTestRunning = false;
             }
 
-            // ==================== WebSocket 测试 ====================
             let wsTestRunning = false;
             async function runWsTest() {
                 if (wsTestRunning) return;
@@ -1810,7 +1960,7 @@ async function handleRequest(request) {
                                     const pongTime = performance.now();
                                     const data = JSON.parse(event.data);
                                     if (data.type === 'pong') {
-                                        const latency = pongTime - data.timestamp;
+                                        const latency = pongTime - (data.echoTime || data.timestamp);
                                         latencies.push(latency);
                                         testCount++;
                                         
@@ -1818,7 +1968,8 @@ async function handleRequest(request) {
                                             setTimeout(sendPing, 200);
                                         } else {
                                             clearTimeout(timeoutId);
-                                            ws.close();
+                                            ws.send(JSON.stringify({ type: 'close' }));
+                                            setTimeout(() => ws.close(), 100);
                                             const avgLatency = Math.round(latencies.reduce((a,b) => a+b, 0) / latencies.length);
                                             resolve({ success: true, avg: avgLatency, min: Math.round(Math.min(...latencies)), max: Math.round(Math.max(...latencies)) });
                                         }
@@ -1850,7 +2001,6 @@ async function handleRequest(request) {
                 wsTestRunning = false;
             }
 
-            // ==================== 并发测试 ====================
             let concurrentTestRunning = false;
             async function runConcurrentTest() {
                 if (concurrentTestRunning) return;
@@ -1877,7 +2027,6 @@ async function handleRequest(request) {
                 concurrentTestRunning = false;
             }
 
-            // ==================== 流式测试 ====================
             let streamTestRunning = false;
             async function runStreamTest() {
                 if (streamTestRunning) return;
@@ -1916,7 +2065,6 @@ async function handleRequest(request) {
                 streamTestRunning = false;
             }
 
-            // ==================== 丢包测试 ====================
             let lossTestRunning = false;
             async function runLossTest() {
                 if (lossTestRunning) return;
@@ -1943,7 +2091,6 @@ async function handleRequest(request) {
                 lossTestRunning = false;
             }
 
-            // ==================== 带宽测速 ====================
             let speedTestRunning = false;
             async function runSpeedTest() {
                 if (speedTestRunning) return;
@@ -1979,7 +2126,6 @@ async function handleRequest(request) {
                 speedTestRunning = false;
             }
 
-            // ==================== DNS 测试 ====================
             let dnsTestRunning = false;
             async function runDnsTest() {
                 if (dnsTestRunning) return;
@@ -2019,7 +2165,6 @@ async function handleRequest(request) {
                 dnsTestRunning = false;
             }
 
-            // ==================== 生成报告 ====================
             function generateReportText() {
                 const t = i18n[currentLang];
                 const now = new Date().toLocaleString('zh-CN');
@@ -2069,7 +2214,6 @@ async function handleRequest(request) {
 \`;
             }
             
-            // ==================== 复制报告 ====================
             async function copyReport() {
                 const text = generateReportText();
                 try {
@@ -2087,7 +2231,6 @@ async function handleRequest(request) {
                 }
             }
 
-            // ==================== 初始化 ====================
             function init() {
                 minRtt = Infinity;
                 maxRtt = 0;
@@ -2127,10 +2270,8 @@ async function handleRequest(request) {
     headers: {
       'content-type': 'text/html;charset=UTF-8',
       'cache-control': 'no-cache, no-store, must-revalidate',
-      'x-content-type-options': 'nosniff',
-      'x-frame-options': 'DENY',
-      'x-xss-protection': '1; mode=block',
-      'referrer-policy': 'strict-origin-when-cross-origin',
+      'content-security-policy': cspHeader,
+      ...SECURITY_HEADERS,
       'server-timing': `worker;dur=${workerDuration}`
     }
   });
