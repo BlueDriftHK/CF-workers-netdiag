@@ -1,7 +1,7 @@
 // ============================================================
 // NetSight Pro - 蓝色极速网络诊断工具
 // Cloudflare Worker 完整优化版
-// 版本: 3.1 | 实时延迟监控模块拉长版
+// 版本: 3.2 | 替换 H2 Push 为 HTTP/2 + Early Hints 检测
 // ============================================================
 
 addEventListener('fetch', event => {
@@ -99,16 +99,34 @@ async function handleRequest(request) {
     });
   }
 
-  // ==================== HTTP/2 Server Push 检测端点 ====================
-  if (url.pathname === '/push-test') {
-    const headers = new Headers({
-      'content-type': 'text/plain',
-      'cache-control': 'no-store',
-      'link': '</push-test?pushed=true>; rel=preload; as=fetch'
-    });
+  // ==================== HTTP/2 + Early Hints 检测端点 ====================
+  if (url.pathname === '/http2-test') {
+    const cf = request.cf || {};
+    const protocol = cf.httpProtocol || 'N/A';
+    const isHttp2 = protocol.includes('HTTP/2');
+    const isHttp3 = protocol.toUpperCase().includes('HTTP/3');
+    const acceptEarlyHints = request.headers.get('Accept-Early-Hints');
     
-    const isPushed = url.searchParams.get('pushed') === 'true';
-    return new Response(isPushed ? 'PUSHED' : 'MAIN', { headers });
+    // 检测 ALPN 协商的协议
+    let tlsProtocol = 'N/A';
+    if (cf.tlsVersion) {
+      tlsProtocol = cf.tlsVersion;
+    }
+    
+    return new Response(JSON.stringify({
+      http2: isHttp2,
+      http3: isHttp3,
+      protocol: protocol,
+      tlsVersion: tlsProtocol,
+      earlyHints: acceptEarlyHints === 'early-hints',
+      supportsEarlyHints: acceptEarlyHints !== null
+    }), {
+      headers: {
+        'content-type': 'application/json',
+        'cache-control': 'no-store',
+        'access-control-allow-origin': '*'
+      }
+    });
   }
 
   // ==================== 多文件并发下载测试 ====================
@@ -1128,8 +1146,8 @@ async function handleRequest(request) {
                         <span class="info-value" id="compress-val">---</span>
                     </div>
                     <div class="info-row">
-                        <span class="info-label"><i class="fas fa-rocket"></i> <span id="t-push-label">H2 推送</span></span>
-                        <span class="info-value" id="push-val">---</span>
+                        <span class="info-label"><i class="fas fa-rocket"></i> <span id="t-http2-label">HTTP/2 状态</span></span>
+                        <span class="info-value" id="http2-val">检测中...</span>
                     </div>
                     <div class="info-row">
                         <span class="info-label"><i class="fas fa-robot"></i> <span id="t-bot-label">机器人评分</span></span>
@@ -1255,7 +1273,8 @@ async function handleRequest(request) {
                     speedTesting: 'Testing bandwidth...', cpuTesting: 'CPU benchmark...',
                     wsTesting: 'WebSocket latency...', concurrentTesting: 'Concurrency test...',
                     streamTesting: 'Stream throughput...', compressLabel: 'Compression',
-                    pushLabel: 'H2 Push', lossResult: 'Loss'
+                    http2Label: 'HTTP/2', lossResult: 'Loss', http2Enabled: 'HTTP/2 Enabled',
+                    http2Disabled: 'HTTP/1.1', earlyHints: 'Early Hints'
                 },
                 'zh-CN': { 
                     sec: '安全与协议', geo: '边缘节点位置', userGeo: '真实 IP 位置',
@@ -1271,7 +1290,8 @@ async function handleRequest(request) {
                     speedTesting: '正在测速...', cpuTesting: 'CPU 基准测试...',
                     wsTesting: 'WebSocket 延迟测试...', concurrentTesting: '并发测试中...',
                     streamTesting: '流式吞吐量测试...', compressLabel: '压缩算法',
-                    pushLabel: 'H2 推送', lossResult: '丢包率'
+                    http2Label: 'HTTP/2 状态', lossResult: '丢包率', http2Enabled: 'HTTP/2 已启用',
+                    http2Disabled: 'HTTP/1.1', earlyHints: 'Early Hints'
                 },
                 'zh-TW': { 
                     sec: '安全與協議', geo: '邊緣節點位置', userGeo: '真實 IP 位置',
@@ -1287,7 +1307,8 @@ async function handleRequest(request) {
                     speedTesting: '正在測速...', cpuTesting: 'CPU 基準測試...',
                     wsTesting: 'WebSocket 延遲測試...', concurrentTesting: '併發測試中...',
                     streamTesting: '串流吞吐量測試...', compressLabel: '壓縮演算法',
-                    pushLabel: 'H2 推送', lossResult: '丟包率'
+                    http2Label: 'HTTP/2 狀態', lossResult: '丟包率', http2Enabled: 'HTTP/2 已啟用',
+                    http2Disabled: 'HTTP/1.1', earlyHints: 'Early Hints'
                 }
             };
             
@@ -1317,7 +1338,7 @@ async function handleRequest(request) {
                 jitterVal: document.getElementById('jitter-val'), protoVal: document.getElementById('proto-val'),
                 userGeoInfo: document.getElementById('user-geo-info'), echVal: document.getElementById('ech-val'),
                 botScoreVal: document.getElementById('bot-score-val'), compressVal: document.getElementById('compress-val'),
-                pushVal: document.getElementById('push-val'), lossBtn: document.getElementById('btn-loss-test'),
+                http2Val: document.getElementById('http2-val'), lossBtn: document.getElementById('btn-loss-test'),
                 lossResult: document.getElementById('loss-result'), speedBtn: document.getElementById('btn-speed-test'),
                 speedResult: document.getElementById('speed-result'), dnsBtn: document.getElementById('btn-dns-test'),
                 dnsResult: document.getElementById('dns-result'), cpuBtn: document.getElementById('btn-cpu-test'),
@@ -1397,7 +1418,7 @@ async function handleRequest(request) {
                     't-speed-btn': t.speedBtn, 't-dns-btn': t.dnsBtn,
                     't-cpu-btn': t.cpuBtn, 't-ws-btn': t.wsBtn,
                     't-concurrent-btn': t.concurrentBtn, 't-stream-btn': t.streamBtn,
-                    't-compress-label': t.compressLabel, 't-push-label': t.pushLabel
+                    't-compress-label': t.compressLabel, 't-http2-label': t.http2Label
                 };
                 Object.entries(textIds).forEach(([id, text]) => {
                     const el = document.getElementById(id);
@@ -1612,6 +1633,35 @@ async function handleRequest(request) {
                     updateQuality(999);
                 }
                 setTimeout(testRtt, 2000);
+            }
+            
+            // ==================== HTTP/2 + Early Hints 检测 ====================
+            async function testHttp2() {
+                if (!elements.http2Val) return;
+                const t = i18n[currentLang];
+                try {
+                    const res = await fetch('/http2-test');
+                    const data = await res.json();
+                    
+                    if (data.http2 || data.http3) {
+                        let badgeHtml = '';
+                        if (data.http3) {
+                            badgeHtml = '<span class="badge badge-success"><i class="fas fa-check"></i> HTTP/3 (QUIC)</span>';
+                        } else if (data.http2) {
+                            badgeHtml = '<span class="badge badge-success"><i class="fas fa-check"></i> ' + t.http2Enabled + '</span>';
+                        }
+                        
+                        if (data.earlyHints) {
+                            badgeHtml += ' <span class="badge badge-info"><i class="fas fa-rocket"></i> ' + t.earlyHints + '</span>';
+                        }
+                        
+                        elements.http2Val.innerHTML = badgeHtml;
+                    } else {
+                        elements.http2Val.innerHTML = '<span class="badge badge-warning"><i class="fas fa-exclamation-triangle"></i> ' + t.http2Disabled + '</span>';
+                    }
+                } catch (e) {
+                    elements.http2Val.innerHTML = '<span class="badge">N/A</span>';
+                }
             }
             
             // ==================== 真实 IP 位置 ====================
@@ -1866,22 +1916,6 @@ async function handleRequest(request) {
                 streamTestRunning = false;
             }
 
-            // ==================== H2 Push 检测 ====================
-            async function testH2Push() {
-                if (!elements.pushVal) return;
-                try {
-                    const res = await fetch('/push-test');
-                    const text = await res.text();
-                    if (text === 'PUSHED') {
-                        elements.pushVal.innerHTML = '<span class="badge badge-success"><i class="fas fa-check"></i> 已启用</span>';
-                    } else {
-                        elements.pushVal.innerHTML = '<span class="badge badge-danger"><i class="fas fa-times"></i> 未启用</span>';
-                    }
-                } catch (e) {
-                    elements.pushVal.innerHTML = '<span class="badge">N/A</span>';
-                }
-            }
-
             // ==================== 丢包测试 ====================
             let lossTestRunning = false;
             async function runLossTest() {
@@ -1998,6 +2032,7 @@ async function handleRequest(request) {
                 const minRttVal = document.getElementById('min-rtt') ? document.getElementById('min-rtt').textContent : '--';
                 const maxRttVal = document.getElementById('max-rtt') ? document.getElementById('max-rtt').textContent : '--';
                 const clientLocation = BACKEND_DATA.realGeoCity ? BACKEND_DATA.realGeoCity + ', ' + BACKEND_DATA.realGeoCountry : '未知';
+                const http2Status = elements.http2Val ? elements.http2Val.textContent.trim() : '--';
                 
                 return \`【NetSight Pro 极光网络诊断报告】
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -2022,6 +2057,7 @@ async function handleRequest(request) {
    加密套件: \${BACKEND_DATA.tlsCipher}
    ECH: \${BACKEND_DATA.tlsClientHelloLength > 0 ? '已启用' : '未启用'}
    压缩算法: \${BACKEND_DATA.compressionBrotli ? 'Brotli ' : ''}\${BACKEND_DATA.compressionGzip ? 'Gzip' : '无'}
+   HTTP/2 状态: \${http2Status}
    机器人评分: \${BACKEND_DATA.botScore}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📍 位置信息
@@ -2060,7 +2096,7 @@ async function handleRequest(request) {
                 
                 updateUI();
                 updateHardwareInfo();
-                testH2Push();
+                testHttp2();
                 window.addEventListener('resize', resizeCanvas);
                 if (elements.chart && elements.chart.parentElement) {
                     const observer = new ResizeObserver(() => resizeCanvas());
