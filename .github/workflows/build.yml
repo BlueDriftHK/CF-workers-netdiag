@@ -12,9 +12,8 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: subosito/flutter-action@v2
-      # 缓存Flutter依赖，防止pub get超时报错
       - name: Cache Flutter Pub
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.pub-cache
           key: pub-${{ hashFiles('pubspec.yaml') }}
@@ -30,9 +29,8 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: subosito/flutter-action@v2
-      # 缓存pod依赖，避免pod install失败
       - name: Cache Pod
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ios/Pods
           key: pod-${{ hashFiles('ios/Podfile.lock') }}
