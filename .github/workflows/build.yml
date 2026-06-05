@@ -1,19 +1,23 @@
 name: Build APK & IPA(iOS26.5)
 on:
-  workflow_dispatch: # 网页手动一键打包
+  workflow_dispatch:
   push:
     branches: [main]
-# 强制启用Node24，彻底消除版本警告
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  # Android APK编译 ubuntu云端
   build_apk:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - uses: subosito/flutter-action@v2
+      # 缓存Flutter依赖，防止pub get超时报错
+      - name: Cache Flutter Pub
+        uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: pub-${{ hashFiles('pubspec.yaml') }}
       - run: flutter pub get
       - run: flutter build apk --debug
       - uses: actions/upload-artifact@v5
@@ -21,15 +25,19 @@ jobs:
           name: Android_APK
           path: build/app/outputs/apk/debug/*.apk
 
-  # iOS IPA编译 macos云端、最低兼容iOS26.0→26.5
   build_ios:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v5
       - uses: subosito/flutter-action@v2
+      # 缓存pod依赖，避免pod install失败
+      - name: Cache Pod
+        uses: actions/cache@v4
+        with:
+          path: ios/Pods
+          key: pod-${{ hashFiles('ios/Podfile.lock') }}
       - run: flutter pub get
       - run: cd ios && pod install --repo-update
-      # 无签名Debug包，适配iOS26.5全机型
       - run: flutter build ipa --debug --target-platform=ios-arm64
       - uses: actions/upload-artifact@v5
         with:
