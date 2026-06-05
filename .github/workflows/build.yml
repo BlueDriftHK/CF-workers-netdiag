@@ -1,0 +1,37 @@
+name: Build APK & IPA(iOS26.5专用·无本地Mac)
+on:
+  workflow_dispatch: # 网页手动一键启动打包
+  push:
+    branches: [main]
+
+jobs:
+  # Android APK(ubuntu云端，免费无消耗压力)
+  build_apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+      - run: flutter pub get
+      - run: flutter build apk --debug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: APK安装包
+          path: build/app/outputs/apk/debug/*.apk
+
+  # iOS IPA【云端Mac编译，适配iOS26.5，不用自己有Mac】
+  build_ios:
+    runs-on: macos-15 # 固定镜像：预装Xcode26，iOS26 SDK，完美适配26.5系统
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+      # 指定Xcode26编译，适配iOS26
+      - name: Switch Xcode
+        run: sudo xcode-select -s /Applications/Xcode_26.app
+      - run: flutter pub get
+      - run: cd ios && pod install --repo-update
+      # 最低部署iOS26，设备iOS26.5可直接安装，debug免签名
+      - run: flutter build ipa --debug --target-platform=ios-arm64 --ios-bundle-architecture=arm64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: IPA-iOS26.5
+          path: build/ios/ipa/*.ipa
