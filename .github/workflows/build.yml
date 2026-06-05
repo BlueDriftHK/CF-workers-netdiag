@@ -12,11 +12,6 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: subosito/flutter-action@v2
-      - name: Cache Flutter Pub
-        uses: actions/cache@v5
-        with:
-          path: ~/.pub-cache
-          key: pub-${{ hashFiles('pubspec.yaml') }}
       - run: flutter pub get
       - run: flutter build apk --debug
       - uses: actions/upload-artifact@v5
@@ -29,11 +24,6 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: subosito/flutter-action@v2
-      - name: Cache Pod
-        uses: actions/cache@v5
-        with:
-          path: ios/Pods
-          key: pod-${{ hashFiles('ios/Podfile.lock') }}
       - run: flutter pub get
       - run: cd ios && pod install --repo-update
       - run: flutter build ipa --debug --target-platform=ios-arm64
