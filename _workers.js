@@ -1,13 +1,16 @@
 // ============================================================
 // NetSight Pro - 蓝色极速网络诊断工具
 // Cloudflare Worker 完整优化版
-// 版本: 3.3 | 修复所有已知问题 + 性能增强
+// 版本: 3.5 | 修复全局作用域异步操作问题
 // ============================================================
 
 // ==================== 常量定义 ====================
 const CORS_HEADERS = {
   'access-control-allow-origin': '*',
-  'cache-control': 'no-store'
+  'access-control-allow-methods': 'GET, HEAD, OPTIONS',
+  'access-control-allow-headers': 'Content-Type',
+  'cache-control': 'no-store',
+  'vary': 'Origin'
 };
 
 const SECURITY_HEADERS = {
@@ -21,6 +24,22 @@ const SECURITY_HEADERS = {
 // 简单的限流实现
 const rateLimit = new Map();
 
+// 注意：清理函数将在 fetch 事件中按需调用，而不是使用 setInterval
+function cleanupRateLimit() {
+  const now = Date.now();
+  let cleanedCount = 0;
+  for (const [ip, timestamps] of rateLimit.entries()) {
+    const valid = timestamps.filter(t => now - t < 60000);
+    if (valid.length === 0) {
+      rateLimit.delete(ip);
+      cleanedCount++;
+    } else {
+      rateLimit.set(ip, valid);
+    }
+  }
+  return cleanedCount;
+}
+
 function isRateLimited(ip, maxRequests = 60, windowMs = 60000) {
   const now = Date.now();
   const requests = rateLimit.get(ip) || [];
@@ -31,16 +50,9 @@ function isRateLimited(ip, maxRequests = 60, windowMs = 60000) {
   recent.push(now);
   rateLimit.set(ip, recent);
   
-  // 清理过期记录
-  if (rateLimit.size > 1000) {
-    for (const [key, timestamps] of rateLimit.entries()) {
-      const valid = timestamps.filter(t => now - t < windowMs);
-      if (valid.length === 0) {
-        rateLimit.delete(key);
-      } else {
-        rateLimit.set(key, valid);
-      }
-    }
+  // 每 100 次请求清理一次，而不是使用 setInterval
+  if (rateLimit.size > 0 && Math.random() < 0.01) {
+    cleanupRateLimit();
   }
   
   return false;
@@ -57,7 +69,7 @@ function escapeForJS(str) {
     .replace(/\t/g, '\\t');
 }
 
-// 并发限制器
+// 修复后的并发限制器
 function pLimit(concurrency) {
   const queue = [];
   let activeCount = 0;
@@ -65,32 +77,56 @@ function pLimit(concurrency) {
   const next = () => {
     activeCount--;
     if (queue.length > 0) {
-      queue.shift()();
+      const nextFn = queue.shift();
+      if (nextFn) nextFn();
     }
   };
   
-  const run = async (fn, resolve) => {
+  const run = async (fn, resolve, reject) => {
     activeCount++;
-    const result = await fn();
-    resolve(result);
-    next();
-  };
-  
-  const enqueue = (fn, resolve) => {
-    queue.push(() => run(fn, resolve));
-    if (activeCount < concurrency && queue.length > 0) {
-      queue.shift()();
+    try {
+      const result = await fn();
+      resolve(result);
+    } catch (error) {
+      reject(error);
+    } finally {
+      next();
     }
   };
   
-  return (fn) => new Promise((resolve) => {
-    enqueue(fn, resolve);
+  const enqueue = (fn, resolve, reject) => {
+    queue.push(() => run(fn, resolve, reject));
+    if (activeCount < concurrency && queue.length > 0) {
+      const nextFn = queue.shift();
+      if (nextFn) nextFn();
+    }
+  };
+  
+  return (fn) => new Promise((resolve, reject) => {
+    enqueue(fn, resolve, reject);
   });
 }
 
 addEventListener('fetch', event => {
   event.respondWith(handleRequest(event));
 });
+
+// 处理 OPTIONS 预检请求
+function handleOptions(request) {
+  const origin = request.headers.get('Origin');
+  const headers = {
+    ...CORS_HEADERS,
+    'access-control-max-age': '86400',
+    ...SECURITY_HEADERS
+  };
+  if (origin) {
+    headers['access-control-allow-origin'] = origin;
+  }
+  return new Response(null, {
+    status: 204,
+    headers
+  });
+}
 
 async function handleRequest(event) {
   const request = event.request;
@@ -99,6 +135,11 @@ async function handleRequest(event) {
   const clientIp = request.headers.get('cf-connecting-ip') || 
                    request.headers.get('x-forwarded-for') || 
                    'unknown';
+  
+  // 处理 OPTIONS 预检请求
+  if (request.method === 'OPTIONS') {
+    return handleOptions(request);
+  }
   
   // 限流检查（跳过静态资源和主页面）
   if (!url.pathname.startsWith('/static/') && url.pathname !== '/') {
@@ -123,7 +164,7 @@ async function handleRequest(event) {
     return new Response(JSON.stringify({
       status: 'ok',
       timestamp: Date.now(),
-      version: '3.3',
+      version: '3.5',
       uptime: performance.timeOrigin ? Date.now() - performance.timeOrigin : 'unknown'
     }), {
       headers: {
@@ -139,7 +180,6 @@ async function handleRequest(event) {
     const cachedResponse = await cache.match(cacheKey);
     if (cachedResponse) return cachedResponse;
     
-    // 确定内容类型
     let contentType = 'text/plain';
     if (url.pathname.endsWith('.css')) contentType = 'text/css';
     else if (url.pathname.endsWith('.js')) contentType = 'application/javascript';
@@ -153,12 +193,11 @@ async function handleRequest(event) {
         const response = new Response(kvValue, {
           headers: {
             'content-type': contentType,
-            'cache-control': 'public, max-age=86400', // 24小时
-            'cdn-cache-control': 'public, max-age=604800', // CDN 7天
+            'cache-control': 'public, max-age=86400',
+            'cdn-cache-control': 'public, max-age=604800',
             ...SECURITY_HEADERS
           }
         });
-        // 注意：这里需要传入 event 对象，但已在闭包中
         event.waitUntil(cache.put(cacheKey, response.clone()));
         return response;
       }
@@ -169,7 +208,7 @@ async function handleRequest(event) {
   
   // ==================== 速度测试端点 ====================
   if (url.pathname === '/speedtest') {
-    const size = Math.min(parseInt(url.searchParams.get('size')) || 102400, 5242880); // 最大 5MB
+    const size = Math.min(parseInt(url.searchParams.get('size')) || 102400, 5242880);
     const data = new Uint8Array(size);
     crypto.getRandomValues(data);
     return new Response(data, {
@@ -204,7 +243,7 @@ async function handleRequest(event) {
     });
   }
   
-  // ==================== WebSocket 测试端点（增强版） ====================
+  // ==================== WebSocket 测试端点 ====================
   if (url.pathname === '/ws-test') {
     const upgradeHeader = request.headers.get('Upgrade');
     if (!upgradeHeader || upgradeHeader !== 'websocket') {
@@ -217,47 +256,84 @@ async function handleRequest(event) {
     server.accept();
     
     let pingInterval;
+    let heartbeatInterval;
     let isAlive = true;
+    let closed = false;
+    
+    const cleanup = () => {
+      if (closed) return;
+      closed = true;
+      if (pingInterval) {
+        clearInterval(pingInterval);
+        pingInterval = null;
+      }
+      if (heartbeatInterval) {
+        clearInterval(heartbeatInterval);
+        heartbeatInterval = null;
+      }
+    };
     
     // 心跳保持
     const startHeartbeat = () => {
+      // 发送 ping 的间隔
       pingInterval = setInterval(() => {
-        if (server.readyState === 1 && isAlive) {
-          try {
-            server.send(JSON.stringify({ type: 'ping', timestamp: Date.now() }));
-          } catch (e) {
-            clearInterval(pingInterval);
-          }
-        } else {
-          clearInterval(pingInterval);
+        if (closed || server.readyState !== 1) {
+          cleanup();
+          return;
+        }
+        try {
+          server.send(JSON.stringify({ type: 'ping', timestamp: Date.now() }));
+        } catch (e) {
+          cleanup();
         }
       }, 30000);
+      
+      // 心跳超时检测
+      heartbeatInterval = setInterval(() => {
+        if (closed) {
+          cleanup();
+          return;
+        }
+        if (!isAlive && server.readyState === 1) {
+          try {
+            server.close(1011, '心跳超时');
+          } catch (e) {}
+          cleanup();
+        }
+        isAlive = false;
+      }, 35000);
     };
     
     server.addEventListener('message', event => {
+      if (closed) return;
       try {
         const data = JSON.parse(event.data);
         if (data.type === 'ping') {
-          server.send(JSON.stringify({ 
-            type: 'pong', 
-            timestamp: Date.now(),
-            echoTime: data.timestamp
-          }));
           isAlive = true;
+          if (server.readyState === 1) {
+            server.send(JSON.stringify({ 
+              type: 'pong', 
+              timestamp: Date.now(),
+              echoTime: data.timestamp
+            }));
+          }
         } else if (data.type === 'close') {
           server.close(1000, 'Client requested close');
+          cleanup();
         }
       } catch (e) {
-        server.send(JSON.stringify({ type: 'error', message: '无效消息格式' }));
+        if (server.readyState === 1) {
+          server.send(JSON.stringify({ type: 'error', message: '无效消息格式' }));
+        }
       }
     });
     
     server.addEventListener('close', () => {
-      if (pingInterval) clearInterval(pingInterval);
+      cleanup();
     });
     
     server.addEventListener('error', () => {
-      if (pingInterval) clearInterval(pingInterval);
+      cleanup();
     });
     
     startHeartbeat();
@@ -298,12 +374,12 @@ async function handleRequest(event) {
     });
   }
   
-  // ==================== 多文件并发下载测试（优化版） ====================
+  // ==================== 多文件并发下载测试 ====================
   if (url.pathname === '/concurrent-test') {
     const count = Math.min(parseInt(url.searchParams.get('count')) || 4, 16);
     const size = Math.min(parseInt(url.searchParams.get('size')) || 1024, 65536);
     
-    const limit = pLimit(4); // 限制并发数为4
+    const limit = pLimit(4);
     const promises = [];
     
     for (let i = 0; i < count; i++) {
@@ -312,7 +388,6 @@ async function handleRequest(event) {
           const start = Date.now();
           const data = new Uint8Array(size);
           crypto.getRandomValues(data);
-          // 模拟轻微处理延迟
           await new Promise(resolve => setTimeout(resolve, 0));
           return {
             index: i,
@@ -333,20 +408,22 @@ async function handleRequest(event) {
     });
   }
   
-  // ==================== 大文件流式传输测试（优化版） ====================
+  // ==================== 大文件流式传输测试 ====================
   if (url.pathname === '/stream-test') {
-    const size = Math.min(parseInt(url.searchParams.get('size')) || 1048576, 10485760); // 最大 10MB
+    const size = Math.min(parseInt(url.searchParams.get('size')) || 1048576, 10485760);
     const chunkSize = 65536;
     
     let controllerRef;
+    let cancelled = false;
+    
     const stream = new ReadableStream({
       start(controller) {
         controllerRef = controller;
         let sent = 0;
         
         const pushChunk = () => {
-          if (sent >= size) {
-            controller.close();
+          if (cancelled || sent >= size) {
+            if (!cancelled) controller.close();
             return;
           }
           
@@ -359,14 +436,27 @@ async function handleRequest(event) {
             controller.enqueue(chunk);
             sent += currentChunk;
             
-            // 使用 promise 微任务代替 setTimeout，避免背压问题
             if (sent < size) {
-              Promise.resolve().then(pushChunk);
+              // 检查背压
+              if (controller.desiredSize > 0) {
+                queueMicrotask(pushChunk);
+              } else {
+                // 等待背压解除
+                const waitForDrain = () => {
+                  if (cancelled) return;
+                  if (controller.desiredSize > 0) {
+                    pushChunk();
+                  } else {
+                    setTimeout(waitForDrain, 10);
+                  }
+                };
+                waitForDrain();
+              }
             } else {
               controller.close();
             }
           } catch (e) {
-            controller.error(e);
+            if (!cancelled) controller.error(e);
           }
         };
         
@@ -374,7 +464,7 @@ async function handleRequest(event) {
       },
       
       cancel() {
-        // 处理取消操作
+        cancelled = true;
         if (controllerRef) {
           try {
             controllerRef.close();
@@ -437,7 +527,7 @@ async function handleRequest(event) {
   
   const workerDuration = Date.now() - workerStart;
   
-  // 服务端直接查询真实客户端 IP 的地理位置（带降级）
+  // 服务端直接查询真实客户端 IP 的地理位置
   let realGeoData = null;
   if (clientIp && clientIp !== 'unknown') {
     try {
@@ -448,11 +538,10 @@ async function handleRequest(event) {
         realGeoData = await geoRes.json();
       }
     } catch (e) {
-      // 静默失败，使用 Cloudflare 数据作为降级
+      // 静默失败
     }
   }
   
-  // 降级方案：使用 Cloudflare 的数据
   const realGeo = realGeoData || {};
   const realGeoJS = {
     city: escapeForJS(realGeo.city || cf.city || ''),
@@ -465,7 +554,6 @@ async function handleRequest(event) {
     ip: escapeForJS(realGeo.query || clientIp)
   };
   
-  // 检测接受的编码格式
   const acceptEncoding = request.headers.get('accept-encoding') || '';
   const supportsBrotli = acceptEncoding.includes('br');
   const compressionInfo = {
@@ -475,8 +563,9 @@ async function handleRequest(event) {
     zstd: acceptEncoding.includes('zstd')
   };
   
-  // CSP 头
-  const cspHeader = "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://ipapi.co https://api4.ipify.org https://api6.ipify.org https://ipv4.icanhazip.com https://ipv6.icanhazip.com https://ip4.seeip.org; img-src 'self' data:;";
+  // 生成随机 nonce 用于 CSP
+  const nonce = crypto.randomUUID();
+  const cspHeader = `default-src 'self'; script-src 'self' 'nonce-${nonce}' https://cdnjs.cloudflare.com https://fonts.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://ipapi.co https://api4.ipify.org https://api6.ipify.org https://ipv4.icanhazip.com https://ipv6.icanhazip.com https://ip4.seeip.org; img-src 'self' data:;`;
   
   const html = `<!DOCTYPE html>
 <html lang="zh-CN">
@@ -1420,7 +1509,7 @@ async function handleRequest(event) {
         </div>
     </div>
 
-    <script>
+    <script nonce="${nonce}">
         (function(){
             const i18n = {
                 'en': { 
@@ -1521,6 +1610,7 @@ async function handleRequest(event) {
             let sampleCount = 0;
             let minRtt = Infinity;
             let maxRtt = 0;
+            let rttTestRunning = true;
             
             function isDataCenter() {
                 const patterns = /data center|hosting|cloud|akamai|google|amazon|microsoft|aliyun|tencent|fastly|cloudflare|incapsula|leaseweb|ovh|digitalocean|vultr|linode/i;
@@ -1662,10 +1752,10 @@ async function handleRequest(event) {
                 ctx.strokeStyle = '#06b6d4';
                 ctx.lineWidth = 2.5;
                 const stepX = canvas.width / (MAX_RTT_POINTS - 1);
-                const maxRtt = Math.max(...rttData, 100);
+                const maxRttVal = Math.max(...rttData, 100);
                 rttData.forEach((value, index) => {
                     const x = index * stepX;
-                    const y = canvas.height - (Math.min(value, maxRtt) / maxRtt) * (canvas.height - 20) - 10;
+                    const y = canvas.height - (Math.min(value, maxRttVal) / maxRttVal) * (canvas.height - 20) - 10;
                     if (index === 0) ctx.moveTo(x, y);
                     else ctx.lineTo(x, y);
                 });
@@ -1753,6 +1843,7 @@ async function handleRequest(event) {
             }
             
             async function testRtt() {
+                if (!rttTestRunning) return;
                 const start = performance.now();
                 try {
                     await fetchWithTimeout(window.location.href + '?_=' + Date.now(), 
