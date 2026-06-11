@@ -294,6 +294,7 @@
         canvas {
             width: 100%;
             height: 200px;
+            display: block;
         }
 
         .metrics-grid {
@@ -331,6 +332,14 @@
             margin-top: 12px;
         }
 
+        .speed-item {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.08), rgba(6, 182, 212, 0.04));
+            border-radius: 16px;
+            padding: 10px 18px;
+            font-size: 12px;
+            border-left: 2px solid var(--cyan);
+        }
+
         .badge {
             padding: 4px 12px;
             border-radius: 40px;
@@ -346,10 +355,10 @@
         .badge-info { background: rgba(6, 182, 212, 0.12); color: #22d3ee; border: 1px solid rgba(6, 182, 212, 0.25); }
         .badge-danger { background: rgba(239, 68, 68, 0.12); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.25); }
 
-        .quality-excellent { background: rgba(16, 185, 129, 0.2); color: #34d399; padding: 4px 12px; border-radius: 20px; }
-        .quality-good { background: rgba(6, 182, 212, 0.2); color: #22d3ee; padding: 4px 12px; border-radius: 20px; }
-        .quality-poor { background: rgba(245, 158, 11, 0.2); color: #fbbf24; padding: 4px 12px; border-radius: 20px; }
-        .quality-bad { background: rgba(239, 68, 68, 0.2); color: #f87171; padding: 4px 12px; border-radius: 20px; }
+        .quality-excellent { background: rgba(16, 185, 129, 0.2); color: #34d399; padding: 4px 12px; border-radius: 20px; margin-left: 8px; }
+        .quality-good { background: rgba(6, 182, 212, 0.2); color: #22d3ee; padding: 4px 12px; border-radius: 20px; margin-left: 8px; }
+        .quality-poor { background: rgba(245, 158, 11, 0.2); color: #fbbf24; padding: 4px 12px; border-radius: 20px; margin-left: 8px; }
+        .quality-bad { background: rgba(239, 68, 68, 0.2); color: #f87171; padding: 4px 12px; border-radius: 20px; margin-left: 8px; }
 
         @keyframes spin {
             from { transform: rotate(0deg); }
@@ -465,7 +474,7 @@
 
                 <!-- 实时图表 -->
                 <div class="chart-container">
-                    <canvas id="rtt-chart"></canvas>
+                    <canvas id="rtt-chart" width="800" height="200"></canvas>
                 </div>
 
                 <!-- 质量指标 -->
@@ -590,7 +599,6 @@
             </div>
             <div class="card-body">
                 <div style="max-height: 400px; overflow-y: auto;">
-                    <!-- v3.3.0 -->
                     <div style="padding: 16px 0; border-bottom: 1px solid rgba(59, 130, 246, 0.1);">
                         <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap;">
                             <span style="font-size: 16px; font-weight: 700; color: var(--cyan);">v3.3.0</span>
@@ -599,29 +607,22 @@
                         </div>
                         <ul style="list-style: none; padding-left: 0;">
                             <li style="margin-bottom: 8px; font-size: 13px; color: rgba(255,255,255,0.7); padding-left: 20px; position: relative;">
-                                <span style="position: absolute; left: 0; color: var(--cyan);">▹</span>
-                                <span class="badge badge-info" style="margin-right: 8px;">新增</span>健康检查端点 /health
+                                <span style="position: absolute; left: 0; color: var(--cyan);">▹</span>健康检查端点 /health
                             </li>
                             <li style="margin-bottom: 8px; font-size: 13px; color: rgba(255,255,255,0.7); padding-left: 20px; position: relative;">
-                                <span style="position: absolute; left: 0; color: var(--cyan);">▹</span>
-                                <span class="badge badge-info" style="margin-right: 8px;">新增</span>请求限流保护 - IP 级别 60次/分钟
+                                <span style="position: absolute; left: 0; color: var(--cyan);">▹</span>请求限流保护 - IP 级别 60次/分钟
                             </li>
                             <li style="margin-bottom: 8px; font-size: 13px; color: rgba(255,255,255,0.7); padding-left: 20px; position: relative;">
-                                <span style="position: absolute; left: 0; color: var(--cyan);">▹</span>
-                                <span class="badge badge-info" style="margin-right: 8px;">新增</span>完整安全响应头（CSP、HSTS）
+                                <span style="position: absolute; left: 0; color: var(--cyan);">▹</span>完整安全响应头（CSP、HSTS）
                             </li>
                             <li style="margin-bottom: 8px; font-size: 13px; color: rgba(255,255,255,0.7); padding-left: 20px; position: relative;">
-                                <span style="position: absolute; left: 0; color: var(--cyan);">▹</span>
-                                <span class="badge badge-info" style="margin-right: 8px;">新增</span>WebSocket 心跳机制
+                                <span style="position: absolute; left: 0; color: var(--cyan);">▹</span>WebSocket 心跳机制
                             </li>
                             <li style="margin-bottom: 8px; font-size: 13px; color: rgba(255,255,255,0.7); padding-left: 20px; position: relative;">
-                                <span style="position: absolute; left: 0; color: var(--cyan);">▹</span>
-                                <span class="badge badge-warning" style="margin-right: 8px;">优化</span>并发测试增加 4 并发限制器
+                                <span style="position: absolute; left: 0; color: var(--cyan);">▹</span>并发测试增加 4 并发限制器
                             </li>
                         </ul>
                     </div>
-
-                    <!-- v3.2.0 -->
                     <div style="padding: 16px 0; border-bottom: 1px solid rgba(59, 130, 246, 0.1);">
                         <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
                             <span style="font-size: 16px; font-weight: 700; color: var(--cyan);">v3.2.0</span>
@@ -637,14 +638,9 @@
                             <li style="margin-bottom: 8px; font-size: 13px; color: rgba(255,255,255,0.7); padding-left: 20px; position: relative;">
                                 <span style="position: absolute; left: 0; color: var(--cyan);">▹</span>新增最低/最高RTT统计
                             </li>
-                            <li style="margin-bottom: 8px; font-size: 13px; color: rgba(255,255,255,0.7); padding-left: 20px; position: relative;">
-                                <span style="position: absolute; left: 0; color: var(--cyan);">▹</span>真实IP地理位置查询
-                            </li>
                         </ul>
                     </div>
-
-                    <!-- v3.1.0 -->
-                    <div style="padding: 16px 0; border-bottom: 1px solid rgba(59, 130, 246, 0.1);">
+                    <div style="padding: 16px 0;">
                         <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
                             <span style="font-size: 16px; font-weight: 700; color: var(--cyan);">v3.1.0</span>
                             <span style="font-size: 11px; color: rgba(255,255,255,0.4);">2026-05-15</span>
@@ -655,25 +651,6 @@
                             </li>
                             <li style="margin-bottom: 8px; font-size: 13px; color: rgba(255,255,255,0.7); padding-left: 20px; position: relative;">
                                 <span style="position: absolute; left: 0; color: var(--cyan);">▹</span>Canvas 实时延迟图表绘制
-                            </li>
-                            <li style="margin-bottom: 8px; font-size: 13px; color: rgba(255,255,255,0.7); padding-left: 20px; position: relative;">
-                                <span style="position: absolute; left: 0; color: var(--cyan);">▹</span>安全协议检测增强
-                            </li>
-                        </ul>
-                    </div>
-
-                    <!-- v3.0.0 -->
-                    <div style="padding: 16px 0;">
-                        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
-                            <span style="font-size: 16px; font-weight: 700; color: var(--cyan);">v3.0.0</span>
-                            <span style="font-size: 11px; color: rgba(255,255,255,0.4);">2026-05-10</span>
-                        </div>
-                        <ul style="list-style: none; padding-left: 0;">
-                            <li style="margin-bottom: 8px; font-size: 13px; color: rgba(255,255,255,0.7); padding-left: 20px; position: relative;">
-                                <span style="position: absolute; left: 0; color: var(--cyan);">▹</span>全新蓝色主题UI设计
-                            </li>
-                            <li style="margin-bottom: 8px; font-size: 13px; color: rgba(255,255,255,0.7); padding-left: 20px; position: relative;">
-                                <span style="position: absolute; left: 0; color: var(--cyan);">▹</span>完全重写为 Cloudflare Worker 架构
                             </li>
                         </ul>
                     </div>
@@ -695,31 +672,47 @@
     <script>
         // ==================== 全局变量 ====================
         let rttData = [];
-        let rttInterval = null;
+        let rttTimeout = null;
         let chart = null;
+        let canvas = null;
         let sampleCount = 0;
         let minRtt = Infinity;
         let maxRtt = 0;
         let consecutiveLoss = 0;
+        let lastRttValue = null;
+        let isMonitoring = true;
 
         // ==================== 初始化 ====================
         document.addEventListener('DOMContentLoaded', function() {
-            initChart();
+            initCanvas();
             startRttMonitoring();
+            window.addEventListener('resize', handleResize);
         });
 
-        function initChart() {
-            const canvas = document.getElementById('rtt-chart');
+        function initCanvas() {
+            canvas = document.getElementById('rtt-chart');
             if (!canvas) return;
-            canvas.width = canvas.parentElement?.clientWidth || 800;
+            
+            const container = canvas.parentElement;
+            const rect = container.getBoundingClientRect();
+            canvas.width = rect.width || 800;
             canvas.height = 200;
+            
             chart = canvas.getContext('2d');
         }
 
+        function handleResize() {
+            if (!canvas || !canvas.parentElement) return;
+            const container = canvas.parentElement;
+            const rect = container.getBoundingClientRect();
+            if (rect.width > 0) {
+                canvas.width = rect.width;
+                drawChart();
+            }
+        }
+
         function drawChart() {
-            if (!chart || rttData.length < 2) return;
-            const canvas = document.getElementById('rtt-chart');
-            if (!canvas) return;
+            if (!chart || !canvas || rttData.length < 2) return;
             
             chart.clearRect(0, 0, canvas.width, canvas.height);
             
@@ -747,16 +740,21 @@
             chart.fill();
         }
 
-        // 模拟真实网络延迟
         function generateDemoRtt() {
-            const baseRtt = 45;
-            const variation = Math.random() * 40 - 20;
-            return Math.max(20, Math.min(200, Math.round(baseRtt + variation)));
+            if (lastRttValue === null) {
+                lastRttValue = 45;
+            }
+            let change = (Math.random() - 0.5) * 15;
+            let newValue = lastRttValue + change;
+            newValue = Math.max(20, Math.min(200, newValue));
+            lastRttValue = newValue;
+            return Math.round(newValue);
         }
 
         async function testRtt() {
+            if (!isMonitoring) return;
+            
             const diff = generateDemoRtt();
-            await new Promise(resolve => setTimeout(resolve, 30));
             
             document.getElementById('live-rtt').textContent = diff;
             
@@ -775,39 +773,54 @@
             if (rttData.length > 0) {
                 const jitter = Math.abs(diff - rttData[rttData.length - 1]);
                 document.getElementById('live-jitter').textContent = jitter;
-                
-                let qualityText = '', qualityClass = '';
-                if (diff < 50) { qualityText = '优秀'; qualityClass = 'quality-excellent'; }
-                else if (diff < 100) { qualityText = '良好'; qualityClass = 'quality-good'; }
-                else if (diff < 150) { qualityText = '一般'; qualityClass = 'quality-good'; }
-                else if (diff < 250) { qualityText = '较差'; qualityClass = 'quality-poor'; }
-                else { qualityText = '极差'; qualityClass = 'quality-bad'; }
-                
-                const qualityEl = document.getElementById('quality-text');
-                if (qualityEl) {
-                    qualityEl.textContent = qualityText;
-                    qualityEl.className = qualityClass;
-                }
+            } else {
+                document.getElementById('live-jitter').textContent = '0';
             }
             
-            consecutiveLoss = 0;
-            document.getElementById('loss-rate').textContent = '0%';
-            document.getElementById('loss-rate').style.color = '#34d399';
+            let qualityText = '', qualityClass = '';
+            if (diff < 50) { qualityText = '优秀'; qualityClass = 'quality-excellent'; }
+            else if (diff < 100) { qualityText = '良好'; qualityClass = 'quality-good'; }
+            else if (diff < 150) { qualityText = '一般'; qualityClass = 'quality-good'; }
+            else if (diff < 250) { qualityText = '较差'; qualityClass = 'quality-poor'; }
+            else { qualityText = '极差'; qualityClass = 'quality-bad'; }
+            
+            const qualityEl = document.getElementById('quality-text');
+            if (qualityEl) {
+                qualityEl.textContent = qualityText;
+                qualityEl.className = qualityClass;
+            }
+            
+            if (Math.random() < 0.05) {
+                consecutiveLoss++;
+                const lossRate = Math.min(100, Math.round((consecutiveLoss / Math.min(sampleCount, 20)) * 100));
+                document.getElementById('loss-rate').textContent = lossRate + '%';
+                document.getElementById('loss-rate').style.color = lossRate === 0 ? '#34d399' : (lossRate < 5 ? '#fbbf24' : '#f87171');
+            } else {
+                consecutiveLoss = 0;
+                document.getElementById('loss-rate').textContent = '0%';
+                document.getElementById('loss-rate').style.color = '#34d399';
+            }
             
             rttData.push(diff);
             if (rttData.length > 40) rttData.shift();
             drawChart();
             
-            setTimeout(testRtt, 2000);
+            rttTimeout = setTimeout(testRtt, 2000);
         }
 
         function startRttMonitoring() {
-            if (rttInterval) clearInterval(rttInterval);
+            if (rttTimeout) clearTimeout(rttTimeout);
+            isMonitoring = true;
             rttData = [];
             sampleCount = 0;
             minRtt = Infinity;
             maxRtt = 0;
             consecutiveLoss = 0;
+            lastRttValue = null;
+            document.getElementById('live-min').textContent = '--';
+            document.getElementById('live-max').textContent = '--';
+            document.getElementById('sample-count').textContent = '0';
+            document.getElementById('live-jitter').textContent = '--';
             testRtt();
         }
 
@@ -816,7 +829,6 @@
             clearAllResults();
         }
 
-        // ==================== 测试函数 ====================
         function showResult(elementId, html, isError = false) {
             const el = document.getElementById(elementId);
             if (el) {
@@ -825,7 +837,7 @@
                 el.style.background = isError ? 'rgba(239,68,68,0.08)' : 'rgba(0,0,0,0.3)';
                 el.style.borderLeftColor = isError ? '#ef4444' : '#06b6d4';
                 setTimeout(() => {
-                    if (el.innerHTML === html) {
+                    if (el.innerHTML === html && el.style.display === 'block') {
                         el.style.display = 'none';
                     }
                 }, 5000);
@@ -834,20 +846,19 @@
 
         function runLossTest() {
             showResult('loss-result', '<span class="loading"></span> 丢包率测试中...');
-            
             setTimeout(() => {
-                const lossPercent = Math.random() > 0.7 ? Math.floor(Math.random() * 15) : 0;
-                if (lossPercent === 0) {
-                    showResult('loss-result', '<i class="fas fa-check-circle"></i> 丢包率: 0% (无丢包)');
+                const hasLoss = Math.random() > 0.7;
+                if (!hasLoss) {
+                    showResult('loss-result', '<i class="fas fa-check-circle"></i> 丢包率测试完成: 0% (无丢包)');
                 } else {
-                    showResult('loss-result', `<i class="fas fa-exclamation-triangle"></i> 丢包率: ${lossPercent}% (模拟数据)`, true);
+                    const lossPercent = Math.floor(Math.random() * 15) + 1;
+                    showResult('loss-result', `<i class="fas fa-exclamation-triangle"></i> 丢包率测试完成: ${lossPercent}% (模拟数据)`, true);
                 }
             }, 1500);
         }
 
         function runSpeedTest() {
             showResult('speed-result', '<span class="loading"></span> 带宽测速中...');
-            
             setTimeout(() => {
                 const results = [
                     { sizeKB: 100, speed: (Math.random() * 50 + 30).toFixed(2) },
@@ -864,7 +875,6 @@
 
         function runDnsTest() {
             showResult('dns-result', '<span class="loading"></span> DNS 解析测试中...');
-            
             setTimeout(() => {
                 const results = [
                     { domain: 'Cloudflare', time: Math.floor(Math.random() * 60 + 20) },
@@ -883,30 +893,27 @@
 
         function runCpuTest() {
             showResult('cpu-result', '<span class="loading"></span> CPU 性能测试中...');
-            
             setTimeout(() => {
                 const opsMs = Math.floor(Math.random() * 80 + 40);
                 const duration = Math.floor(500000 / opsMs);
                 let badgeClass = opsMs > 50 ? 'badge-success' : (opsMs > 20 ? 'badge-warning' : 'badge-danger');
-                showResult('cpu-result', `<i class="fas fa-microchip"></i> CPU 性能 (模拟数据): <strong>${opsMs}</strong> 操作/毫秒 <span class="badge ${badgeClass}">${duration}ms</span>`);
+                showResult('cpu-result', `<i class="fas fa-microchip"></i> CPU 性能测试完成 (模拟数据): <strong>${opsMs}</strong> 操作/毫秒 <span class="badge ${badgeClass}">${duration}ms</span>`);
             }, 1000);
         }
 
         function runWsTest() {
             showResult('ws-result', '<span class="loading"></span> WebSocket 测试中...');
-            
             setTimeout(() => {
                 const avg = Math.floor(Math.random() * 60 + 25);
                 const min = avg - Math.floor(Math.random() * 15);
                 const max = avg + Math.floor(Math.random() * 25);
                 let badgeClass = avg < 50 ? 'badge-success' : (avg < 150 ? 'badge-warning' : 'badge-danger');
-                showResult('ws-result', `<i class="fas fa-bolt"></i> WebSocket 延迟 (模拟数据): <strong>${avg}ms</strong> <span class="badge ${badgeClass}">最小: ${min}ms / 最大: ${max}ms</span>`);
+                showResult('ws-result', `<i class="fas fa-bolt"></i> WebSocket 测试完成 (模拟数据): <strong>${avg}ms</strong> <span class="badge ${badgeClass}">最小: ${min}ms / 最大: ${max}ms</span>`);
             }, 2000);
         }
 
         function runConcurrentTest() {
             showResult('concurrent-result', '<span class="loading"></span> 并发测试中...');
-            
             setTimeout(() => {
                 const results = [
                     { count: 4, avg: Math.floor(Math.random() * 25 + 10) },
@@ -925,14 +932,13 @@
 
         function runStreamTest() {
             showResult('stream-result', '<span class="loading"></span> 流式传输测试中...');
-            
             setTimeout(() => {
                 const results = [
                     { sizeKB: 128, speed: (Math.random() * 40 + 30).toFixed(2) },
                     { sizeKB: 512, speed: (Math.random() * 45 + 35).toFixed(2) },
                     { sizeKB: 2048, speed: (Math.random() * 50 + 40).toFixed(2) }
                 ];
-                let html = '<i class="fas fa-stream"></i> 流式吞吐量 (模拟数据):<br><div class="speed-result">';
+                let html = '<i class="fas fa-stream"></i> 流式传输测试结果 (模拟数据):<br><div class="speed-result">';
                 html += results.map(r => `<div class="speed-item">${r.sizeKB} KB: ${r.speed} Mbps</div>`).join('');
                 html += '</div>';
                 showResult('stream-result', html);
@@ -941,7 +947,6 @@
 
         function runHttp2Test() {
             showResult('http2-result', '<span class="loading"></span> HTTP/2 检测中...');
-            
             setTimeout(() => {
                 let html = '<i class="fas fa-rocket"></i> HTTP/2/3 检测结果 (模拟数据):<br><div class="speed-result">';
                 html += `<div class="speed-item">✅ HTTP/2 已启用</div>`;
@@ -960,14 +965,6 @@
                 if (el) el.style.display = 'none';
             });
         }
-
-        window.addEventListener('resize', () => {
-            const canvas = document.getElementById('rtt-chart');
-            if (canvas) {
-                canvas.width = canvas.parentElement?.clientWidth || 800;
-                drawChart();
-            }
-        });
     </script>
 </body>
 </html>
