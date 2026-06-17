@@ -4,309 +4,1012 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="description" content="NetSight Pro - 部署在 Cloudflare Workers 边缘节点的专业级网络诊断工具">
-    <title>NetSight Pro · 极光诊断 · 真实演示</title>
-    <!-- Font Awesome 6 -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <title>NetSight Pro · 极光诊断</title>
+    <!-- Font Awesome 6 (免费) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Google Font Inter -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
     <style>
         /* ===== 全局重置 & 变量 ===== */
         * { margin:0; padding:0; box-sizing:border-box; }
         :root {
-            --primary: #3b82f6; --primary-dark: #2563eb; --primary-light: #60a5fa;
-            --cyan: #06b6d4; --cyan-dark: #0891b2; --purple: #8b5cf6;
-            --pink: #ec4899; --success: #10b981; --warning: #f59e0b;
-            --bg-dark: #0a0f1a; --bg-card: rgba(15,25,45,0.6);
-            --glass-border: rgba(255,255,255,0.05);
+            --primary: #3b82f6;
+            --primary-dark: #2563eb;
+            --primary-light: #60a5fa;
+            --cyan: #06b6d4;
+            --cyan-dark: #0891b2;
+            --purple: #8b5cf6;
+            --purple-dark: #7c3aed;
+            --pink: #ec4899;
+            --indigo: #6366f1;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --bg-dark: #0a0f1a;
+            --bg-card: rgba(15, 25, 45, 0.6);
+            --bg-card-hover: rgba(25, 40, 65, 0.7);
+            --border-glow: rgba(59, 130, 246, 0.2);
+            --glass-border: rgba(255, 255, 255, 0.05);
             --shadow-sm: 0 4px 20px rgba(0,0,0,0.2);
             --shadow-md: 0 8px 32px rgba(0,0,0,0.3);
+            --shadow-lg: 0 20px 48px rgba(0,0,0,0.4);
+            --shadow-glow: 0 0 20px rgba(59, 130, 246, 0.3);
+            --radius-sm: 12px;
+            --radius-md: 20px;
+            --radius-lg: 28px;
+            --radius-xl: 40px;
+            --radius-full: 9999px;
         }
         body {
-            font-family: 'Inter', -apple-system, sans-serif;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
             background: radial-gradient(ellipse at 20% 30%, #0d1425, #070b14);
-            min-height: 100vh; color: #fff; padding: 20px 24px;
+            min-height: 100vh;
+            color: #fff;
+            position: relative;
+            scroll-behavior: smooth;
             -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            padding: 20px 24px;
         }
-        .container { max-width:1400px; margin:0 auto; position:relative; z-index:1; }
-        /* 玻璃态 */
+        /* 动态渐变背景 */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background:
+                radial-gradient(circle at 20% 30%, rgba(59, 130, 246, 0.12) 0%, transparent 50%),
+                radial-gradient(circle at 85% 60%, rgba(139, 92, 246, 0.10) 0%, transparent 55%),
+                radial-gradient(circle at 40% 80%, rgba(6, 182, 212, 0.08) 0%, transparent 60%),
+                radial-gradient(circle at 70% 20%, rgba(236, 72, 153, 0.06) 0%, transparent 45%);
+            pointer-events: none;
+            z-index: 0;
+            animation: bgFloat 12s ease-in-out infinite alternate;
+        }
+        @keyframes bgFloat {
+            0% { opacity: 0.6; transform: scale(1); }
+            100% { opacity: 1; transform: scale(1.02); }
+        }
+        /* 噪点纹理 */
+        body::after {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='1' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+            pointer-events: none;
+            z-index: 0;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            position: relative;
+            z-index: 1;
+        }
+        /* 滚动条 */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: rgba(255,255,255,0.03); border-radius: 10px; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.25); }
+
+        /* ===== 玻璃态组件 ===== */
         .glass {
-            background: rgba(20,28,38,0.55); backdrop-filter: blur(18px);
-            -webkit-backdrop-filter: blur(18px);
-            border:1px solid rgba(120,140,180,0.2);
-            box-shadow: 0 8px 32px rgba(0,0,0,0.2); border-radius: 32px;
+            background: rgba(20, 28, 38, 0.55);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-radius: var(--radius-lg);
+            border: 1px solid rgba(120, 140, 180, 0.2);
+            box-shadow: var(--shadow-sm);
         }
         .glass-card {
-            background: rgba(20,28,38,0.5); backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
-            border:1px solid rgba(120,140,180,0.15);
-            border-radius: 28px; transition: all 0.25s ease;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+            background: rgba(20, 28, 38, 0.50);
+            backdrop-filter: blur(18px);
+            -webkit-backdrop-filter: blur(18px);
+            border-radius: var(--radius-md);
+            border: 1px solid rgba(120, 140, 180, 0.15);
+            transition: all 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
         }
         .glass-card:hover {
-            transform: translateY(-4px); border-color: rgba(100,120,160,0.3);
-            background: rgba(28,38,52,0.65);
-            box-shadow: 0 16px 40px rgba(0,0,0,0.3);
+            transform: translateY(-6px);
+            border-color: rgba(100, 120, 160, 0.35);
+            background: rgba(28, 38, 52, 0.65);
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.3);
         }
-        /* 导航 */
+        /* ===== 导航栏 ===== */
         .navbar {
-            display: flex; justify-content: space-between; align-items: center;
-            padding: 12px 28px; margin-bottom: 44px; flex-wrap: wrap; gap: 16px;
-            background: rgba(12,18,28,0.6); backdrop-filter: blur(20px);
-            border:1px solid rgba(120,140,180,0.18); border-radius: 60px;
-            position: sticky; top: 16px; z-index: 100;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 28px;
+            background: rgba(12, 18, 28, 0.60);
+            backdrop-filter: blur(22px);
+            -webkit-backdrop-filter: blur(22px);
+            border-radius: var(--radius-full);
+            border: 1px solid rgba(120, 140, 180, 0.18);
+            margin-bottom: 48px;
+            flex-wrap: wrap;
+            gap: 16px;
+            position: sticky;
+            top: 16px;
+            z-index: 100;
+            transition: all 0.4s cubic-bezier(0.2, 0.9, 0.4, 1.1);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
         }
-        .logo { display:flex; align-items:center; gap:12px; }
+        .navbar.scrolled {
+            background: rgba(15, 22, 32, 0.75);
+            backdrop-filter: blur(25px);
+            border-color: rgba(100, 120, 160, 0.25);
+        }
+        .logo { display: flex; align-items: center; gap: 12px; }
         .logo-icon {
-            width:48px; height:48px;
-            background: linear-gradient(135deg, #3b82f6, #06b6d4, #8b5cf6);
-            border-radius: 18px; display:flex; align-items:center; justify-content:center;
-            font-size:24px; box-shadow: 0 4px 16px rgba(59,130,246,0.3);
+            width: 48px; height: 48px;
+            background: linear-gradient(135deg, var(--primary), var(--cyan), var(--purple));
+            border-radius: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            color: #fff;
+            box-shadow: 0 4px 20px rgba(59, 130, 246, 0.3);
+            animation: floatIcon 4s ease-in-out infinite;
+            flex-shrink: 0;
         }
-        .logo h1 { font-size:24px; font-weight:700; background:linear-gradient(135deg,#fff,#06b6d4,#8b5cf6); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
-        .logo p { font-size:11px; color:rgba(255,255,255,0.5); font-weight:500; }
-        .nav-links { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+        @keyframes floatIcon {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-5px); }
+        }
+        .logo h1 {
+            font-size: 24px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #fff, var(--cyan), var(--purple));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: -0.3px;
+        }
+        .logo p {
+            font-size: 11px;
+            color: rgba(255,255,255,0.5);
+            font-weight: 500;
+        }
+        .nav-links {
+            display: flex;
+            gap: 4px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
         .nav-link {
-            padding:8px 18px; border-radius:40px; color:rgba(255,255,255,0.7);
-            text-decoration:none; font-size:14px; font-weight:500; transition: all 0.2s;
+            padding: 8px 18px;
+            border-radius: var(--radius-full);
+            color: rgba(255,255,255,0.75);
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.3s cubic-bezier(0.2, 0.9, 0.4, 1.1);
         }
-        .nav-link:hover { background:rgba(255,255,255,0.08); color:#fff; }
+        .nav-link:hover {
+            background: rgba(255,255,255,0.08);
+            color: #fff;
+            transform: translateY(-1px);
+        }
         .nav-link.primary {
-            background: linear-gradient(135deg, #3b82f6, #06b6d4);
-            color:#fff; box-shadow:0 2px 12px rgba(59,130,246,0.25);
+            background: linear-gradient(135deg, var(--primary), var(--cyan));
+            color: #fff;
+            box-shadow: 0 2px 12px rgba(59, 130, 246, 0.25);
         }
-        .nav-link.primary:hover { transform:translateY(-2px); box-shadow:0 6px 20px rgba(59,130,246,0.35); }
+        .nav-link.primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(59, 130, 246, 0.35);
+        }
         .nav-link .badge-demo {
-            background: rgba(236,72,153,0.2); color: #ec4899;
-            font-size: 10px; padding: 2px 8px; border-radius: 9999px; margin-left: 4px;
+            background: rgba(236, 72, 153, 0.2);
+            color: var(--pink);
+            font-size: 10px;
+            padding: 2px 8px;
+            border-radius: var(--radius-full);
+            margin-left: 4px;
         }
-        /* hero */
+        /* ===== Hero ===== */
         .hero {
-            text-align:center; padding:60px 40px; margin-bottom:48px;
-            background: rgba(24,34,50,0.45); backdrop-filter: blur(24px);
-            border-radius: 48px; border:1px solid rgba(180,200,240,0.12);
-            position:relative; overflow:hidden;
+            text-align: center;
+            padding: 60px 40px;
+            margin-bottom: 48px;
+            background: rgba(24, 34, 50, 0.45);
+            backdrop-filter: blur(28px);
+            -webkit-backdrop-filter: blur(28px);
+            border-radius: var(--radius-xl);
+            border: 1px solid rgba(180, 200, 240, 0.12);
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+        }
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -20%;
+            width: 80%;
+            height: 200%;
+            background: radial-gradient(ellipse, rgba(59, 130, 246, 0.10), transparent);
+            pointer-events: none;
+        }
+        .hero::after {
+            content: '';
+            position: absolute;
+            bottom: -30%;
+            right: -10%;
+            width: 60%;
+            height: 150%;
+            background: radial-gradient(ellipse, rgba(139, 92, 246, 0.07), transparent);
+            pointer-events: none;
         }
         .hero-badge {
-            display:inline-flex; align-items:center; gap:8px;
-            padding:6px 20px; border-radius:40px;
-            background: rgba(6,182,212,0.1); border:1px solid rgba(6,182,212,0.2);
-            font-size:13px; font-weight:500; color:#06b6d4; margin-bottom:28px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 20px;
+            background: rgba(6, 182, 212, 0.10);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(6, 182, 212, 0.20);
+            border-radius: var(--radius-full);
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--cyan);
+            margin-bottom: 28px;
+            position: relative;
+            z-index: 1;
         }
         .hero h1 {
-            font-size:60px; font-weight:800;
-            background: linear-gradient(135deg, #fff, #06b6d4, #8b5cf6, #ec4899);
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-            background-clip: text; letter-spacing: -0.02em; margin-bottom:20px;
+            font-size: 60px;
+            font-weight: 800;
+            background: linear-gradient(135deg, #fff, var(--cyan), var(--purple), var(--pink));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 24px;
+            letter-spacing: -0.02em;
+            position: relative;
+            z-index: 1;
         }
-        .hero p { font-size:18px; color:rgba(255,255,255,0.6); max-width:680px; margin:0 auto 32px; line-height:1.6; }
-        .hero-buttons { display:flex; gap:14px; justify-content:center; flex-wrap:wrap; }
+        .hero p {
+            font-size: 18px;
+            color: rgba(255,255,255,0.65);
+            max-width: 700px;
+            margin: 0 auto 36px;
+            line-height: 1.7;
+            font-weight: 400;
+            position: relative;
+            z-index: 1;
+        }
+        .hero-stats {
+            display: flex;
+            justify-content: center;
+            gap: 56px;
+            margin-top: 40px;
+            flex-wrap: wrap;
+            position: relative;
+            z-index: 1;
+        }
+        .hero-stat { text-align: center; }
+        .hero-stat-number {
+            font-size: 38px;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--cyan), var(--primary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .hero-stat-label {
+            font-size: 13px;
+            color: rgba(255,255,255,0.5);
+            margin-top: 6px;
+            font-weight: 500;
+        }
+        .hero-buttons {
+            display: flex;
+            gap: 16px;
+            justify-content: center;
+            flex-wrap: wrap;
+            position: relative;
+            z-index: 1;
+        }
+        /* ===== 按钮 ===== */
         .btn {
-            padding:14px 32px; border-radius:48px; font-weight:600;
-            display:inline-flex; align-items:center; gap:10px;
-            text-decoration:none; border:none; cursor:pointer;
-            transition: all 0.2s ease; font-family:inherit; font-size:14px;
+            padding: 14px 34px;
+            border-radius: var(--radius-full);
+            font-size: 14px;
+            font-weight: 600;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+            cursor: pointer;
+            border: none;
+            font-family: inherit;
+            letter-spacing: -0.2px;
         }
-        .btn-primary { background:linear-gradient(135deg,#3b82f6,#06b6d4); color:#fff; box-shadow:0 4px 16px rgba(59,130,246,0.3); }
-        .btn-primary:hover { transform:translateY(-2px); box-shadow:0 8px 28px rgba(59,130,246,0.4); }
-        .btn-outline { background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.15); color:rgba(255,255,255,0.9); }
-        .btn-outline:hover { background:rgba(255,255,255,0.12); transform:translateY(-2px); }
-        .btn-purple { background:linear-gradient(135deg,#7c3aed,#8b5cf6); color:#fff; box-shadow:0 4px 16px rgba(139,92,246,0.3); }
-        .btn-purple:hover { transform:translateY(-2px); box-shadow:0 8px 28px rgba(139,92,246,0.4); }
-        .btn-success { background:linear-gradient(135deg,#059669,#10b981); color:#fff; box-shadow:0 4px 16px rgba(16,185,129,0.3); }
-        .btn-success:hover { transform:translateY(-2px); box-shadow:0 8px 28px rgba(16,185,129,0.4); }
-        .btn-danger { background:linear-gradient(135deg,#dc2626,#ef4444); color:#fff; box-shadow:0 4px 16px rgba(239,68,68,0.3); }
-        .btn-danger:hover { transform:translateY(-2px); box-shadow:0 8px 28px rgba(239,68,68,0.4); }
-        .btn-sm { padding:10px 22px; font-size:13px; }
-        .hero-stats { display:flex; justify-content:center; gap:48px; margin-top:36px; flex-wrap:wrap; }
-        .stat-number { font-size:36px; font-weight:800; background:linear-gradient(135deg,#06b6d4,#3b82f6); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
-        .stat-label { font-size:13px; color:rgba(255,255,255,0.5); margin-top:6px; font-weight:500; }
-        /* 统计卡片行 */
-        .stats-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:24px; margin-bottom:48px; }
-        .stat-card { padding:28px 16px; text-align:center; }
-        /* 功能网格 */
-        .features-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:28px; margin-bottom:56px; }
-        .feature-card { padding:32px; position:relative; overflow:hidden; }
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary), var(--cyan));
+            color: #fff;
+            box-shadow: 0 4px 16px rgba(59, 130, 246, 0.3);
+        }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(59, 130, 246, 0.4); }
+        .btn-outline {
+            background: rgba(255,255,255,0.06);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.15);
+            color: rgba(255,255,255,0.9);
+        }
+        .btn-outline:hover { background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.25); transform: translateY(-2px); }
+        .btn-purple {
+            background: linear-gradient(135deg, var(--purple-dark), var(--purple));
+            color: #fff;
+            box-shadow: 0 4px 16px rgba(139, 92, 246, 0.3);
+        }
+        .btn-purple:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(139, 92, 246, 0.4); }
+        .btn-success {
+            background: linear-gradient(135deg, #059669, var(--success));
+            color: #fff;
+            box-shadow: 0 4px 16px rgba(16, 185, 129, 0.3);
+        }
+        .btn-success:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(16, 185, 129, 0.4); }
+        .btn-danger {
+            background: linear-gradient(135deg, #dc2626, var(--danger));
+            color: #fff;
+            box-shadow: 0 4px 16px rgba(239, 68, 68, 0.3);
+        }
+        .btn-danger:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(239, 68, 68, 0.4); }
+        .btn-sm { padding: 10px 22px; font-size: 13px; }
+
+        /* ===== 章节标题 ===== */
+        .section-header {
+            text-align: center;
+            margin-bottom: 48px;
+        }
+        .section-title {
+            font-size: 38px;
+            font-weight: 700;
+            margin-bottom: 16px;
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            background: linear-gradient(135deg, #fff, var(--cyan));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: -0.5px;
+        }
+        .section-subtitle {
+            color: rgba(255,255,255,0.5);
+            font-size: 16px;
+            max-width: 600px;
+            margin: 0 auto;
+            font-weight: 400;
+        }
+
+        /* ===== 统计卡片行 ===== */
+        .stats-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 24px;
+            margin-bottom: 48px;
+        }
+        .stat-card {
+            padding: 28px 20px;
+            text-align: center;
+        }
+        .stat-number-lg {
+            font-size: 40px;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--cyan), var(--purple));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .stat-label {
+            font-size: 13px;
+            color: rgba(255,255,255,0.5);
+            margin-top: 8px;
+            font-weight: 500;
+        }
+
+        /* ===== 功能特性网格 ===== */
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 28px;
+            margin-bottom: 56px;
+        }
+        .feature-card {
+            padding: 32px;
+            position: relative;
+            overflow: hidden;
+        }
         .feature-card::after {
-            content:''; position:absolute; top:0; left:0; right:0; height:3px;
-            background:linear-gradient(90deg,#3b82f6,#06b6d4,#8b5cf6);
-            transform:translateX(-100%); transition:transform 0.5s ease;
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--primary), var(--cyan), var(--purple));
+            transform: translateX(-100%);
+            transition: transform 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94);
         }
-        .feature-card:hover::after { transform:translateX(0); }
+        .feature-card:hover::after { transform: translateX(0); }
         .feature-icon {
-            width:64px; height:64px; background:rgba(59,130,246,0.1); backdrop-filter:blur(8px);
-            border-radius:24px; display:flex; align-items:center; justify-content:center;
-            font-size:32px; color:#06b6d4; margin-bottom:24px;
-            border:1px solid rgba(255,255,255,0.04);
-        }
-        .feature-card h3 { font-size:20px; font-weight:700; margin-bottom:12px; letter-spacing:-0.3px; }
-        .feature-card p { color:rgba(255,255,255,0.55); font-size:14px; line-height:1.6; }
-        .feature-tags { display:flex; flex-wrap:wrap; gap:8px; margin-top:20px; }
-        .tag { padding:4px 12px; background:rgba(59,130,246,0.08); border-radius:20px; font-size:11px; font-weight:500; color:#06b6d4; border:0.5px solid rgba(255,255,255,0.03); }
-        /* ===== 演示区 - 真实感增强 ===== */
-        .demo-section { margin-bottom:56px; }
-        .demo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
-        @media (max-width: 860px) { .demo-grid { grid-template-columns:1fr; } }
-        .demo-panel {
-            padding: 28px 30px;
-            background: rgba(12,20,32,0.5); backdrop-filter: blur(12px);
-            border-radius: 32px; border: 1px solid rgba(120,140,180,0.12);
+            width: 64px;
+            height: 64px;
+            background: rgba(59, 130, 246, 0.10);
+            backdrop-filter: blur(8px);
+            border-radius: var(--radius-md);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 32px;
+            margin-bottom: 24px;
+            color: var(--cyan);
             transition: all 0.3s ease;
+            border: 1px solid rgba(255,255,255,0.04);
+            flex-shrink: 0;
         }
-        .demo-panel:hover { border-color: rgba(120,140,180,0.25); background: rgba(18,28,42,0.6); }
-        .demo-panel h3 { font-size: 20px; font-weight: 700; margin-bottom: 16px; display: flex; align-items: center; gap: 12px; }
-        .demo-panel h3 i { color: #06b6d4; }
-        .demo-panel .sub-info { font-size: 13px; color: rgba(255,255,255,0.35); margin-bottom: 12px; display: flex; gap: 16px; flex-wrap: wrap; }
-        .demo-panel .sub-info span { display: flex; align-items: center; gap: 6px; }
-        .demo-status {
-            display: flex; flex-wrap: wrap; align-items: center;
-            gap: 16px 28px; background: rgba(0,0,0,0.25);
-            border-radius: 20px; padding: 14px 22px; margin: 8px 0 16px;
+        .feature-card:hover .feature-icon {
+            transform: scale(1.05);
+            background: rgba(59, 130, 246, 0.18);
+            color: var(--primary-light);
+        }
+        .feature-card h3 {
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 12px;
+            letter-spacing: -0.3px;
+        }
+        .feature-card p {
+            color: rgba(255,255,255,0.55);
+            font-size: 14px;
+            line-height: 1.7;
+        }
+        .feature-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 20px;
+        }
+        .tag {
+            padding: 4px 14px;
+            background: rgba(59, 130, 246, 0.08);
+            backdrop-filter: blur(4px);
+            border-radius: var(--radius-full);
+            font-size: 11px;
+            font-weight: 500;
+            color: var(--cyan);
+            transition: all 0.2s ease;
             border: 0.5px solid rgba(255,255,255,0.04);
         }
-        .demo-status-item { display: flex; align-items: center; gap: 8px; font-size: 14px; }
-        .demo-status-item .label { color: rgba(255,255,255,0.4); font-weight: 500; font-size: 13px; }
-        .demo-status-item .value { font-weight: 700; color: #fff; font-size: 15px; }
+        .tag:hover {
+            background: rgba(6, 182, 212, 0.20);
+            color: #fff;
+        }
+
+        /* ===== 在线演示模块 ===== */
+        .demo-section { margin-bottom: 56px; }
+        .demo-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 28px;
+        }
+        @media (max-width: 860px) { .demo-grid { grid-template-columns: 1fr; } }
+        .demo-panel {
+            padding: 28px 30px;
+            background: rgba(12, 20, 32, 0.50);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            border-radius: var(--radius-lg);
+            border: 1px solid rgba(120, 140, 180, 0.12);
+            transition: all 0.3s ease;
+        }
+        .demo-panel:hover {
+            border-color: rgba(120, 140, 180, 0.25);
+            background: rgba(18, 28, 42, 0.60);
+        }
+        .demo-panel h3 {
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .demo-panel h3 i { color: var(--cyan); }
+        .demo-panel .sub-info {
+            font-size: 13px;
+            color: rgba(255,255,255,0.35);
+            margin-bottom: 12px;
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+        .demo-panel .sub-info span { display: flex; align-items: center; gap: 6px; }
+        .demo-status {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 16px 28px;
+            background: rgba(0, 0, 0, 0.25);
+            border-radius: var(--radius-md);
+            padding: 14px 22px;
+            margin: 8px 0 16px;
+            border: 0.5px solid rgba(255,255,255,0.04);
+        }
+        .demo-status-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+        }
+        .demo-status-item .label {
+            color: rgba(255,255,255,0.4);
+            font-weight: 500;
+            font-size: 13px;
+        }
+        .demo-status-item .value {
+            font-weight: 700;
+            color: #fff;
+            font-size: 15px;
+        }
         .demo-status-item .value.green { color: #34d399; }
         .demo-status-item .value.cyan { color: #06b6d4; }
         .demo-status-item .value.purple { color: #a78bfa; }
         .demo-status-item .value.orange { color: #fbbf24; }
         .demo-status-item .value.pink { color: #f472b6; }
         .demo-status-item .value.red { color: #f87171; }
-        /* 图表 */
+
         .demo-chart-wrap {
-            background: rgba(0,0,0,0.2); border-radius: 16px; padding: 12px;
-            margin: 12px 0 16px; border: 0.5px solid rgba(255,255,255,0.04);
+            background: rgba(0, 0, 0, 0.20);
+            border-radius: var(--radius-sm);
+            padding: 12px;
+            margin: 12px 0 16px;
+            border: 0.5px solid rgba(255,255,255,0.04);
         }
         .demo-chart {
-            height: 80px; display: flex; align-items: flex-end;
-            gap: 4px; overflow: hidden;
+            height: 80px;
+            display: flex;
+            align-items: flex-end;
+            gap: 4px;
+            overflow: hidden;
         }
         .chart-bar {
-            flex: 1; border-radius: 4px 4px 0 0; min-height: 6px;
-            transition: height 0.35s ease; opacity: 0.8;
+            flex: 1;
+            border-radius: 4px 4px 0 0;
+            min-height: 6px;
+            transition: height 0.35s ease;
+            opacity: 0.8;
             background: linear-gradient(180deg, #06b6d4, #3b82f6);
         }
         .chart-bar:nth-child(odd) { background: linear-gradient(180deg, #8b5cf6, #3b82f6); }
         .chart-bar.high { background: linear-gradient(180deg, #f472b6, #ec4899); }
         .chart-bar.low { background: linear-gradient(180deg, #34d399, #10b981); }
         .chart-label {
-            display: flex; justify-content: space-between; font-size: 11px;
-            color: rgba(255,255,255,0.25); margin-top: 4px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            color: rgba(255,255,255,0.25);
+            margin-top: 4px;
         }
-        /* 进度条 */
-        .progress-bar { width: 100%; height: 6px; background: rgba(255,255,255,0.06); border-radius: 12px; margin: 8px 0 4px; overflow: hidden; }
-        .progress-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #3b82f6, #06b6d4); border-radius: 12px; transition: width 0.3s ease; }
-        .progress-fill.purple-fill { background: linear-gradient(90deg, #7c3aed, #8b5cf6); }
-        .progress-fill.green-fill { background: linear-gradient(90deg, #059669, #10b981); }
-        .demo-buttons { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+
+        .progress-bar {
+            width: 100%;
+            height: 6px;
+            background: rgba(255,255,255,0.06);
+            border-radius: 12px;
+            margin: 8px 0 4px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #3b82f6, #06b6d4);
+            border-radius: 12px;
+            transition: width 0.3s ease;
+        }
+        .demo-buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 16px;
+        }
         .demo-buttons .btn { padding: 10px 22px; font-size: 13px; }
-        /* 日志 */
+
         .log-area {
-            background: rgba(0,0,0,0.4); border-radius: 14px;
-            padding: 12px 16px; font-family: 'SF Mono', 'Monaco', 'Fira Code', monospace;
-            font-size: 12px; color: #a8ffc3; max-height: 150px;
-            overflow-y: auto; margin-top: 14px;
+            background: rgba(0, 0, 0, 0.40);
+            border-radius: var(--radius-sm);
+            padding: 12px 16px;
+            font-family: 'SF Mono', 'Monaco', 'Fira Code', monospace;
+            font-size: 12px;
+            color: #a8ffc3;
+            max-height: 150px;
+            overflow-y: auto;
+            margin-top: 14px;
             border: 0.5px solid rgba(255,255,255,0.04);
             scrollbar-width: thin;
         }
-        .log-area div { padding: 3px 0; border-bottom: 0.5px solid rgba(255,255,255,0.03); font-size: 12px; }
-        .log-area .log-time { color: rgba(255,255,255,0.2); margin-right: 10px; font-size: 11px; }
+        .log-area div {
+            padding: 3px 0;
+            border-bottom: 0.5px solid rgba(255,255,255,0.03);
+            font-size: 12px;
+        }
+        .log-area .log-time {
+            color: rgba(255,255,255,0.20);
+            margin-right: 10px;
+            font-size: 11px;
+        }
         .log-area .log-ok { color: #34d399; }
         .log-area .log-warn { color: #fbbf24; }
         .log-area .log-info { color: #60a5fa; }
         .log-area .log-error { color: #f87171; }
         .log-area .log-ping { color: #a78bfa; }
-        /* 连接状态指示器 */
-        .status-indicator {
-            display: inline-flex; align-items: center; gap: 6px;
-            padding: 4px 14px; border-radius: 9999px; font-size: 12px; font-weight: 600;
+
+        /* ===== API 表格 ===== */
+        .api-section { margin-bottom: 56px; }
+        .api-table-wrapper {
+            overflow-x: auto;
+            border-radius: var(--radius-lg);
+            background: rgba(20, 28, 38, 0.30);
+            backdrop-filter: blur(8px);
         }
-        .status-indicator.online { background: rgba(16,185,129,0.15); color: #34d399; }
-        .status-indicator.offline { background: rgba(239,68,68,0.15); color: #f87171; }
-        .status-indicator.connecting { background: rgba(251,191,36,0.15); color: #fbbf24; animation: pulse 1.5s ease-in-out infinite; }
-        .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
-        .status-dot.green { background: #34d399; box-shadow: 0 0 8px rgba(16,185,129,0.4); }
-        .status-dot.red { background: #f87171; box-shadow: 0 0 8px rgba(239,68,68,0.4); }
-        .status-dot.yellow { background: #fbbf24; box-shadow: 0 0 8px rgba(251,191,36,0.4); animation: pulse 1s ease-in-out infinite; }
-        @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
-        /* API table */
-        .api-section { margin-bottom:56px; }
-        .api-table-wrapper { overflow-x:auto; border-radius:32px; background:rgba(20,28,38,0.3); backdrop-filter:blur(8px); }
-        .api-table { width:100%; border-collapse:collapse; min-width:700px; }
-        .api-table th, .api-table td { padding:18px 24px; text-align:left; border-bottom:0.5px solid rgba(255,255,255,0.05); }
-        .api-table th { color:#06b6d4; font-weight:600; font-size:13px; background:rgba(6,182,212,0.04); }
-        .api-table td { color:rgba(255,255,255,0.8); font-size:14px; }
-        .method { display:inline-block; padding:4px 14px; border-radius:9999px; font-size:11px; font-weight:600; }
-        .method-get { background:rgba(16,185,129,0.12); color:#34d399; }
-        .method-ws { background:rgba(139,92,246,0.12); color:#a78bfa; }
-        .endpoint { font-family:'SF Mono',monospace; font-size:13px; font-weight:500; color:#60a5fa; }
-        .badge-limit { background:rgba(245,158,11,0.1); color:#f59e0b; padding:2px 10px; border-radius:9999px; font-size:11px; white-space:nowrap; }
-        .badge-limit.no { background:rgba(239,68,68,0.1); color:#f87171; }
+        .api-table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 700px;
+        }
+        .api-table th, .api-table td {
+            padding: 18px 24px;
+            text-align: left;
+            border-bottom: 0.5px solid rgba(255,255,255,0.05);
+        }
+        .api-table th {
+            color: var(--cyan);
+            font-weight: 600;
+            font-size: 13px;
+            letter-spacing: 0.3px;
+            background: rgba(6, 182, 212, 0.04);
+        }
+        .api-table td {
+            color: rgba(255,255,255,0.8);
+            font-size: 14px;
+        }
+        .api-table tr:hover td { background: rgba(255,255,255,0.03); }
+        .method {
+            display: inline-block;
+            padding: 4px 14px;
+            border-radius: var(--radius-full);
+            font-size: 11px;
+            font-weight: 600;
+        }
+        .method-get { background: rgba(16, 185, 129, 0.12); color: #34d399; }
+        .method-ws { background: rgba(139, 92, 246, 0.12); color: #a78bfa; }
+        .endpoint {
+            font-family: 'SF Mono', 'Monaco', monospace;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--primary-light);
+        }
+        .badge-limit {
+            background: rgba(245, 158, 11, 0.10);
+            color: var(--warning);
+            padding: 2px 10px;
+            border-radius: var(--radius-full);
+            font-size: 11px;
+            white-space: nowrap;
+        }
+        .badge-limit.no {
+            background: rgba(239, 68, 68, 0.10);
+            color: #f87171;
+        }
         .code-block {
-            background:rgba(0,0,0,0.35); backdrop-filter:blur(8px);
-            border-radius:20px; padding:20px 24px; margin-top:20px;
-            border:0.5px solid rgba(255,255,255,0.06); overflow-x:auto;
+            background: rgba(0, 0, 0, 0.35);
+            backdrop-filter: blur(8px);
+            border-radius: var(--radius-md);
+            padding: 20px 24px;
+            border: 0.5px solid rgba(255,255,255,0.06);
+            overflow-x: auto;
+            margin-top: 20px;
         }
-        .code-block pre { font-family:'SF Mono',monospace; font-size:13px; color:#a8ffc3; white-space:pre-wrap; word-break:break-all; line-height:1.6; }
-        .code-block .comment { color:rgba(255,255,255,0.3); }
-        /* deploy */
-        .deploy-steps { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:28px; margin-bottom:48px; }
-        .step-card { padding:32px; text-align:center; background:rgba(20,28,38,0.4); backdrop-filter:blur(12px); border-radius:32px; border:1px solid rgba(120,140,180,0.12); }
-        .step-number { width:56px; height:56px; background:linear-gradient(135deg,#3b82f6,#06b6d4); border-radius:60px; display:flex; align-items:center; justify-content:center; font-size:28px; font-weight:800; margin:0 auto 20px; }
-        .step-card h4 { margin-bottom:12px; }
-        .step-card p { color:rgba(255,255,255,0.5); font-size:14px; }
-        .step-card .mono { background:rgba(0,0,0,0.3); border-radius:16px; padding:14px; margin-top:16px; font-family:monospace; font-size:12px; color:#a8ffc3; text-align:left; }
-        /* timeline */
-        .timeline { position:relative; padding-left:30px; margin:20px 0; }
-        .timeline::before { content:''; position:absolute; left:8px; top:8px; bottom:8px; width:2px; background:linear-gradient(to bottom,#06b6d4,#8b5cf6,#ec4899); border-radius:2px; }
-        .timeline-item { position:relative; padding-bottom:32px; }
-        .timeline-dot { position:absolute; left:-30px; top:4px; width:14px; height:14px; background:#06b6d4; border-radius:50%; box-shadow:0 0 12px #06b6d4; border:2px solid rgba(255,255,255,0.2); }
-        .timeline-version { font-weight:800; color:#06b6d4; font-size:18px; }
-        .timeline-date { font-size:12px; color:rgba(255,255,255,0.4); margin-left:12px; font-weight:500; }
-        .timeline-content { color:rgba(255,255,255,0.6); font-size:13px; margin-top:8px; line-height:1.6; }
-        /* faq */
-        .faq-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:20px; margin-top:24px; }
-        .faq-item { padding:24px; background:rgba(0,0,0,0.2); backdrop-filter:blur(8px); border-radius:24px; border-left:3px solid #06b6d4; }
-        .faq-question { font-weight:700; margin-bottom:10px; display:flex; align-items:center; gap:10px; font-size:15px; }
-        .faq-answer { color:rgba(255,255,255,0.55); font-size:13px; line-height:1.6; }
-        /* footer */
-        .footer { margin-top:56px; padding:28px 32px; background:rgba(10,15,26,0.4); backdrop-filter:blur(16px); border-radius:40px; border:0.5px solid rgba(120,140,180,0.15); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:20px; }
-        .footer-links { display:flex; gap:28px; flex-wrap:wrap; }
-        .footer-links a { color:rgba(255,255,255,0.4); text-decoration:none; font-size:13px; font-weight:500; transition:0.2s; }
-        .footer-links a:hover { color:#06b6d4; }
-        .copyright { color:rgba(255,255,255,0.3); font-size:12px; }
-        .social-icons { display:flex; gap:18px; }
-        .social-icons a { color:rgba(255,255,255,0.4); font-size:20px; transition:0.2s; }
-        .social-icons a:hover { color:#06b6d4; transform:translateY(-3px); }
-        /* 响应式 */
-        @media (max-width:768px) {
-            .hero h1 { font-size:38px; }
-            .navbar { flex-direction:column; text-align:center; }
-            .footer { flex-direction:column; text-align:center; }
-            .hero-stats { gap:28px; }
-            .stat-number { font-size:28px; }
+        .code-block pre {
+            font-family: 'SF Mono', 'Monaco', 'Fira Code', monospace;
+            font-size: 13px;
+            color: #a8ffc3;
+            margin: 0;
+            white-space: pre-wrap;
+            word-break: break-all;
+            line-height: 1.6;
         }
-        @media (max-width:480px) {
-            .hero h1 { font-size:30px; }
-            .btn { padding:10px 20px; font-size:13px; }
-            .nav-link { padding:6px 14px; font-size:12px; }
-            .demo-panel { padding:18px 16px; }
+        .code-block .comment { color: rgba(255,255,255,0.3); }
+
+        /* ===== 部署步骤 ===== */
+        .deploy-steps {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 28px;
+            margin-bottom: 48px;
         }
-        .animate-on-scroll { animation: fadeUp 0.5s ease forwards; }
-        @keyframes fadeUp { from { opacity:0; transform:translateY(24px); } to { opacity:1; transform:translateY(0); } }
-        .glass-card { opacity:0; animation: none; }
-        .glass-card.animate-on-scroll { opacity:1; }
-        /* 滚动条 */
-        ::-webkit-scrollbar { width:6px; height:6px; }
-        ::-webkit-scrollbar-track { background:rgba(255,255,255,0.03); border-radius:10px; }
-        ::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.15); border-radius:10px; }
-        ::-webkit-scrollbar-thumb:hover { background:rgba(255,255,255,0.25); }
+        .step-card {
+            padding: 32px;
+            text-align: center;
+            background: rgba(20, 28, 38, 0.40);
+            backdrop-filter: blur(12px);
+            border-radius: var(--radius-lg);
+            border: 1px solid rgba(120, 140, 180, 0.10);
+            transition: all 0.3s ease;
+        }
+        .step-card:hover {
+            border-color: rgba(120, 140, 180, 0.25);
+            background: rgba(28, 38, 52, 0.50);
+            transform: translateY(-4px);
+        }
+        .step-number {
+            width: 56px;
+            height: 56px;
+            background: linear-gradient(135deg, var(--primary), var(--cyan));
+            border-radius: var(--radius-full);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            font-weight: 800;
+            margin: 0 auto 20px;
+            color: #fff;
+        }
+        .step-card h4 {
+            font-size: 18px;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+        .step-card p {
+            color: rgba(255,255,255,0.5);
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        .step-card .mono {
+            background: rgba(0, 0, 0, 0.30);
+            border-radius: var(--radius-sm);
+            padding: 14px 18px;
+            margin-top: 16px;
+            font-family: 'SF Mono', monospace;
+            font-size: 12px;
+            color: #a8ffc3;
+            text-align: left;
+            line-height: 1.8;
+            border: 0.5px solid rgba(255,255,255,0.04);
+        }
+
+        /* ===== 时间线 ===== */
+        .timeline {
+            position: relative;
+            padding-left: 30px;
+            margin: 16px 0;
+        }
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 8px;
+            top: 8px;
+            bottom: 8px;
+            width: 2px;
+            background: linear-gradient(to bottom, var(--cyan), var(--purple), var(--pink));
+            border-radius: 2px;
+        }
+        .timeline-item {
+            position: relative;
+            padding-bottom: 32px;
+        }
+        .timeline-item:last-child { padding-bottom: 0; }
+        .timeline-dot {
+            position: absolute;
+            left: -30px;
+            top: 4px;
+            width: 14px;
+            height: 14px;
+            background: var(--cyan);
+            border-radius: 50%;
+            box-shadow: 0 0 16px rgba(6, 182, 212, 0.4);
+            border: 2px solid rgba(255,255,255,0.15);
+        }
+        .timeline-version {
+            font-weight: 800;
+            color: var(--cyan);
+            font-size: 18px;
+            letter-spacing: -0.3px;
+        }
+        .timeline-date {
+            font-size: 12px;
+            color: rgba(255,255,255,0.35);
+            margin-left: 12px;
+            font-weight: 500;
+        }
+        .timeline-content {
+            color: rgba(255,255,255,0.60);
+            font-size: 13px;
+            margin-top: 8px;
+            line-height: 1.7;
+            padding-right: 16px;
+        }
+
+        /* ===== FAQ ===== */
+        .faq-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+            gap: 20px;
+            margin-top: 24px;
+        }
+        .faq-item {
+            padding: 24px 28px;
+            background: rgba(0, 0, 0, 0.20);
+            backdrop-filter: blur(8px);
+            border-radius: var(--radius-md);
+            border-left: 3px solid var(--cyan);
+            transition: all 0.3s ease;
+        }
+        .faq-item:hover {
+            background: rgba(255,255,255,0.04);
+            transform: translateX(4px);
+        }
+        .faq-question {
+            font-weight: 700;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 15px;
+        }
+        .faq-question i {
+            color: var(--cyan);
+            font-size: 16px;
+        }
+        .faq-answer {
+            color: rgba(255,255,255,0.55);
+            font-size: 13px;
+            line-height: 1.7;
+        }
+
+        /* ===== 页脚 ===== */
+        .footer {
+            margin-top: 56px;
+            padding: 32px 40px;
+            background: rgba(10, 15, 26, 0.40);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-radius: var(--radius-xl);
+            border: 0.5px solid rgba(120, 140, 180, 0.15);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 24px;
+        }
+        .footer-links {
+            display: flex;
+            gap: 28px;
+            flex-wrap: wrap;
+        }
+        .footer-links a {
+            color: rgba(255,255,255,0.45);
+            text-decoration: none;
+            font-size: 13px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+        .footer-links a:hover {
+            color: var(--cyan);
+            transform: translateY(-1px);
+        }
+        .copyright {
+            color: rgba(255,255,255,0.30);
+            font-size: 12px;
+            font-weight: 400;
+        }
+        .social-icons {
+            display: flex;
+            gap: 20px;
+        }
+        .social-icons a {
+            color: rgba(255,255,255,0.40);
+            font-size: 20px;
+            transition: all 0.2s ease;
+        }
+        .social-icons a:hover {
+            color: var(--cyan);
+            transform: translateY(-3px);
+        }
+
+        /* ===== 响应式 ===== */
+        @media (max-width: 1024px) {
+            .hero h1 { font-size: 48px; }
+            .section-title { font-size: 32px; }
+            .hero-stats { gap: 32px; }
+            .hero-stat-number { font-size: 32px; }
+        }
+        @media (max-width: 768px) {
+            body { padding: 12px 16px; }
+            .hero h1 { font-size: 34px; }
+            .hero { padding: 40px 24px; }
+            .section-title { font-size: 26px; }
+            .navbar { flex-direction: column; text-align: center; padding: 12px 20px; border-radius: 28px; }
+            .footer { flex-direction: column; text-align: center; padding: 24px 20px; }
+            .features-grid { grid-template-columns: 1fr; }
+            .hero-stats { gap: 20px; }
+            .hero-stat-number { font-size: 26px; }
+            .api-table th, .api-table td { padding: 12px 16px; font-size: 13px; }
+            .faq-grid { grid-template-columns: 1fr; }
+            .deploy-steps { grid-template-columns: 1fr; }
+            .stats-row { grid-template-columns: repeat(2, 1fr); }
+            .demo-panel { padding: 20px; }
+            .demo-status { padding: 12px 16px; gap: 12px; }
+            .nav-links { justify-content: center; }
+            .nav-link { padding: 6px 14px; font-size: 13px; }
+        }
+        @media (max-width: 480px) {
+            body { padding: 8px 10px; }
+            .hero h1 { font-size: 28px; }
+            .hero { padding: 28px 16px; }
+            .btn { padding: 10px 20px; font-size: 13px; }
+            .section-title { font-size: 22px; }
+            .stats-row { grid-template-columns: 1fr 1fr; gap: 12px; }
+            .stat-card { padding: 16px 12px; }
+            .stat-number-lg { font-size: 30px; }
+            .feature-card { padding: 24px 20px; }
+            .api-table th, .api-table td { padding: 10px 12px; font-size: 12px; }
+            .log-area { font-size: 11px; max-height: 120px; }
+            .demo-buttons .btn { padding: 8px 16px; font-size: 12px; }
+            .footer-links { gap: 16px; }
+            .footer-links a { font-size: 12px; }
+        }
+
+        /* ===== 动画工具 ===== */
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-on-scroll {
+            animation: fadeInUp 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+        }
+        .glass-card { opacity: 0; }
+        .glass-card.animate-on-scroll { opacity: 1; }
+
+        /* ===== Font Awesome 后备 ===== */
+        .no-fa .fas:before, .no-fa .far:before, .no-fa .fab:before { display: none; }
+        .no-fa .fas:after, .no-fa .far:after, .no-fa .fab:after { display: inline-block; }
+        .no-fa .fa-chart-line:after { content: "📈"; }
+        .no-fa .fa-tachometer-alt:after { content: "⚡"; }
+        .no-fa .fa-shield-alt:after { content: "🛡️"; }
+        .no-fa .fa-globe:after { content: "🌐"; }
+        .no-fa .fa-lock:after { content: "🔒"; }
+        .no-fa .fa-code:after { content: "</>"; }
+        .no-fa .fa-history:after { content: "📜"; }
+        .no-fa .fa-question-circle:after { content: "❓"; }
+        .no-fa .fa-github:after { content: "🐙"; }
+        .no-fa .fa-play-circle:after { content: "▶️"; }
+        .no-fa .fa-chart-network:after { content: "🌐"; }
+        .no-fa .fa-star-of-life:after { content: "⭐"; }
+        .no-fa .fa-cloud-upload-alt:after { content: "☁️"; }
+        .no-fa .fa-download:after { content: "⬇️"; }
+        .no-fa .fa-plug:after { content: "🔌"; }
+        .no-fa .fa-heart:after { content: "❤️"; }
+        .no-fa .fa-chart-simple:after { content: "📊"; }
+        .no-fa .fa-microchip:after { content: "🖥️"; }
+        .no-fa .fa-bolt:after { content: "⚡"; }
     </style>
 </head>
 <body>
 <div class="container">
     <!-- ===== 导航 ===== -->
-    <nav class="navbar">
+    <nav class="navbar" id="navbar">
         <div class="logo">
             <div class="logo-icon"><i class="fas fa-chart-network"></i></div>
             <div><h1>NetSight Pro</h1><p>极光诊断 · 实时网络分析</p></div>
@@ -323,7 +1026,7 @@
     </nav>
 
     <!-- ===== Hero ===== -->
-    <div class="hero">
+    <section class="hero">
         <div class="hero-badge"><i class="fas fa-bolt"></i> Cloudflare Workers 边缘节点 · 全球 300+ 数据中心</div>
         <h1>网络诊断 · 毫秒级响应</h1>
         <p>实时监控网络质量、多维度性能测试、安全协议检测 — 极光视觉设计，企业级安全防护</p>
@@ -333,35 +1036,32 @@
             <a href="#api" class="btn btn-purple"><i class="fas fa-code"></i> API 文档</a>
         </div>
         <div class="hero-stats">
-            <div><div class="stat-number">60+</div><div class="stat-label">API 端点/功能</div></div>
-            <div><div class="stat-number">3.5</div><div class="stat-label">当前版本</div></div>
-            <div><div class="stat-number">12</div><div class="stat-label">GitHub Stars</div></div>
-            <div><div class="stat-number">100%</div><div class="stat-label">开源免费</div></div>
+            <div class="hero-stat"><div class="hero-stat-number">60+</div><div class="hero-stat-label">API 端点/功能</div></div>
+            <div class="hero-stat"><div class="hero-stat-number">3.5</div><div class="hero-stat-label">当前版本</div></div>
+            <div class="hero-stat"><div class="hero-stat-number">12</div><div class="hero-stat-label">GitHub Stars</div></div>
+            <div class="hero-stat"><div class="hero-stat-number">100%</div><div class="hero-stat-label">开源免费</div></div>
         </div>
-    </div>
+    </section>
 
     <!-- ===== 统计卡片 ===== -->
     <div class="stats-row">
-        <div class="glass-card stat-card"><div class="stat-number"><i class="fas fa-tachometer-alt"></i> &lt;10ms</div><div class="stat-label">边缘节点响应</div></div>
-        <div class="glass-card stat-card"><div class="stat-number"><i class="fas fa-shield-alt"></i> 60/min</div><div class="stat-label">IP 限流保护</div></div>
-        <div class="glass-card stat-card"><div class="stat-number"><i class="fas fa-chart-line"></i> 24/7</div><div class="stat-label">实时监控</div></div>
-        <div class="glass-card stat-card"><div class="stat-number"><i class="fas fa-code-branch"></i> 1200+</div><div class="stat-label">核心代码行</div></div>
+        <div class="glass-card stat-card"><div class="stat-number-lg"><i class="fas fa-tachometer-alt"></i> &lt;10ms</div><div class="stat-label">边缘节点响应</div></div>
+        <div class="glass-card stat-card"><div class="stat-number-lg"><i class="fas fa-shield-alt"></i> 60/min</div><div class="stat-label">IP 限流保护</div></div>
+        <div class="glass-card stat-card"><div class="stat-number-lg"><i class="fas fa-chart-line"></i> 24/7</div><div class="stat-label">实时监控</div></div>
+        <div class="glass-card stat-card"><div class="stat-number-lg"><i class="fas fa-code-branch"></i> 1200+</div><div class="stat-label">核心代码行</div></div>
     </div>
 
     <!-- ==========================================================
-    在线演示模块 - 真实感增强
+    在线演示模块
     ========================================================== -->
     <section id="demo" class="demo-section">
-        <div style="text-align:center; margin-bottom:36px;">
-            <div style="font-size:38px; font-weight:700; background:linear-gradient(135deg,#fff,#06b6d4); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; display:inline-flex; gap:12px; align-items:center;">
-                <i class="fas fa-play-circle"></i> 在线演示
-            </div>
-            <div style="color:rgba(255,255,255,0.5); font-size:16px; margin-top:8px;">模拟真实网络诊断流程 · 延迟监控 · 带宽测速 · WebSocket 双向通信</div>
+        <div class="section-header">
+            <div class="section-title"><i class="fas fa-play-circle"></i> 在线演示</div>
+            <div class="section-subtitle">模拟真实网络诊断流程 · 延迟监控 · 带宽测速 · WebSocket 双向通信</div>
         </div>
-
         <div class="demo-grid">
-            <!-- 左侧：RTT 实时监控 + 丢包 + 抖动 -->
-            <div class="demo-panel glass-card">
+            <!-- 左侧：RTT 监控 -->
+            <div class="demo-panel">
                 <h3><i class="fas fa-chart-line"></i> 实时 RTT 监控</h3>
                 <div class="sub-info">
                     <span><i class="fas fa-circle" style="color:#34d399;font-size:10px;"></i> 采样间隔 1.5s</span>
@@ -391,9 +1091,9 @@
                 </div>
             </div>
 
-            <!-- 右侧：带宽测速 + WebSocket 双向通信 -->
-            <div class="demo-panel glass-card">
-                <h3><i class="fas fa-tachometer-alt"></i> 带宽 & WebSocket</h3>
+            <!-- 右侧：带宽 + WebSocket -->
+            <div class="demo-panel">
+                <h3><i class="fas fa-tachometer-alt"></i> 带宽 &amp; WebSocket</h3>
                 <div class="sub-info">
                     <span><i class="fas fa-server"></i> 测速节点: <span style="color:#06b6d4;">边缘节点 #12</span></span>
                     <span><i class="fas fa-wifi"></i> 连接: <span id="wsStatusLabel" style="color:#f87171;">未连接</span></span>
@@ -424,11 +1124,9 @@
 
     <!-- ===== 功能特性 ===== -->
     <section id="features">
-        <div style="text-align:center; margin-bottom:40px;">
-            <div style="font-size:38px; font-weight:700; background:linear-gradient(135deg,#fff,#06b6d4); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; display:inline-flex; gap:12px; align-items:center;">
-                <i class="fas fa-star-of-life"></i> 功能特性
-            </div>
-            <div style="color:rgba(255,255,255,0.5); font-size:16px; margin-top:8px;">专业级网络诊断工具，满足全方位测试需求</div>
+        <div class="section-header">
+            <div class="section-title"><i class="fas fa-star-of-life"></i> 功能特性</div>
+            <div class="section-subtitle">专业级网络诊断工具，满足全方位测试需求</div>
         </div>
         <div class="features-grid">
             <div class="glass-card feature-card"><div class="feature-icon"><i class="fas fa-chart-line"></i></div><h3>网络质量检测</h3><p>实时延迟监控、丢包率测试、网络抖动评估、连接质量评分</p><div class="feature-tags"><span class="tag">每2秒RTT</span><span class="tag">丢包率</span><span class="tag">5档评分</span></div></div>
@@ -442,13 +1140,11 @@
 
     <!-- ===== API 文档 ===== -->
     <section id="api" class="api-section">
-        <div style="text-align:center; margin-bottom:36px;">
-            <div style="font-size:38px; font-weight:700; background:linear-gradient(135deg,#fff,#06b6d4); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; display:inline-flex; gap:12px; align-items:center;">
-                <i class="fas fa-code"></i> API 端点
-            </div>
-            <div style="color:rgba(255,255,255,0.5); font-size:16px; margin-top:8px;">RESTful API 接口，支持多种测试场景</div>
+        <div class="section-header">
+            <div class="section-title"><i class="fas fa-code"></i> API 端点</div>
+            <div class="section-subtitle">RESTful API 接口，支持多种测试场景</div>
         </div>
-        <div class="api-table-wrapper glass" style="padding:0;">
+        <div class="api-table-wrapper">
             <table class="api-table">
                 <thead><tr><th>端点</th><th>方法</th><th>参数限制</th><th>限流</th><th>描述</th></tr></thead>
                 <tbody>
@@ -479,11 +1175,9 @@ $ curl https://your-worker.dev/geo</pre>
 
     <!-- ===== 部署指南 ===== -->
     <section id="deploy">
-        <div style="text-align:center; margin-bottom:36px;">
-            <div style="font-size:38px; font-weight:700; background:linear-gradient(135deg,#fff,#06b6d4); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; display:inline-flex; gap:12px; align-items:center;">
-                <i class="fas fa-cloud-upload-alt"></i> 部署指南
-            </div>
-            <div style="color:rgba(255,255,255,0.5); font-size:16px; margin-top:8px;">3 种方式，5 分钟快速部署到 Cloudflare Workers</div>
+        <div class="section-header">
+            <div class="section-title"><i class="fas fa-cloud-upload-alt"></i> 部署指南</div>
+            <div class="section-subtitle">3 种方式，5 分钟快速部署到 Cloudflare Workers</div>
         </div>
         <div class="deploy-steps">
             <div class="step-card"><div class="step-number">1</div><h4><i class="fab fa-npm"></i> Wrangler CLI</h4><p>使用 Cloudflare 官方 CLI 工具</p><div class="mono">npm install -g wrangler<br>wrangler login<br>wrangler deploy --main _workers.js</div></div>
@@ -494,13 +1188,11 @@ $ curl https://your-worker.dev/geo</pre>
 
     <!-- ===== 更新日志 ===== -->
     <section id="changelog">
-        <div style="text-align:center; margin-bottom:36px;">
-            <div style="font-size:38px; font-weight:700; background:linear-gradient(135deg,#fff,#06b6d4); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; display:inline-flex; gap:12px; align-items:center;">
-                <i class="fas fa-history"></i> 更新日志
-            </div>
-            <div style="color:rgba(255,255,255,0.5); font-size:16px; margin-top:8px;">版本演进记录，持续迭代优化</div>
+        <div class="section-header">
+            <div class="section-title"><i class="fas fa-history"></i> 更新日志</div>
+            <div class="section-subtitle">版本演进记录，持续迭代优化</div>
         </div>
-        <div class="glass" style="padding:32px;">
+        <div class="glass" style="padding:32px 36px;">
             <div class="timeline">
                 <div class="timeline-item"><div class="timeline-dot"></div><div><span class="timeline-version">v3.5</span><span class="timeline-date">2026-06-11</span></div><div class="timeline-content">✨ 限流清理机制优化（按需随机抽样）<br>🐛 修复全局作用域异步操作问题<br>💓 WebSocket 心跳机制增强<br>🔒 动态 CSP nonce</div></div>
                 <div class="timeline-item"><div class="timeline-dot" style="background:#8b5cf6;box-shadow:0 0 12px #8b5cf6;"></div><div><span class="timeline-version">v3.3</span><span class="timeline-date">2026-05-28</span></div><div class="timeline-content">✨ 新增 /health 健康检查<br>🛡️ IP 级别限流保护 (60/min)<br>🔒 完整安全响应头 (CSP, HSTS)<br>💓 WebSocket 30秒心跳</div></div>
@@ -512,11 +1204,9 @@ $ curl https://your-worker.dev/geo</pre>
 
     <!-- ===== FAQ ===== -->
     <section id="faq">
-        <div style="text-align:center; margin-bottom:36px;">
-            <div style="font-size:38px; font-weight:700; background:linear-gradient(135deg,#fff,#06b6d4); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; display:inline-flex; gap:12px; align-items:center;">
-                <i class="fas fa-question-circle"></i> 常见问题
-            </div>
-            <div style="color:rgba(255,255,255,0.5); font-size:16px; margin-top:8px;">解答您可能遇到的疑问</div>
+        <div class="section-header">
+            <div class="section-title"><i class="fas fa-question-circle"></i> 常见问题</div>
+            <div class="section-subtitle">解答您可能遇到的疑问</div>
         </div>
         <div class="faq-grid">
             <div class="faq-item"><div class="faq-question"><i class="fas fa-question"></i> 部署后出现 404 错误？</div><div class="faq-answer">确保复制的是 _workers.js 的完整内容，而非 index.html。</div></div>
@@ -551,9 +1241,34 @@ $ curl https://your-worker.dev/geo</pre>
         'use strict';
 
         // ==========================================================
-        // 1. 滚动动画
+        // 1. 导航栏滚动效果
         // ==========================================================
-        const cards = document.querySelectorAll('.glass-card');
+        const navbar = document.getElementById('navbar');
+        window.addEventListener('scroll', function() {
+            navbar.classList.toggle('scrolled', window.scrollY > 50);
+        });
+
+        // ==========================================================
+        // 2. 平滑滚动锚点
+        // ==========================================================
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function(e) {
+                const href = this.getAttribute('href');
+                if (href === '#' || href === '') return;
+                const target = document.querySelector(href);
+                if (target) {
+                    e.preventDefault();
+                    const navHeight = navbar.offsetHeight + 20;
+                    const targetPosition = target.getBoundingClientRect().top + window.pageYOffset - navHeight;
+                    window.scrollTo({ top: targetPosition, behavior: 'smooth' });
+                }
+            });
+        });
+
+        // ==========================================================
+        // 3. 滚动动画 (Intersection Observer)
+        // ==========================================================
+        const observerOptions = { threshold: 0.08, rootMargin: '0px 0px -40px 0px' };
         const observer = new IntersectionObserver((entries) => {
             entries.forEach(entry => {
                 if (entry.isIntersecting) {
@@ -561,20 +1276,11 @@ $ curl https://your-worker.dev/geo</pre>
                     observer.unobserve(entry.target);
                 }
             });
-        }, { threshold: 0.08 });
-        cards.forEach(c => observer.observe(c));
-        document.querySelectorAll('.glass-card.visible').forEach(c => c.classList.add('animate-on-scroll'));
-
-        // 平滑滚动
-        document.querySelectorAll('a[href^="#"]').forEach(a => {
-            a.addEventListener('click', function(e) {
-                const target = document.querySelector(this.getAttribute('href'));
-                if (target) { e.preventDefault(); target.scrollIntoView({ behavior:'smooth' }); }
-            });
-        });
+        }, observerOptions);
+        document.querySelectorAll('.glass-card').forEach(card => observer.observe(card));
 
         // ==========================================================
-        // 2. 在线演示 - RTT 监控 (真实感增强)
+        // 4. 在线演示 - RTT 监控
         // ==========================================================
         const rttChart = document.getElementById('rttChart');
         const rttValue = document.getElementById('rttValue');
@@ -588,7 +1294,6 @@ $ curl https://your-worker.dev/geo</pre>
 
         let rttInterval = null;
         let chartData = new Array(20).fill(8);
-        let rttHistory = [];
         let packetCounter = 0;
         let sessionSeconds = 0;
         let sessionTimer = null;
@@ -608,41 +1313,35 @@ $ curl https://your-worker.dev/geo</pre>
             });
             const min = Math.min(...chartData);
             const maxVal = Math.max(...chartData);
-            chartStats.textContent = `最小: ${min}ms 最大: ${maxVal}ms`;
+            chartStats.textContent = '最小: ' + min + 'ms 最大: ' + maxVal + 'ms';
         }
 
         function addLog(container, msg, type) {
             const div = document.createElement('div');
             const now = new Date();
             const time = now.toLocaleTimeString('zh-CN', { hour12: false });
-            div.innerHTML = `<span class="log-time">[${time}]</span> ${msg}`;
+            div.innerHTML = '<span class="log-time">[' + time + ']</span> ' + msg;
             if (type) div.classList.add('log-' + type);
             container.prepend(div);
             while (container.children.length > 22) container.removeChild(container.lastChild);
         }
 
         function updateRtt() {
-            // 真实感模拟: 基础延迟 + 随机波动 + 偶尔尖峰
             let base = 12 + Math.random() * 18;
-            // 模拟网络拥塞尖峰 (5%概率)
             if (Math.random() > 0.92) {
                 base += 40 + Math.random() * 80;
             }
-            // 模拟小幅波动
             base += (Math.random() - 0.5) * 6;
             const rtt = Math.max(2, Math.round(base));
-            
-            // 计算抖动 (当前与上次的差值)
             const jitter = lastRtt ? Math.abs(rtt - lastRtt) : 0;
             lastRtt = rtt;
-            
+
             chartData.push(rtt);
             chartData.shift();
             renderChart();
             rttValue.textContent = rtt + ' ms';
             jitterValue.textContent = jitter + ' ms';
 
-            // 丢包率模拟: 根据延迟动态变化
             let loss = 0;
             if (rtt > 100) loss = 0.5 + Math.random() * 1.5;
             else if (rtt > 60) loss = 0.2 + Math.random() * 0.8;
@@ -650,46 +1349,34 @@ $ curl https://your-worker.dev/geo</pre>
             loss = Math.min(3.0, loss);
             lossValue.textContent = loss.toFixed(1) + '%';
 
-            // 质量评分
             let quality, qClass;
-            if (rtt < 25 && loss < 0.5) {
-                quality = '优秀'; qClass = 'green';
-            } else if (rtt < 50 && loss < 1.5) {
-                quality = '良好'; qClass = 'purple';
-            } else if (rtt < 80 && loss < 3.0) {
-                quality = '一般'; qClass = 'orange';
-            } else {
-                quality = '较差'; qClass = 'red';
-            }
+            if (rtt < 25 && loss < 0.5) { quality = '优秀'; qClass = 'green'; }
+            else if (rtt < 50 && loss < 1.5) { quality = '良好'; qClass = 'purple'; }
+            else if (rtt < 80 && loss < 3.0) { quality = '一般'; qClass = 'orange'; }
+            else { quality = '较差'; qClass = 'red'; }
             qualityValue.textContent = quality;
             qualityValue.className = 'value ' + qClass;
 
-            // 统计
             packetCounter++;
             packetCount.textContent = packetCounter;
 
-            // 日志 (按概率记录)
             if (Math.random() > 0.55) {
                 const status = rtt < 30 ? '✅ 正常' : (rtt < 60 ? '⚡ 波动' : '⚠️ 高延迟');
-                addLog(rttLog, `RTT: ${rtt}ms | 抖动: ${jitter}ms | 丢包: ${loss.toFixed(1)}% | ${status}`, 
+                addLog(rttLog, 'RTT: ' + rtt + 'ms | 抖动: ' + jitter + 'ms | 丢包: ' + loss.toFixed(1) + '% | ' + status,
                     rtt < 30 ? 'ok' : (rtt < 60 ? 'warn' : 'error'));
             }
         }
 
         document.getElementById('startRttSim').addEventListener('click', function() {
-            if (rttInterval) {
-                addLog(rttLog, '⚠️ 监控已在运行中', 'warn');
-                return;
-            }
-            packetCounter = 0;
-            sessionSeconds = 0;
+            if (rttInterval) { addLog(rttLog, '⚠️ 监控已在运行中', 'warn'); return; }
+            packetCounter = 0; sessionSeconds = 0;
             addLog(rttLog, '▶️ 开始实时 RTT 监控 (采样间隔 1.5s)', 'info');
             updateRtt();
             rttInterval = setInterval(updateRtt, 1500);
-            sessionTimer = setInterval(() => {
+            sessionTimer = setInterval(function() {
                 sessionSeconds++;
-                const m = String(Math.floor(sessionSeconds / 60)).padStart(2, '0');
-                const s = String(sessionSeconds % 60).padStart(2, '0');
+                var m = String(Math.floor(sessionSeconds / 60)).padStart(2, '0');
+                var s = String(sessionSeconds % 60).padStart(2, '0');
                 sessionTime.textContent = m + ':' + s;
             }, 1000);
         });
@@ -711,7 +1398,7 @@ $ curl https://your-worker.dev/geo</pre>
         });
 
         // ==========================================================
-        // 3. 在线演示 - 带宽测速 + WebSocket 真实模拟
+        // 5. 在线演示 - 带宽测速 + WebSocket
         // ==========================================================
         const speedValue = document.getElementById('speedValue');
         const uploadSpeed = document.getElementById('uploadSpeed');
@@ -725,67 +1412,54 @@ $ curl https://your-worker.dev/geo</pre>
         let wsConnected = false;
         let wsPingCount = 0;
 
-        // 测速
         document.getElementById('startSpeedTest').addEventListener('click', function() {
-            if (speedRunning) {
-                addLog(speedLog, '⚠️ 测速正在进行中', 'warn');
-                return;
-            }
+            if (speedRunning) { addLog(speedLog, '⚠️ 测速正在进行中', 'warn'); return; }
             speedRunning = true;
             speedStatus.textContent = '测速中...';
             addLog(speedLog, '📡 开始带宽测速 (模拟 20 个数据块)', 'info');
-            let progress = 0;
-            const totalSteps = 20;
-            let speeds = [];
-            
-            speedInterval = setInterval(() => {
+            var progress = 0;
+            var totalSteps = 20;
+            var speeds = [];
+
+            speedInterval = setInterval(function() {
                 progress += 1;
-                const pct = Math.min(100, Math.round((progress / totalSteps) * 100));
+                var pct = Math.min(100, Math.round((progress / totalSteps) * 100));
                 progressValue.textContent = pct + '%';
                 speedProgress.style.width = pct + '%';
-                
-                // 模拟真实测速: 前期慢速, 中期稳定, 后期波动
-                let speed;
-                if (progress < 5) {
-                    speed = 15 + Math.random() * 30;
-                } else if (progress < 15) {
-                    speed = 60 + Math.random() * 120;
-                } else {
-                    speed = 40 + Math.random() * 100;
-                }
+
+                var speed;
+                if (progress < 5) { speed = 15 + Math.random() * 30; }
+                else if (progress < 15) { speed = 60 + Math.random() * 120; }
+                else { speed = 40 + Math.random() * 100; }
                 speed = Math.round(speed);
                 speeds.push(speed);
                 speedValue.textContent = speed + ' Mbps';
-                
-                // 上行速度 (下行的一半左右)
-                const up = Math.round(speed * (0.3 + Math.random() * 0.4));
+
+                var up = Math.round(speed * (0.3 + Math.random() * 0.4));
                 uploadSpeed.textContent = up + ' Mbps';
-                
+
                 if (progress >= totalSteps) {
                     clearInterval(speedInterval);
                     speedInterval = null;
                     speedRunning = false;
-                    const avg = Math.round(speeds.reduce((a,b) => a+b, 0) / speeds.length);
-                    const maxSp = Math.max(...speeds);
-                    const minSp = Math.min(...speeds);
+                    var avg = Math.round(speeds.reduce(function(a,b) { return a + b; }, 0) / speeds.length);
+                    var maxSp = Math.max.apply(null, speeds);
+                    var minSp = Math.min.apply(null, speeds);
                     speedValue.textContent = avg + ' Mbps';
                     speedStatus.textContent = '✅ 完成';
-                    addLog(speedLog, `✅ 测速完成 | 平均: ${avg}Mbps | 峰值: ${maxSp}Mbps | 最低: ${minSp}Mbps`, 'ok');
+                    addLog(speedLog, '✅ 测速完成 | 平均: ' + avg + 'Mbps | 峰值: ' + maxSp + 'Mbps | 最低: ' + minSp + 'Mbps', 'ok');
                     progressValue.textContent = '100%';
                     speedProgress.style.width = '100%';
-                    setTimeout(() => {
-                        speedStatus.textContent = '就绪';
-                    }, 3000);
+                    setTimeout(function() { speedStatus.textContent = '就绪'; }, 3000);
                 }
             }, 180);
         });
 
-        // WebSocket 真实模拟
-        const wsConnectBtn = document.getElementById('wsConnectBtn');
-        const wsSendPing = document.getElementById('wsSendPing');
-        const wsStatusLabel = document.getElementById('wsStatusLabel');
-        let wsHeartbeatInterval = null;
-        let wsPongCount = 0;
+        // WebSocket
+        var wsConnectBtn = document.getElementById('wsConnectBtn');
+        var wsSendPing = document.getElementById('wsSendPing');
+        var wsStatusLabel = document.getElementById('wsStatusLabel');
+        var wsHeartbeatInterval = null;
 
         function updateWsStatus(connected) {
             wsConnected = connected;
@@ -812,41 +1486,33 @@ $ curl https://your-worker.dev/geo</pre>
 
         wsConnectBtn.addEventListener('click', function() {
             if (wsConnected) {
-                // 断开
                 addLog(speedLog, '🔌 WebSocket 连接已断开', 'warn');
                 updateWsStatus(false);
                 wsPingCount = 0;
                 return;
             }
-            // 连接
             addLog(speedLog, '🔗 正在建立 WebSocket 连接...', 'info');
             wsStatusLabel.textContent = '连接中...';
             wsStatusLabel.style.color = '#fbbf24';
-            
-            // 模拟连接延迟
-            setTimeout(() => {
+
+            setTimeout(function() {
                 addLog(speedLog, '✅ WebSocket 连接已建立 (模拟 ws://edge-node-12)', 'ok');
                 updateWsStatus(true);
                 wsPingCount = 0;
-                
-                // 自动心跳
-                wsHeartbeatInterval = setInterval(() => {
+                wsHeartbeatInterval = setInterval(function() {
                     if (!wsConnected) return;
-                    const ping = Math.round(6 + Math.random() * 20);
+                    var ping = Math.round(6 + Math.random() * 20);
                     wsPingCount++;
-                    addLog(speedLog, `💓 心跳 #${wsPingCount} 延迟 ${ping}ms`, 'ping');
+                    addLog(speedLog, '💓 心跳 #' + wsPingCount + ' 延迟 ' + ping + 'ms', 'ping');
                 }, 1800);
             }, 800 + Math.random() * 600);
         });
 
         wsSendPing.addEventListener('click', function() {
-            if (!wsConnected) {
-                addLog(speedLog, '⚠️ 请先建立 WebSocket 连接', 'warn');
-                return;
-            }
-            const ping = Math.round(4 + Math.random() * 15);
+            if (!wsConnected) { addLog(speedLog, '⚠️ 请先建立 WebSocket 连接', 'warn'); return; }
+            var ping = Math.round(4 + Math.random() * 15);
             wsPingCount++;
-            addLog(speedLog, `📤 主动 Ping #${wsPingCount} 延迟 ${ping}ms (Pong 响应)`, 'ok');
+            addLog(speedLog, '📤 主动 Ping #' + wsPingCount + ' 延迟 ' + ping + 'ms (Pong 响应)', 'ok');
         });
 
         document.getElementById('clearSpeedLog').addEventListener('click', function() {
@@ -855,7 +1521,7 @@ $ curl https://your-worker.dev/geo</pre>
         });
 
         // ==========================================================
-        // 4. 初始化
+        // 6. 初始化
         // ==========================================================
         renderChart();
         addLog(rttLog, '💡 点击「开始监控」体验实时网络探测', 'info');
@@ -863,7 +1529,7 @@ $ curl https://your-worker.dev/geo</pre>
         updateWsStatus(false);
 
         // ==========================================================
-        // 5. 清理
+        // 7. 清理
         // ==========================================================
         window.addEventListener('beforeunload', function() {
             if (rttInterval) clearInterval(rttInterval);
