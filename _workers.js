@@ -1213,6 +1213,39 @@ async function handleRequest(event) {
             border-color: var(--cyan);
         }
 
+        .driver-badge {
+            width: 100%;
+            text-align: center;
+            padding: 10px 20px;
+            margin-top: 12px;
+            background: rgba(10, 15, 26, 0.3);
+            border-radius: 40px;
+            border: 1px solid rgba(59, 130, 246, 0.06);
+            font-size: 11px;
+            color: rgba(255,255,255,0.25);
+            letter-spacing: 0.3px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .driver-badge a {
+            color: rgba(59, 130, 246, 0.6);
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.3s ease;
+        }
+
+        .driver-badge a:hover {
+            color: #06b6d4;
+        }
+
+        .driver-badge i {
+            color: rgba(6, 182, 212, 0.4);
+            font-size: 10px;
+        }
+
         @keyframes spin {
             from { transform: rotate(0deg); }
             to { transform: rotate(360deg); }
@@ -1506,6 +1539,20 @@ async function handleRequest(event) {
             <span><i class="fas fa-fingerprint"></i> RAY ID: <span style="font-family: monospace;">${data.rayId}</span></span>
             <span><i class="fas fa-ip"></i> 客户端: ${data.clientIp}</span>
             <span class="copy-btn" id="copy-report"><i class="fas fa-copy"></i> <span id="t-copy">复制报告</span></span>
+        </div>
+
+        <!-- CF-workers-netdiag 驱动声明 -->
+        <div class="driver-badge">
+            <i class="fas fa-bolt"></i>
+            由 
+            <a href="https://github.com/BlueDriftHK/CF-workers-netdiag" 
+               target="_blank" 
+               rel="noopener noreferrer">
+                CF-workers-netdiag
+            </a>
+            <span style="color: rgba(255,255,255,0.15);">·</span>
+            <span style="color: rgba(255,255,255,0.2);">强力驱动</span>
+            <i class="fas fa-rocket"></i>
         </div>
     </div>
 
@@ -2302,6 +2349,7 @@ async function handleRequest(event) {
    运营商: \${BACKEND_DATA.realGeoOrg || BACKEND_DATA.asOrg}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🚀 NetSight Pro - 极光网络诊断工具
+💡 由 CF-workers-netdiag · 强力驱动
 \`;
             }
             
