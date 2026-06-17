@@ -3,79 +3,71 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>NetSight Pro · 在线演示</title>
+    <meta name="description" content="NetSight Pro - 部署在 Cloudflare Workers 边缘节点的专业级网络诊断工具">
+    <title>NetSight Pro · 极光诊断 · 完整版</title>
     <!-- Font Awesome 6 (免费) -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-    <!-- Google Font (Inter) -->
+    <!-- Google Font Inter -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
     <style>
+        /* ===== 全局重置 & 变量 ===== */
         * { margin:0; padding:0; box-sizing:border-box; }
+        :root {
+            --primary: #3b82f6; --primary-dark: #2563eb; --primary-light: #60a5fa;
+            --cyan: #06b6d4; --cyan-dark: #0891b2; --purple: #8b5cf6;
+            --pink: #ec4899; --success: #10b981; --warning: #f59e0b;
+            --bg-dark: #0a0f1a; --bg-card: rgba(15,25,45,0.6);
+            --glass-border: rgba(255,255,255,0.05);
+            --shadow-sm: 0 4px 20px rgba(0,0,0,0.2);
+            --shadow-md: 0 8px 32px rgba(0,0,0,0.3);
+        }
         body {
             font-family: 'Inter', -apple-system, sans-serif;
             background: radial-gradient(ellipse at 20% 30%, #0d1425, #070b14);
-            min-height: 100vh;
-            color: #fff;
+            min-height: 100vh; color: #fff; padding: 20px 24px;
             -webkit-font-smoothing: antialiased;
-            padding: 20px 24px;
         }
         .container { max-width:1400px; margin:0 auto; position:relative; z-index:1; }
         /* 玻璃态 */
         .glass {
-            background: rgba(20,28,38,0.55);
-            backdrop-filter: blur(18px);
+            background: rgba(20,28,38,0.55); backdrop-filter: blur(18px);
             -webkit-backdrop-filter: blur(18px);
             border:1px solid rgba(120,140,180,0.2);
-            box-shadow: 0 8px 32px rgba(0,0,0,0.2);
-            border-radius: 32px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.2); border-radius: 32px;
         }
         .glass-card {
-            background: rgba(20,28,38,0.5);
-            backdrop-filter: blur(16px);
+            background: rgba(20,28,38,0.5); backdrop-filter: blur(16px);
             -webkit-backdrop-filter: blur(16px);
             border:1px solid rgba(120,140,180,0.15);
-            border-radius: 28px;
-            transition: all 0.25s ease;
+            border-radius: 28px; transition: all 0.25s ease;
             box-shadow: 0 8px 24px rgba(0,0,0,0.15);
         }
         .glass-card:hover {
-            transform: translateY(-4px);
-            border-color: rgba(100,120,160,0.3);
+            transform: translateY(-4px); border-color: rgba(100,120,160,0.3);
             background: rgba(28,38,52,0.65);
             box-shadow: 0 16px 40px rgba(0,0,0,0.3);
         }
         /* 导航 */
         .navbar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 12px 28px;
-            margin-bottom: 44px;
-            flex-wrap: wrap;
-            gap: 16px;
-            background: rgba(12,18,28,0.6);
-            backdrop-filter: blur(20px);
-            border:1px solid rgba(120,140,180,0.18);
-            border-radius: 60px;
-            position: sticky;
-            top: 16px;
-            z-index: 100;
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 12px 28px; margin-bottom: 44px; flex-wrap: wrap; gap: 16px;
+            background: rgba(12,18,28,0.6); backdrop-filter: blur(20px);
+            border:1px solid rgba(120,140,180,0.18); border-radius: 60px;
+            position: sticky; top: 16px; z-index: 100;
         }
         .logo { display:flex; align-items:center; gap:12px; }
         .logo-icon {
             width:48px; height:48px;
             background: linear-gradient(135deg, #3b82f6, #06b6d4, #8b5cf6);
-            border-radius: 18px;
-            display:flex; align-items:center; justify-content:center;
+            border-radius: 18px; display:flex; align-items:center; justify-content:center;
             font-size:24px; box-shadow: 0 4px 16px rgba(59,130,246,0.3);
         }
         .logo h1 { font-size:24px; font-weight:700; background:linear-gradient(135deg,#fff,#06b6d4,#8b5cf6); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
         .logo p { font-size:11px; color:rgba(255,255,255,0.5); font-weight:500; }
         .nav-links { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
         .nav-link {
-            padding:8px 18px; border-radius:40px;
-            color:rgba(255,255,255,0.7); text-decoration:none;
-            font-size:14px; font-weight:500;
-            transition: all 0.2s;
+            padding:8px 18px; border-radius:40px; color:rgba(255,255,255,0.7);
+            text-decoration:none; font-size:14px; font-weight:500; transition: all 0.2s;
         }
         .nav-link:hover { background:rgba(255,255,255,0.08); color:#fff; }
         .nav-link.primary {
@@ -86,26 +78,21 @@
         /* hero */
         .hero {
             text-align:center; padding:60px 40px; margin-bottom:48px;
-            background: rgba(24,34,50,0.45);
-            backdrop-filter: blur(24px);
-            border-radius: 48px;
-            border:1px solid rgba(180,200,240,0.12);
+            background: rgba(24,34,50,0.45); backdrop-filter: blur(24px);
+            border-radius: 48px; border:1px solid rgba(180,200,240,0.12);
             position:relative; overflow:hidden;
         }
         .hero-badge {
             display:inline-flex; align-items:center; gap:8px;
             padding:6px 20px; border-radius:40px;
             background: rgba(6,182,212,0.1); border:1px solid rgba(6,182,212,0.2);
-            font-size:13px; font-weight:500; color:#06b6d4;
-            margin-bottom:28px;
+            font-size:13px; font-weight:500; color:#06b6d4; margin-bottom:28px;
         }
         .hero h1 {
             font-size:60px; font-weight:800;
             background: linear-gradient(135deg, #fff, #06b6d4, #8b5cf6, #ec4899);
             -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-            background-clip: text;
-            letter-spacing: -0.02em;
-            margin-bottom:20px;
+            background-clip: text; letter-spacing: -0.02em; margin-bottom:20px;
         }
         .hero p { font-size:18px; color:rgba(255,255,255,0.6); max-width:680px; margin:0 auto 32px; line-height:1.6; }
         .hero-buttons { display:flex; gap:14px; justify-content:center; flex-wrap:wrap; }
@@ -113,8 +100,7 @@
             padding:14px 32px; border-radius:48px; font-weight:600;
             display:inline-flex; align-items:center; gap:10px;
             text-decoration:none; border:none; cursor:pointer;
-            transition: all 0.2s ease;
-            font-family:inherit; font-size:14px;
+            transition: all 0.2s ease; font-family:inherit; font-size:14px;
         }
         .btn-primary { background:linear-gradient(135deg,#3b82f6,#06b6d4); color:#fff; box-shadow:0 4px 16px rgba(59,130,246,0.3); }
         .btn-primary:hover { transform:translateY(-2px); box-shadow:0 8px 28px rgba(59,130,246,0.4); }
@@ -122,111 +108,11 @@
         .btn-outline:hover { background:rgba(255,255,255,0.12); transform:translateY(-2px); }
         .btn-purple { background:linear-gradient(135deg,#7c3aed,#8b5cf6); color:#fff; box-shadow:0 4px 16px rgba(139,92,246,0.3); }
         .btn-purple:hover { transform:translateY(-2px); box-shadow:0 8px 28px rgba(139,92,246,0.4); }
+        .btn-success { background:linear-gradient(135deg,#059669,#10b981); color:#fff; box-shadow:0 4px 16px rgba(16,185,129,0.3); }
+        .btn-success:hover { transform:translateY(-2px); box-shadow:0 8px 28px rgba(16,185,129,0.4); }
         .hero-stats { display:flex; justify-content:center; gap:48px; margin-top:36px; flex-wrap:wrap; }
         .stat-number { font-size:36px; font-weight:800; background:linear-gradient(135deg,#06b6d4,#3b82f6); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
         .stat-label { font-size:13px; color:rgba(255,255,255,0.5); margin-top:6px; font-weight:500; }
-        /* 演示区 - 新模块 */
-        .demo-section { margin-bottom:56px; }
-        .demo-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 28px;
-        }
-        @media (max-width: 860px) { .demo-grid { grid-template-columns:1fr; } }
-        .demo-panel {
-            padding: 28px 30px;
-            background: rgba(12,20,32,0.5);
-            backdrop-filter: blur(12px);
-            border-radius: 32px;
-            border: 1px solid rgba(120,140,180,0.12);
-        }
-        .demo-panel h3 {
-            font-size: 20px; font-weight: 700;
-            margin-bottom: 16px;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-        .demo-panel h3 i { color: #06b6d4; }
-        .demo-status {
-            display: flex;
-            flex-wrap: wrap;
-            align-items: center;
-            gap: 20px 28px;
-            background: rgba(0,0,0,0.2);
-            border-radius: 24px;
-            padding: 16px 24px;
-            margin: 12px 0 20px;
-        }
-        .demo-status-item {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            font-size: 15px;
-        }
-        .demo-status-item .label { color: rgba(255,255,255,0.4); font-weight: 500; }
-        .demo-status-item .value { font-weight: 700; color: #fff; }
-        .demo-status-item .value.green { color: #34d399; }
-        .demo-status-item .value.cyan { color: #06b6d4; }
-        .demo-status-item .value.purple { color: #a78bfa; }
-        .progress-bar {
-            width: 100%;
-            height: 6px;
-            background: rgba(255,255,255,0.08);
-            border-radius: 12px;
-            margin: 12px 0 8px;
-            overflow: hidden;
-        }
-        .progress-fill {
-            height: 100%;
-            width: 0%;
-            background: linear-gradient(90deg, #3b82f6, #06b6d4);
-            border-radius: 12px;
-            transition: width 0.3s ease;
-        }
-        .demo-buttons {
-            display: flex;
-            gap: 12px;
-            flex-wrap: wrap;
-            margin-top: 18px;
-        }
-        .demo-buttons .btn { padding: 10px 24px; font-size: 13px; }
-        .demo-chart {
-            background: rgba(0,0,0,0.25);
-            border-radius: 20px;
-            padding: 16px;
-            margin-top: 16px;
-            height: 90px;
-            display: flex;
-            align-items: flex-end;
-            gap: 6px;
-            overflow: hidden;
-        }
-        .chart-bar {
-            flex: 1;
-            background: linear-gradient(180deg, #06b6d4, #3b82f6);
-            border-radius: 6px 6px 0 0;
-            min-height: 8px;
-            transition: height 0.4s ease;
-            opacity: 0.7;
-        }
-        .chart-bar:nth-child(odd) { background: linear-gradient(180deg, #8b5cf6, #3b82f6); }
-        .log-area {
-            background: rgba(0,0,0,0.35);
-            border-radius: 16px;
-            padding: 12px 16px;
-            font-family: 'SF Mono', monospace;
-            font-size: 12px;
-            color: #a8ffc3;
-            max-height: 140px;
-            overflow-y: auto;
-            margin-top: 16px;
-            border: 0.5px solid rgba(255,255,255,0.04);
-        }
-        .log-area div { padding: 4px 0; border-bottom: 0.5px solid rgba(255,255,255,0.03); }
-        .log-area .log-time { color: rgba(255,255,255,0.3); margin-right: 12px; }
-        .log-area .log-ok { color: #34d399; }
-        .log-area .log-warn { color: #fbbf24; }
         /* 统计卡片行 */
         .stats-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:24px; margin-bottom:48px; }
         .stat-card { padding:28px 16px; text-align:center; }
@@ -249,7 +135,57 @@
         .feature-card p { color:rgba(255,255,255,0.55); font-size:14px; line-height:1.6; }
         .feature-tags { display:flex; flex-wrap:wrap; gap:8px; margin-top:20px; }
         .tag { padding:4px 12px; background:rgba(59,130,246,0.08); border-radius:20px; font-size:11px; font-weight:500; color:#06b6d4; border:0.5px solid rgba(255,255,255,0.03); }
-        /* api table */
+        /* 演示区 */
+        .demo-section { margin-bottom:56px; }
+        .demo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+        @media (max-width: 860px) { .demo-grid { grid-template-columns:1fr; } }
+        .demo-panel {
+            padding: 28px 30px;
+            background: rgba(12,20,32,0.5); backdrop-filter: blur(12px);
+            border-radius: 32px; border: 1px solid rgba(120,140,180,0.12);
+        }
+        .demo-panel h3 { font-size: 20px; font-weight: 700; margin-bottom: 16px; display: flex; align-items: center; gap: 12px; }
+        .demo-panel h3 i { color: #06b6d4; }
+        .demo-status {
+            display: flex; flex-wrap: wrap; align-items: center;
+            gap: 20px 28px; background: rgba(0,0,0,0.2);
+            border-radius: 24px; padding: 16px 24px; margin: 12px 0 20px;
+        }
+        .demo-status-item { display: flex; align-items: center; gap: 10px; font-size: 15px; }
+        .demo-status-item .label { color: rgba(255,255,255,0.4); font-weight: 500; }
+        .demo-status-item .value { font-weight: 700; color: #fff; }
+        .demo-status-item .value.green { color: #34d399; }
+        .demo-status-item .value.cyan { color: #06b6d4; }
+        .demo-status-item .value.purple { color: #a78bfa; }
+        .demo-status-item .value.orange { color: #fbbf24; }
+        .progress-bar { width: 100%; height: 6px; background: rgba(255,255,255,0.08); border-radius: 12px; margin: 12px 0 8px; overflow: hidden; }
+        .progress-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #3b82f6, #06b6d4); border-radius: 12px; transition: width 0.3s ease; }
+        .demo-buttons { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 18px; }
+        .demo-buttons .btn { padding: 10px 24px; font-size: 13px; }
+        .demo-chart {
+            background: rgba(0,0,0,0.25); border-radius: 20px; padding: 16px;
+            margin-top: 16px; height: 90px; display: flex;
+            align-items: flex-end; gap: 6px; overflow: hidden;
+        }
+        .chart-bar {
+            flex: 1; background: linear-gradient(180deg, #06b6d4, #3b82f6);
+            border-radius: 6px 6px 0 0; min-height: 8px;
+            transition: height 0.4s ease; opacity: 0.7;
+        }
+        .chart-bar:nth-child(odd) { background: linear-gradient(180deg, #8b5cf6, #3b82f6); }
+        .log-area {
+            background: rgba(0,0,0,0.35); border-radius: 16px;
+            padding: 12px 16px; font-family: 'SF Mono', monospace;
+            font-size: 12px; color: #a8ffc3; max-height: 140px;
+            overflow-y: auto; margin-top: 16px;
+            border: 0.5px solid rgba(255,255,255,0.04);
+        }
+        .log-area div { padding: 4px 0; border-bottom: 0.5px solid rgba(255,255,255,0.03); }
+        .log-area .log-time { color: rgba(255,255,255,0.3); margin-right: 12px; }
+        .log-area .log-ok { color: #34d399; }
+        .log-area .log-warn { color: #fbbf24; }
+        .log-area .log-info { color: #60a5fa; }
+        /* API table */
         .api-section { margin-bottom:56px; }
         .api-table-wrapper { overflow-x:auto; border-radius:32px; background:rgba(20,28,38,0.3); backdrop-filter:blur(8px); }
         .api-table { width:100%; border-collapse:collapse; }
@@ -259,16 +195,17 @@
         .method { display:inline-block; padding:4px 12px; border-radius:20px; font-size:11px; font-weight:600; }
         .method-get { background:rgba(16,185,129,0.12); color:#34d399; }
         .method-ws { background:rgba(139,92,246,0.12); color:#a78bfa; }
+        .method-post { background:rgba(251,191,36,0.12); color:#fbbf24; }
         .endpoint { font-family:'SF Mono',monospace; font-size:13px; font-weight:500; color:#60a5fa; }
         .badge-limit { background:rgba(245,158,11,0.1); color:#f59e0b; padding:2px 8px; border-radius:12px; font-size:11px; }
+        .badge-limit.no { background:rgba(239,68,68,0.1); color:#f87171; }
         .code-block {
             background:rgba(0,0,0,0.35); backdrop-filter:blur(8px);
             border-radius:20px; padding:20px; margin-top:20px;
-            border:0.5px solid rgba(255,255,255,0.06);
-            overflow-x:auto;
+            border:0.5px solid rgba(255,255,255,0.06); overflow-x:auto;
         }
         .code-block pre { font-family:'SF Mono',monospace; font-size:13px; color:#a8ffc3; white-space:pre-wrap; word-break:break-all; line-height:1.5; }
-        /* deploy steps */
+        /* deploy */
         .deploy-steps { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:28px; margin-bottom:48px; }
         .step-card { padding:32px; text-align:center; background:rgba(20,28,38,0.4); backdrop-filter:blur(12px); border-radius:32px; border:1px solid rgba(120,140,180,0.12); }
         .step-number { width:56px; height:56px; background:linear-gradient(135deg,#3b82f6,#06b6d4); border-radius:60px; display:flex; align-items:center; justify-content:center; font-size:28px; font-weight:800; margin:0 auto 20px; }
@@ -310,7 +247,6 @@
             .btn { padding:10px 20px; font-size:13px; }
             .nav-link { padding:6px 14px; font-size:12px; }
         }
-        /* 动画 */
         .animate-on-scroll { animation: fadeUp 0.5s ease forwards; }
         @keyframes fadeUp { from { opacity:0; transform:translateY(24px); } to { opacity:1; transform:translateY(0); } }
         .glass-card { opacity:0; animation: none; }
@@ -319,7 +255,7 @@
 </head>
 <body>
 <div class="container">
-    <!-- 导航 -->
+    <!-- ===== 导航 ===== -->
     <nav class="navbar">
         <div class="logo">
             <div class="logo-icon"><i class="fas fa-chart-network"></i></div>
@@ -336,7 +272,7 @@
         </div>
     </nav>
 
-    <!-- Hero -->
+    <!-- ===== Hero ===== -->
     <div class="hero">
         <div class="hero-badge"><i class="fas fa-bolt"></i> Cloudflare Workers 边缘节点 · 全球 300+ 数据中心</div>
         <h1>网络诊断 · 毫秒级响应</h1>
@@ -354,7 +290,7 @@
         </div>
     </div>
 
-    <!-- ========= 在线演示模块 (新增) ========= -->
+    <!-- ===== 在线演示模块 ===== -->
     <div id="demo" class="demo-section">
         <div style="text-align:center; margin-bottom:36px;">
             <div style="font-size:38px; font-weight:700; background:linear-gradient(135deg,#fff,#06b6d4); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; display:inline-flex; gap:12px; align-items:center;">
@@ -362,9 +298,8 @@
             </div>
             <div style="color:rgba(255,255,255,0.5); font-size:16px; margin-top:8px;">模拟网络诊断核心功能 — 实时RTT监控 · 带宽测速 · WebSocket 模拟</div>
         </div>
-
         <div class="demo-grid">
-            <!-- 左侧：RTT 实时监控 + 图表 -->
+            <!-- 左侧 RTT -->
             <div class="demo-panel glass-card">
                 <h3><i class="fas fa-chart-line"></i> 实时 RTT 监控</h3>
                 <div class="demo-status">
@@ -372,38 +307,31 @@
                     <span class="demo-status-item"><span class="label">丢包率</span> <span class="value green" id="lossValue">0.0%</span></span>
                     <span class="demo-status-item"><span class="label">质量</span> <span class="value purple" id="qualityValue">优秀</span></span>
                 </div>
-                <div class="demo-chart" id="rttChart">
-                    <!-- 动态生成 20 个柱子 -->
-                </div>
+                <div class="demo-chart" id="rttChart"></div>
                 <div class="demo-buttons">
                     <button class="btn btn-primary" id="startRttSim"><i class="fas fa-play"></i> 开始模拟</button>
                     <button class="btn btn-outline" id="stopRttSim"><i class="fas fa-stop"></i> 停止</button>
                 </div>
-                <div class="log-area" id="rttLog">
-                    <div><span class="log-time">[系统]</span> 就绪，点击「开始模拟」查看实时延迟变化</div>
-                </div>
+                <div class="log-area" id="rttLog"><div><span class="log-time">[系统]</span> 就绪，点击「开始模拟」查看实时延迟变化</div></div>
             </div>
-
-            <!-- 右侧：带宽测速 + WebSocket 模拟 -->
+            <!-- 右侧 带宽+WS -->
             <div class="demo-panel glass-card">
                 <h3><i class="fas fa-tachometer-alt"></i> 带宽 & WebSocket 模拟</h3>
                 <div class="demo-status">
                     <span class="demo-status-item"><span class="label">下行速度</span> <span class="value cyan" id="speedValue">0 Mbps</span></span>
-                    <span class="demo-status-item"><span class="label">进度</span> <span class="value" id="progressValue" style="color:#fbbf24;">0%</span></span>
+                    <span class="demo-status-item"><span class="label">进度</span> <span class="value orange" id="progressValue">0%</span></span>
                 </div>
                 <div class="progress-bar"><div class="progress-fill" id="speedProgress" style="width:0%;"></div></div>
                 <div class="demo-buttons">
                     <button class="btn btn-purple" id="startSpeedTest"><i class="fas fa-download"></i> 测速</button>
-                    <button class="btn btn-outline" id="wsSimBtn"><i class="fas fa-plug"></i> WebSocket 模拟</button>
+                    <button class="btn btn-success" id="wsSimBtn"><i class="fas fa-plug"></i> WebSocket 模拟</button>
                 </div>
-                <div class="log-area" id="speedLog">
-                    <div><span class="log-time">[系统]</span> 点击「测速」模拟带宽测试</div>
-                </div>
+                <div class="log-area" id="speedLog"><div><span class="log-time">[系统]</span> 点击「测速」模拟带宽测试</div></div>
             </div>
         </div>
     </div>
 
-    <!-- 统计卡片 -->
+    <!-- ===== 统计卡片 ===== -->
     <div class="stats-row">
         <div class="glass-card stat-card"><div class="stat-number"><i class="fas fa-tachometer-alt"></i> &lt;10ms</div><div class="stat-label">边缘节点响应</div></div>
         <div class="glass-card stat-card"><div class="stat-number"><i class="fas fa-shield-alt"></i> 60/min</div><div class="stat-label">IP 限流保护</div></div>
@@ -411,9 +339,9 @@
         <div class="glass-card stat-card"><div class="stat-number"><i class="fas fa-code-branch"></i> 1200+</div><div class="stat-label">核心代码行</div></div>
     </div>
 
-    <!-- 功能特性 (保留) -->
+    <!-- ===== 功能特性 ===== -->
     <div id="features">
-        <div class="section-header" style="text-align:center; margin-bottom:40px;">
+        <div style="text-align:center; margin-bottom:40px;">
             <div style="font-size:38px; font-weight:700; background:linear-gradient(135deg,#fff,#06b6d4); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; display:inline-flex; gap:12px; align-items:center;">
                 <i class="fas fa-star-of-life"></i> 功能特性
             </div>
@@ -429,7 +357,7 @@
         </div>
     </div>
 
-    <!-- API 文档 -->
+    <!-- ===== API 文档 ===== -->
     <div id="api" class="api-section">
         <div style="text-align:center; margin-bottom:36px;">
             <div style="font-size:38px; font-weight:700; background:linear-gradient(135deg,#fff,#06b6d4); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; display:inline-flex; gap:12px; align-items:center;">
@@ -441,13 +369,15 @@
             <table class="api-table">
                 <thead><tr><th>端点</th><th>方法</th><th>参数限制</th><th>限流</th><th>描述</th></tr></thead>
                 <tbody>
-                    <tr><td class="endpoint">/health</td><td><span class="method method-get">GET</span></td><td>-</td><td><span class="badge-limit">❌</span></td><td>健康检查</td></tr>
-                    <tr><td class="endpoint">/speedtest</td><td><span class="method method-get">GET</span></td><td>size ≤ 5MB</td><td><span class="badge-limit">✅ 60/min</span></td><td>带宽测速</td></tr>
-                    <tr><td class="endpoint">/cpu-test</td><td><span class="method method-get">GET</span></td><td>n ≤ 200万</td><td><span class="badge-limit">✅ 60/min</span></td><td>CPU基准测试</td></tr>
-                    <tr><td class="endpoint">/ws-test</td><td><span class="method method-ws">WebSocket</span></td><td>-</td><td><span class="badge-limit">✅ 60/min</span></td><td>WebSocket延迟测试</td></tr>
-                    <tr><td class="endpoint">/http2-test</td><td><span class="method method-get">GET</span></td><td>-</td><td><span class="badge-limit">✅ 60/min</span></td><td>HTTP/2/3检测</td></tr>
+                    <tr><td class="endpoint">/health</td><td><span class="method method-get">GET</span></td><td>-</td><td><span class="badge-limit no">❌</span></td><td>健康检查，返回服务状态</td></tr>
+                    <tr><td class="endpoint">/speedtest</td><td><span class="method method-get">GET</span></td><td>size ≤ 5MB</td><td><span class="badge-limit">✅ 60/min</span></td><td>带宽测速，返回随机数据流</td></tr>
+                    <tr><td class="endpoint">/cpu-test</td><td><span class="method method-get">GET</span></td><td>n ≤ 200万</td><td><span class="badge-limit">✅ 60/min</span></td><td>CPU性能基准测试</td></tr>
+                    <tr><td class="endpoint">/ws-test</td><td><span class="method method-ws">WebSocket</span></td><td>-</td><td><span class="badge-limit">✅ 60/min</span></td><td>WebSocket 延迟测试，30秒心跳</td></tr>
+                    <tr><td class="endpoint">/http2-test</td><td><span class="method method-get">GET</span></td><td>-</td><td><span class="badge-limit">✅ 60/min</span></td><td>HTTP/2/3 + Early Hints 检测</td></tr>
                     <tr><td class="endpoint">/concurrent-test</td><td><span class="method method-get">GET</span></td><td>count≤16, size≤64KB</td><td><span class="badge-limit">✅ 60/min</span></td><td>并发压力测试</td></tr>
-                    <tr><td class="endpoint">/stream-test</td><td><span class="method method-get">GET</span></td><td>size ≤ 10MB</td><td><span class="badge-limit">✅ 60/min</span></td><td>流式吞吐量</td></tr>
+                    <tr><td class="endpoint">/stream-test</td><td><span class="method method-get">GET</span></td><td>size ≤ 10MB</td><td><span class="badge-limit">✅ 60/min</span></td><td>流式吞吐量测试</td></tr>
+                    <tr><td class="endpoint">/dns-test</td><td><span class="method method-get">GET</span></td><td>domain 参数</td><td><span class="badge-limit">✅ 60/min</span></td><td>DNS 解析测试</td></tr>
+                    <tr><td class="endpoint">/geo</td><td><span class="method method-get">GET</span></td><td>-</td><td><span class="badge-limit no">❌</span></td><td>IP 地理位置追踪</td></tr>
                 </tbody>
             </table>
         </div>
@@ -458,11 +388,13 @@ curl https://your-worker.dev/speedtest?size=102400
 curl https://your-worker.dev/cpu-test?n=500000
 curl https://your-worker.dev/http2-test
 curl https://your-worker.dev/concurrent-test?count=4&size=2048
-curl https://your-worker.dev/stream-test?size=1048576</pre>
+curl https://your-worker.dev/stream-test?size=1048576
+curl https://your-worker.dev/dns-test?domain=example.com
+curl https://your-worker.dev/geo</pre>
         </div>
     </div>
 
-    <!-- 部署 -->
+    <!-- ===== 部署指南 ===== -->
     <div id="deploy">
         <div style="text-align:center; margin-bottom:36px;">
             <div style="font-size:38px; font-weight:700; background:linear-gradient(135deg,#fff,#06b6d4); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; display:inline-flex; gap:12px; align-items:center;">
@@ -477,7 +409,7 @@ curl https://your-worker.dev/stream-test?size=1048576</pre>
         </div>
     </div>
 
-    <!-- 更新日志 -->
+    <!-- ===== 更新日志 ===== -->
     <div id="changelog">
         <div style="text-align:center; margin-bottom:36px;">
             <div style="font-size:38px; font-weight:700; background:linear-gradient(135deg,#fff,#06b6d4); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; display:inline-flex; gap:12px; align-items:center;">
@@ -495,7 +427,7 @@ curl https://your-worker.dev/stream-test?size=1048576</pre>
         </div>
     </div>
 
-    <!-- FAQ -->
+    <!-- ===== FAQ ===== -->
     <div id="faq">
         <div style="text-align:center; margin-bottom:36px;">
             <div style="font-size:38px; font-weight:700; background:linear-gradient(135deg,#fff,#06b6d4); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; display:inline-flex; gap:12px; align-items:center;">
@@ -513,7 +445,7 @@ curl https://your-worker.dev/stream-test?size=1048576</pre>
         </div>
     </div>
 
-    <!-- 页脚 -->
+    <!-- ===== 页脚 ===== -->
     <div class="footer">
         <div class="copyright"><i class="fab fa-github"></i> NetSight Pro | GNU GPL v3.0</div>
         <div class="footer-links">
@@ -533,7 +465,7 @@ curl https://your-worker.dev/stream-test?size=1048576</pre>
 
 <script>
     (function() {
-        // ---------- 滚动动画 ----------
+        // ===== 滚动动画 =====
         const cards = document.querySelectorAll('.glass-card');
         const observer = new IntersectionObserver((entries) => {
             entries.forEach(entry => {
@@ -545,7 +477,7 @@ curl https://your-worker.dev/stream-test?size=1048576</pre>
         }, { threshold: 0.1 });
         cards.forEach(c => observer.observe(c));
 
-        // 平滑滚动锚点
+        // 平滑滚动
         document.querySelectorAll('a[href^="#"]').forEach(a => {
             a.addEventListener('click', function(e) {
                 const target = document.querySelector(this.getAttribute('href'));
@@ -553,7 +485,7 @@ curl https://your-worker.dev/stream-test?size=1048576</pre>
             });
         });
 
-        // ---------- 在线演示模块 ----------
+        // ===== 在线演示模块 =====
         // RTT 模拟
         const rttChart = document.getElementById('rttChart');
         const rttValue = document.getElementById('rttValue');
@@ -582,31 +514,24 @@ curl https://your-worker.dev/stream-test?size=1048576</pre>
             div.innerHTML = `<span class="log-time">[${time}]</span> ${msg}`;
             if (type) div.classList.add('log-' + type);
             container.prepend(div);
-            if (container.children.length > 12) container.removeChild(container.lastChild);
+            if (container.children.length > 14) container.removeChild(container.lastChild);
         }
 
         function updateRtt() {
-            // 模拟 RTT 10~60ms，偶尔抖动
             let base = 12 + Math.random() * 20;
-            if (Math.random() > 0.85) base += 30 + Math.random() * 40; // 突发抖动
+            if (Math.random() > 0.85) base += 30 + Math.random() * 40;
             const rtt = Math.round(base);
             chartData.push(rtt);
             chartData.shift();
             renderChart();
             rttValue.textContent = rtt + ' ms';
-
-            // 丢包率模拟 0~0.8%
             const loss = Math.random() > 0.7 ? (Math.random() * 0.8).toFixed(1) : '0.0';
             lossValue.textContent = loss + '%';
-
-            // 质量评估
             let quality = '优秀';
             if (rtt > 80) quality = '较差';
             else if (rtt > 50) quality = '一般';
             else if (rtt > 30) quality = '良好';
             qualityValue.textContent = quality;
-
-            // 日志 (每5次记录一次)
             if (Math.random() > 0.6) {
                 const status = rtt < 30 ? '✅ 延迟正常' : (rtt < 60 ? '⚡ 延迟波动' : '⚠️ 高延迟');
                 addLog(rttLog, `RTT: ${rtt}ms, 丢包: ${loss}%, 质量: ${quality}`, rtt < 30 ? 'ok' : 'warn');
@@ -615,7 +540,7 @@ curl https://your-worker.dev/stream-test?size=1048576</pre>
 
         document.getElementById('startRttSim').addEventListener('click', function() {
             if (rttInterval) return;
-            addLog(rttLog, '▶️ 开始实时 RTT 监控');
+            addLog(rttLog, '▶️ 开始实时 RTT 监控', 'info');
             updateRtt();
             rttInterval = setInterval(updateRtt, 1600);
         });
@@ -624,7 +549,7 @@ curl https://your-worker.dev/stream-test?size=1048576</pre>
             if (rttInterval) {
                 clearInterval(rttInterval);
                 rttInterval = null;
-                addLog(rttLog, '⏹️ 停止 RTT 监控');
+                addLog(rttLog, '⏹️ 停止 RTT 监控', 'warn');
             }
         });
 
@@ -639,7 +564,7 @@ curl https://your-worker.dev/stream-test?size=1048576</pre>
         document.getElementById('startSpeedTest').addEventListener('click', function() {
             if (speedRunning) return;
             speedRunning = true;
-            addLog(speedLog, '📡 开始带宽测速...', 'ok');
+            addLog(speedLog, '📡 开始带宽测速...', 'info');
             let progress = 0;
             const totalSteps = 20;
             const interval = setInterval(() => {
@@ -647,7 +572,6 @@ curl https://your-worker.dev/stream-test?size=1048576</pre>
                 const pct = Math.min(100, Math.round((progress / totalSteps) * 100));
                 progressValue.textContent = pct + '%';
                 speedProgress.style.width = pct + '%';
-                // 模拟速度 20~320 Mbps
                 const speed = Math.round(20 + Math.random() * 300);
                 speedValue.textContent = speed + ' Mbps';
                 if (progress >= totalSteps) {
@@ -670,13 +594,13 @@ curl https://your-worker.dev/stream-test?size=1048576</pre>
                 addLog(speedLog, '🔌 WebSocket 模拟已断开', 'warn');
                 return;
             }
-            addLog(speedLog, '🔗 WebSocket 模拟连接中...', 'ok');
+            addLog(speedLog, '🔗 WebSocket 模拟连接中...', 'info');
             let count = 0;
             wsInterval = setInterval(() => {
                 count++;
                 const ping = Math.round(8 + Math.random() * 25);
                 addLog(speedLog, `💓 心跳 #${count} 延迟 ${ping}ms`, 'ok');
-                if (count > 10) {
+                if (count >= 10) {
                     clearInterval(wsInterval);
                     wsInterval = null;
                     addLog(speedLog, '🔌 WebSocket 模拟会话结束 (10次心跳)', 'warn');
@@ -684,12 +608,11 @@ curl https://your-worker.dev/stream-test?size=1048576</pre>
             }, 1200);
         });
 
-        // 初始渲染图表
+        // 初始渲染
         renderChart();
-        addLog(rttLog, '💡 点击「开始模拟」体验实时 RTT 监控');
-        addLog(speedLog, '💡 点击「测速」模拟带宽测试，点击「WebSocket 模拟」体验心跳');
+        addLog(rttLog, '💡 点击「开始模拟」体验实时 RTT 监控', 'info');
+        addLog(speedLog, '💡 点击「测速」模拟带宽测试，点击「WebSocket 模拟」体验心跳', 'info');
 
-        // 清理定时器 (页面卸载时)
         window.addEventListener('beforeunload', function() {
             if (rttInterval) clearInterval(rttInterval);
             if (wsInterval) clearInterval(wsInterval);
