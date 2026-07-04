@@ -1,77 +1,53 @@
-# 🤝 贡献指南 | Contributing Guide
+# 贡献指南
 
-> 感谢你对 NetSight Pro 的关注！我们欢迎所有形式的贡献
-
-**版本**: 1.0 | **最后更新**: 2026-06-12
+感谢你对 网络洞察专业版 的关注！本指南将帮助你了解如何参与项目贡献。
 
 ---
 
 ## 📋 目录
 
-- [欢迎贡献](#-欢迎贡献)
-- [贡献方式](#-贡献方式)
+- [行为准则](#-行为准则)
+- [我能做什么](#-我能做什么)
 - [开发环境搭建](#-开发环境搭建)
+- [贡献流程](#-贡献流程)
 - [代码规范](#-代码规范)
-- [提交规范](#-提交规范)
-- [Pull Request 流程](#-pull-request-流程)
-- [测试要求](#-测试要求)
+- [提交信息格式](#-提交信息格式)
+- [Pull Request 检查清单](#-pull-request-检查清单)
+- [测试指南](#-测试指南)
 - [文档贡献](#-文档贡献)
-- [报告 Bug](#-报告-bug)
-- [功能建议](#-功能建议)
-- [代码审查](#-代码审查)
-- [社区行为准则](#-社区行为准则)
-- [获取帮助](#-获取帮助)
 
 ---
 
-## 🎉 欢迎贡献
+## 🤝 行为准则
 
-NetSight Pro 是一个开源项目，我们欢迎所有形式的贡献，无论大小！
-
-### 贡献类型
-
-| 贡献类型 | 说明 | 适合人群 |
-| :--- | :--- | :--- |
-| 🐛 **报告 Bug** | 发现并报告问题 | 所有用户 |
-| 💡 **功能建议** | 提出新功能想法 | 所有用户 |
-| 📝 **文档改进** | 完善 README、Wiki 等 | 初学者 |
-| 🔧 **代码贡献** | 修复 Bug、添加功能 | 开发者 |
-| 🌐 **翻译** | 多语言支持 | 翻译者 |
-| ⭐ **Star 项目** | 支持项目发展 | 所有用户 |
+本项目遵循 [贡献者公约](CODE_OF_CONDUCT.md)。参与即表示你同意遵守其条款。请保持友善、尊重和建设性的交流氛围。
 
 ---
 
-## 🚀 贡献方式
+## 🎯 我能做什么
 
-### 方式一：报告 Bug 或建议功能
+### 报告 Bug
 
-1. 查看 [Issues](https://github.com/BlueDriftHK/CF-workers-netdiag/issues) 是否已存在
-2. 创建新 Issue，使用提供的模板
-3. 详细描述问题或建议
+如果你发现了 Bug，请在 [Issues](https://github.com/BlueDriftHK/CF-workers-netdiag/issues) 中提交，并包含以下信息：
 
-### 方式二：提交代码
+- **标题**: 简明扼要地描述问题
+- **环境**: 操作系统、浏览器版本、Node.js 版本
+- **复现步骤**: 详细的操作步骤，最好附上 curl 命令或截图
+- **预期行为**: 你期望发生什么
+- **实际行为**: 实际发生了什么（包含错误信息、日志、截图）
+- **Workers 日志**: 如已部署，附上 `wrangler tail` 的相关输出
 
-```bash
-# 1. Fork 项目
-# 2. 克隆到本地
-git clone https://github.com/YOUR_USERNAME/CF-workers-netdiag.git
-cd CF-workers-netdiag
+### 建议新功能
 
-# 3. 创建分支
-git checkout -b feature/your-feature-name
+提交功能建议时，请说明：
 
-# 4. 提交更改
-git add .
-git commit -m "feat: add your feature"
+- 这个功能解决什么问题
+- 你期望的使用场景
+- 如果有，附上参考实现或设计方案
 
-# 5. 推送并创建 PR
-git push origin feature/your-feature-name
-```
+### 贡献代码
 
-### 方式三：改进文档
-
-- 直接编辑 `README.md`、`SECURITY.md` 等文档
-- 或参与 [Wiki](https://github.com/BlueDriftHK/CF-workers-netdiag/wiki) 编辑
+从修复文档错别字到实现全新功能，所有代码贡献都欢迎。建议先从 `good first issue` 标签的 Issue 开始。
 
 ---
 
@@ -79,514 +55,286 @@ git push origin feature/your-feature-name
 
 ### 前置条件
 
-| 工具 | 版本要求 | 说明 |
-| :--- | :--- | :--- |
-| Node.js | 18.x 或更高 | JavaScript 运行时 |
-| npm | 9.x 或更高 | 包管理器 |
-| Wrangler | 最新版 | Cloudflare Workers CLI |
-| Git | 2.x 或更高 | 版本控制 |
-| Code Editor | 任意 | 推荐 VS Code |
+- Node.js 18+
+- npm 或 pnpm
+- Cloudflare 账号（用于测试）
+- Wrangler CLI
 
-### 安装步骤
+### 本地搭建步骤
 
 ```bash
-# 1. 安装 Wrangler CLI
-npm install -g wrangler
-
-# 2. 登录 Cloudflare
-wrangler login
-
-# 3. Fork 并克隆项目
+# 1. Fork 项目后克隆到本地
 git clone https://github.com/YOUR_USERNAME/CF-workers-netdiag.git
 cd CF-workers-netdiag
 
-# 4. 安装依赖（本项目无 npm 依赖，此步骤可选）
-npm init -y  # 仅用于本地测试工具
+# 2. 安装 Wrangler CLI
+npm install -g wrangler
 
-# 5. 本地运行
-wrangler dev --main _workers.js
+# 3. 登录 Cloudflare
+wrangler login
 
-# 6. 访问 http://localhost:8787
+# 4. 创建 KV 命名空间（用于测试测速历史功能）
+wrangler kv:namespace create SPEED_HISTORY
+
+# 5. 本地启动开发服务
+wrangler dev --main _workers.js --port 8787
+
+# 6. 浏览器访问
+# http://localhost:8787
 ```
 
-### VS Code 推荐配置
+### 项目结构速览
 
-创建 `.vscode/settings.json`：
-
-```json
-{
-  "editor.formatOnSave": true,
-  "editor.tabSize": 2,
-  "editor.insertSpaces": true,
-  "files.trimTrailingWhitespace": true,
-  "files.insertFinalNewline": true
-}
 ```
+CF-workers-netdiag/
+├── _workers.js          # ★ 核心文件：Cloudflare Worker 主程序
+├── index.html           # 产品介绍落地页（纯静态）
+├── README.md            # 项目文档
+├── SECURITY.md          # 安全政策
+├── CONTRIBUTING.md      # 本文件
+└── LICENSE              # GPL-3.0 许可证
+```
+
+**注意事项**：
+
+- `_workers.js` 是唯一需要部署的核心文件，包含所有 API 路由、HTML 模板和内联 JS/CSS
+- `index.html` 是纯静态产品介绍页，与 Worker 运行时无关
 
 ---
 
-## 📏 代码规范
+## 🔄 贡献流程
 
-### JavaScript 规范
+```bash
+# 1. 确保你的 Fork 与主仓库同步
+git checkout main
+git pull upstream main
 
-本项目使用 **JavaScript (ES2020+)**，遵循以下规范：
+# 2. 创建特性分支（命名规范见下方）
+git checkout -b feature/你的功能名称
+# 或
+git checkout -b fix/你的修复名称
 
-| 规范项 | 要求 | 示例 |
+# 3. 进行开发并提交
+git add .
+git commit -m '✨ feat: 添加新功能描述'
+
+# 4. 推送到你的 Fork
+git push origin feature/你的功能名称
+
+# 5. 在 GitHub 上创建 Pull Request
+```
+
+### 分支命名规范
+
+| 前缀 | 用途 | 示例 |
 | :--- | :--- | :--- |
-| **缩进** | 2 空格 | `if (x) {` |
-| **变量命名** | camelCase | `let clientIp` |
-| **常量命名** | UPPER_SNAKE_CASE | `const CORS_HEADERS` |
-| **函数命名** | camelCase | `function isRateLimited()` |
-| **类命名** | PascalCase | `class RateLimiter` |
-| **分号** | 必须使用 | `const x = 1;` |
-| **引号** | 单引号 | `const str = 'hello';` |
-| **换行符** | LF (Unix) | 不要使用 CRLF |
+| `feature/` | 新功能 | `feature/add-ipv6-traceroute` |
+| `fix/` | Bug 修复 | `fix/dns-timeout-cors` |
+| `docs/` | 文档更新 | `docs/update-api-reference` |
+| `refactor/` | 代码重构 | `refactor/extract-rate-limiter` |
+| `perf/` | 性能优化 | `perf/reduce-stream-buffer` |
+| `security/` | 安全修复 | `security/fix-xss-vector` |
 
-### 代码示例
+---
+
+## 📝 代码规范
+
+### JavaScript 规范（_workers.js）
+
+由于 `_workers.js` 是单一的 Cloudflare Worker 文件，请遵循以下规范：
 
 ```javascript
 // ✅ 正确示例
-const CORS_HEADERS = {
-  'access-control-allow-origin': '*',
-  'access-control-allow-methods': 'GET, HEAD, OPTIONS'
-};
-
-function calculateRTT(startTime, endTime) {
-  const duration = endTime - startTime;
-  if (duration < 0) {
-    return 0;
+// 1. 使用 2 空格缩进
+function handleRequest(request) {
+  const url = new URL(request.url);
+  
+  // 2. 变量使用 camelCase
+  const clientIp = request.headers.get('CF-Connecting-IP');
+  
+  // 3. 常量使用 UPPER_SNAKE_CASE
+  const MAX_SPEEDTEST_SIZE = 5 * 1024 * 1024;
+  const RATE_LIMIT_MAX = 60;
+  
+  // 4. 函数使用 camelCase，动词开头
+  function isRateLimited(ip, max = RATE_LIMIT_MAX) {
+    // ...
   }
-  return duration;
+  
+  // 5. 必要的 JSDoc 注释
+  /** @param {number} n - 迭代次数 */
+  function runCpuTest(n) {
+    // ...
+  }
 }
 
 // ❌ 错误示例
-var CORS_headers={access-control-allow-origin:"*"}
-function calculate_rtt(start,end){return end-start}
-```
-
-### 注释规范
-
-```javascript
-/**
- * 限流检查函数
- * @param {string} ip - 客户端 IP 地址
- * @param {number} maxRequests - 最大请求数，默认 60
- * @param {number} windowMs - 时间窗口（毫秒），默认 60000
- * @returns {boolean} 是否被限流
- */
-function isRateLimited(ip, maxRequests = 60, windowMs = 60000) {
-  // 实现逻辑
+function handle_request( request ){  // 下划线命名、空格不一致
+  var client_ip = "";  // var、下划线命名
+  const maxsize=1024;  // 缺少空格、命名不规范
 }
 ```
 
-### 文件组织
+### HTML/CSS 规范
 
-```
-_workers.js           # 主文件（所有代码在此）
-├── 常量定义          # CORS_HEADERS, SECURITY_HEADERS
-├── 工具函数          # escapeForJS, pLimit, cleanupRateLimit
-├── 限流逻辑          # isRateLimited, rateLimit Map
-├── 路由处理          # handleRequest, handleOptions
-├── API 端点          # /health, /speedtest, /cpu-test 等
-└── HTML 页面         # 主页面模板
-```
+- HTML 使用 2 空格缩进，保持标签闭合
+- CSS 自定义属性统一在 `:root` 声明，深浅色覆盖在 `@media (prefers-color-scheme: dark)` 中
+- 颜色值优先使用 CSS 变量而非硬编码
+- 新增 CSS 变量命名遵循 `--{类别}-{属性}` 格式，如 `--bg-primary`、`--text-secondary`
+
+### Cloudflare Workers 注意事项
+
+1. **无全局副作用**: 避免在全局作用域中进行异步操作
+2. **安全第一**: 所有用户输入必须做参数校验（`parseInt` 钳制、域名白名单等）
+3. **限流保护**: 新 API 端点必须接入 `isRateLimited()` 限流中间件
+4. **KV 操作**: 使用 KV 前必须做 `typeof SPEED_HISTORY !== 'undefined'` 类型守卫
+5. **XSS 防护**: 动态内容必须经过 `escapeForJS()` 转义
 
 ---
 
-## 📝 提交规范
+## 💬 提交信息格式
 
-### 提交信息格式
+遵循约定式提交（Conventional Commits）规范：
 
 ```
-<type>(<scope>): <subject>
+<类型>: <简短描述>
 
-<body>
+<详细说明（可选）>
 
-<footer>
+<关闭的 Issue 编号（可选）>
 ```
 
-### Type 类型
+### 提交类型
 
 | 类型 | 图标 | 说明 | 示例 |
 | :--- | :--- | :--- | :--- |
-| `feat` | ✨ | 新功能 | `feat: add health check endpoint` |
-| `fix` | 🐛 | Bug 修复 | `fix: websocket timeout issue` |
-| `docs` | 📝 | 文档更新 | `docs: update API documentation` |
-| `style` | 🎨 | 代码格式 | `style: update card hover effect` |
-| `refactor` | ♻️ | 代码重构 | `refactor: extract common functions` |
-| `perf` | ⚡ | 性能优化 | `perf: optimize concurrent test` |
-| `test` | ✅ | 测试相关 | `test: add unit tests` |
-| `chore` | 🔧 | 构建/工具 | `chore: update wrangler config` |
-| `security` | 🔒 | 安全相关 | `security: add rate limiting` |
-| `i18n` | 🌐 | 国际化 | `i18n: add zh-TW translations` |
-
-### Scope 范围（可选）
-
-| Scope | 说明 |
-| :--- | :--- |
-| `api` | API 端点相关 |
-| `ui` | 前端界面相关 |
-| `ws` | WebSocket 相关 |
-| `security` | 安全相关 |
-| `perf` | 性能相关 |
-| `docs` | 文档相关 |
+| `feat` | ✨ | 新功能 | `feat: 添加 IPv6 路由追踪功能` |
+| `fix` | 🐛 | Bug 修复 | `fix: DNS 超时改用代理路由绕过 CORS` |
+| `docs` | 📝 | 文档更新 | `docs: 完善 API 端点参数说明` |
+| `style` | 🎨 | 代码格式（不影响逻辑） | `style: 统一卡片悬停动效曲线` |
+| `refactor` | ♻️ | 代码重构 | `refactor: 提取限流中间件为独立函数` |
+| `perf` | ⚡ | 性能优化 | `perf: 并发测试改用 ArrayBuffer 复用` |
+| `test` | ✅ | 测试相关 | `test: 添加健康检查端点测试` |
+| `chore` | 🔧 | 构建/工具配置 | `chore: 更新 wrangler 兼容日期` |
+| `security` | 🔒 | 安全修复 | `security: 增强 SSRF 域名白名单校验` |
 
 ### 提交示例
 
 ```bash
 # 简单提交
-git commit -m "fix: correct RTT calculation formula"
+git commit -m '✨ feat: 添加 Traceroute 网络路径追踪'
 
-# 详细提交
-git commit -m "feat(api): add new /dns-test endpoint
+# 带详细说明
+git commit -m '🐛 fix: DNS 测试全部超时
 
-- Add DNS resolution for common domains
-- Return response time and resolved IPs
-- Add rate limiting protection
+浏览器直接 fetch 外部 URL 被 CORS 拦截，改为通过 Worker 
+代理路由转发请求，客户端使用 Image 对象测量真实延迟。
 
-Closes #42"
-
-# 破坏性变更
-git commit -m "refactor(api): change /speedtest response format
-
-BREAKING CHANGE: response format changed from plain text to JSON"
+Closes #12'
 ```
 
 ---
 
-## 🔀 Pull Request 流程
+## ✅ Pull Request 检查清单
 
-### PR 标题格式
+提交 PR 前，请确认以下事项：
 
-```
-<type>(<scope>): <description>
-```
-
-示例：
-- `feat: add WebSocket ping-pong test`
-- `fix(ui): correct chart rendering on mobile`
-- `docs: update installation guide`
-
-### PR 模板
-
-```markdown
-## 变更类型
-
-- [ ] 🐛 Bug 修复
-- [ ] ✨ 新功能
-- [ ] 📝 文档更新
-- [ ] 🎨 代码格式
-- [ ] ♻️ 代码重构
-- [ ] ⚡ 性能优化
-- [ ] 🔒 安全相关
-
-## 变更描述
-
-[详细描述本次变更的内容]
-
-## 测试
-
-- [ ] 本地测试通过
-- [ ] 现有功能未受影响
-- [ ] 新增功能有测试覆盖
-
-## 检查清单
-
-- [ ] 代码符合项目规范
+- [ ] 代码符合项目规范（2 空格缩进、camelCase 命名）
+- [ ] 新 API 端点已接入 `isRateLimited()` 限流中间件
+- [ ] 所有用户输入已做参数校验和类型转换
+- [ ] 新增 HTML 内容已做 `escapeForJS()` 转义
+- [ ] 新增 CSS 颜色值使用 CSS 变量，深浅色模式均已覆盖
+- [ ] 本地 `wrangler dev` 测试通过
+- [ ] 相关文档已更新（README、SECURITY 等）
 - [ ] 提交信息格式正确
-- [ ] 更新了相关文档
-- [ ] 无破坏性变更（如有已说明）
-- [ ] 所有测试通过
-
-## 相关 Issue
-
-Closes #[issue_number]
-
-## 截图（如适用）
-
-[添加截图]
-```
-
-### PR 检查清单
-
-提交 PR 前，请确认：
-
-- [ ] 代码符合规范（2空格缩进、单引号等）
-- [ ] 提交信息格式正确
-- [ ] 已测试通过（`wrangler dev` 本地运行）
-- [ ] 更新了相关文档（如有必要）
-- [ ] 无合并冲突
-- [ ] 未引入破坏性变更（如有已说明）
-
-### PR 生命周期
-
-| 阶段 | 预期时间 | 说明 |
-| :--- | :--- | :--- |
-| 提交 PR | - | 创建 PR，等待审查 |
-| 首次审查 | 1-3 天 | 维护者审查代码 |
-| 修改反馈 | 根据反馈 | 解决问题并更新 |
-| 合并 | 审查通过后 | 合并到 main 分支 |
+- [ ] PR 描述中说明了变更原因和影响范围
+- [ ] 未引入破坏性变更（或已明确标注）
 
 ---
 
-## 🧪 测试要求
+## 🧪 测试指南
 
-### 本地测试
+### 本地功能测试
 
 ```bash
-# 启动本地服务器
-wrangler dev --main _workers.js
+# 启动本地 Worker
+wrangler dev --main _workers.js --port 8787
 
-# 测试健康检查
+# 健康检查
 curl http://localhost:8787/health
 
-# 测试带宽测速
-curl -o /dev/null -s -w '%{speed_download}\n' http://localhost:8787/speedtest?size=102400
+# 带宽测速
+curl http://localhost:8787/speedtest?size=102400
 
-# 测试 CPU 性能
-curl http://localhost:8787/cpu-test?n=10000
+# CPU 测试
+curl http://localhost:8787/cpu-test?n=100000
 
-# 测试 HTTP/2 检测
+# 并发测试
+curl http://localhost:8787/concurrent-test?count=4&size=2048
+
+# HTTP/2 协议检测
 curl http://localhost:8787/http2-test
+
+# WebSocket 测试
+websocat ws://localhost:8787/ws-test
 ```
 
-### 功能测试清单
+### 限流测试
 
-| 功能 | 测试命令 | 预期结果 |
-| :--- | :--- | :--- |
-| 健康检查 | `curl /health` | 返回 JSON，status=ok |
-| 带宽测速 | `curl /speedtest?size=1024` | 返回二进制数据 |
-| CPU 测试 | `curl /cpu-test?n=1000` | 返回 JSON，包含 opsMs |
-| 限流测试 | 连续请求 61 次 | 第 61 次返回 429 |
-| 主页面 | `curl /` | 返回 HTML 页面 |
+```bash
+# 连续发送请求验证限流是否生效
+for i in $(seq 1 70); do
+  echo "请求 $i: $(curl -s -o /dev/null -w '%{http_code}' http://localhost:8787/speedtest?size=1024)"
+done
+# 预期：前 60 次返回 200，之后返回 429
+```
 
-### 兼容性测试
+### 页面测试
 
-| 浏览器 | 最低版本 | 测试状态 |
-| :--- | :--- | :--- |
-| Chrome | 80+ | ✅ 通过 |
-| Firefox | 75+ | ✅ 通过 |
-| Safari | 13.1+ | ✅ 通过 |
-| Edge | 80+ | ✅ 通过 |
+在浏览器中访问 `http://localhost:8787`，检查：
+
+1. 各测试按钮功能是否正常
+2. 深浅色模式是否正确切换（跟随系统设置）
+3. 测速完成后历史记录是否正常展示
+4. 移动端响应式布局是否正常
 
 ---
 
 ## 📚 文档贡献
 
-### 需要维护的文档
+文档同样需要你的贡献。以下是可以参与的文档工作：
 
-| 文档 | 位置 | 说明 |
-| :--- | :--- | :--- |
-| README.md | 根目录 | 项目主文档 |
-| SECURITY.md | 根目录 | 安全政策 |
-| CONTRIBUTING.md | 根目录 | 贡献指南（本文件） |
-| CODE_OF_CONDUCT.md | 根目录 | 行为准则 |
-| Wiki | GitHub Wiki | 详细文档 |
+- 修正 README 中的表述错误或过时信息
+- 补充 API 使用示例
+- 翻译文档到其他语言
+- 完善故障排查章节
+- 添加部署最佳实践
 
-### 文档格式规范
+文档格式要求：
 
 - 使用 Markdown 格式
-- 标题层级清晰（# ## ###）
-- 代码块标注语言（```javascript）
-- 表格对齐美观
-- 链接使用相对路径（如可能）
+- 中文为主，技术术语保留英文
+- 代码块标注正确的语言标识
+- 内部链接使用相对路径
 
 ---
 
-## 🐛 报告 Bug
+## 🔗 相关资源
 
-### Bug 报告模板
-
-```markdown
-## Bug 描述
-
-[清晰简洁地描述问题]
-
-## 复现步骤
-
-1. 访问 '...'
-2. 点击 '...'
-3. 滚动到 '...'
-4. 看到错误
-
-## 预期行为
-
-[清晰描述你期望发生什么]
-
-## 实际行为
-
-[清晰描述实际发生了什么]
-
-## 环境信息
-
-- 浏览器：[Chrome/Firefox/Safari]
-- 版本：[如 120.0]
-- 操作系统：[Windows/Mac/Linux]
-- 部署方式：[Cloudflare/本地]
-
-## 截图
-
-[如适用，添加截图]
-
-## 额外信息
-
-[任何其他相关信息]
-```
+- [Cloudflare Workers 文档](https://developers.cloudflare.com/workers/)
+- [Wrangler CLI 指南](https://developers.cloudflare.com/workers/wrangler/)
+- [Cloudflare KV 文档](https://developers.cloudflare.com/kv/)
+- [约定式提交规范](https://www.conventionalcommits.org/zh-hans/)
 
 ---
 
-## 💡 功能建议
+## 📞 需要帮助？
 
-### 功能建议模板
-
-```markdown
-## 功能描述
-
-[清晰简洁地描述你想要的功能]
-
-## 使用场景
-
-[描述这个功能会在什么场景下使用]
-
-## 解决方案
-
-[如果有，描述你期望的实现方式]
-
-## 替代方案
-
-[描述你考虑过的其他替代方案]
-
-## 附加信息
-
-[任何其他相关信息]
-```
+- 在 [Issues](https://github.com/BlueDriftHK/CF-workers-netdiag/issues) 中提问
+- 描述你遇到的问题和已尝试的解决方法
+- 我们会尽快回复
 
 ---
 
-## 👀 代码审查
-
-### 审查者关注点
-
-| 关注点 | 说明 |
-| :--- | :--- |
-| **正确性** | 代码是否按预期工作 |
-| **安全性** | 是否有安全漏洞（XSS、注入等） |
-| **性能** | 是否影响响应时间或资源消耗 |
-| **可读性** | 代码是否易于理解 |
-| **一致性** | 是否符合项目规范 |
-| **测试** | 是否有足够的测试覆盖 |
-
-### 审查流程
-
-1. 审查者阅读代码变更
-2. 留下评论（问题、建议、赞扬）
-3. 贡献者响应并修改
-4. 所有问题解决后批准
-5. 合并 PR
-
-### 评论标签
-
-| 标签 | 含义 |
-| :--- | :--- |
-| `[question]` | 需要澄清的问题 |
-| `[suggestion]` | 改进建议（非强制） |
-| `[required]` | 必须修改的问题 |
-| `[praise]` | 做得好的地方 |
-| `[nit]` | 小问题 |
-
----
-
-## 📜 社区行为准则
-
-本项目遵循 [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md)
-
-### 基本原则
-
-- 使用欢迎和包容的语言
-- 尊重不同的观点和经验
-- 优雅地接受建设性批评
-- 关注对社区最有利的事情
-- 对其他社区成员表示同理心
-
-### 不可接受行为
-
-- 性暗示语言或图像
-- 挑衅、侮辱/贬低评论
-- 公开或私下骚扰
-- 未经明确许可发布他人私人信息
-- 其他不道德或不专业行为
-
----
-
-## 💬 获取帮助
-
-### 联系方式
-
-| 渠道 | 用途 | 链接 |
-| :--- | :--- | :--- |
-| **GitHub Issues** | 报告问题 | [Issues](https://github.com/BlueDriftHK/CF-workers-netdiag/issues) |
-| **GitHub Discussions** | 讨论交流 | [Discussions](https://github.com/BlueDriftHK/CF-workers-netdiag/discussions) |
-| **Wiki** | 文档查阅 | [Wiki](https://github.com/BlueDriftHK/CF-workers-netdiag/wiki) |
-
-### 常见问题
-
-| 问题 | 解决方法 |
-| :--- | :--- |
-| 本地部署失败 | 检查 Node.js 版本和 Wrangler 登录状态 |
-| 代码风格不一致 | 运行 `prettier --write _workers.js` |
-| 测试失败 | 确保本地 `wrangler dev` 正常运行 |
-| 不确定如何开始 | 查看 [Good First Issue](https://github.com/BlueDriftHK/CF-workers-netdiag/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) |
-
----
-
-## 🏆 贡献者致谢
-
-所有贡献者将出现在项目的 [README.md](README.md) 致谢部分。
-
-### 贡献者级别
-
-| 级别 | 条件 | 致谢方式 |
-| :--- | :--- | :--- |
-| ⭐ 贡献者 | 提交有效 PR | 名字列入 README |
-| 🏅 核心贡献者 | 多次重大贡献 | 名字 + 头像 + 特别致谢 |
-| 👑 维护者 | 持续贡献 + 审查 | 项目维护者名单 |
-
----
-
-## 📄 许可证
-
-本项目采用 **GNU General Public License v3.0** 许可证。贡献代码即表示你同意将代码按此许可证授权。
-
----
-
-## 📋 快速参考卡片
-
-```bash
-# 克隆项目
-git clone https://github.com/YOUR_USERNAME/CF-workers-netdiag.git
-cd CF-workers-netdiag
-
-# 创建分支
-git checkout -b feature/your-feature
-
-# 本地开发
-wrangler dev --main _workers.js
-
-# 提交代码
-git add .
-git commit -m "type(scope): description"
-git push origin feature/your-feature
-
-# 创建 Pull Request
-# 访问 GitHub 仓库页面
-```
-
----
-
-**Made with ❤️ by BlueDriftHK and contributors**
-
-**感谢你为 NetSight Pro 做出的贡献！**
-
----
-
-[⬆️ 返回顶部](#-贡献指南--contributing-guide)
+*感谢每一位贡献者的付出！*
+*（内容由AI生成，仅供参考）*
