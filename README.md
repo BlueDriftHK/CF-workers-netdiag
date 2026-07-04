@@ -1,14 +1,26 @@
-# NetSight Pro 🔍
+---
+AIGC:
+    Label: "1"
+    ContentProducer: 001191440300708461136T1XGW3
+    ProduceID: 920b985d2f5d9c3397e2be237fdb8e96_e60d52bc77a011f1a7da5254006c9bbf
+    ReservedCode1: Jjb+2DRpNeA87vcYp5Zre4yN6tgEg8TnmJCA/HTNW2ZRsNYE6gCq62MZqPdD9iNPV6lsxIgm8c/H1aHJxqb6J7+us2bEYi4vUPmBGqxBXjKxWg5Nglzd+2EPg0bJMnnSIoC8u9T4JkndzXQ2bxDihB7s3aqnqpo2v/xw+oLGmKKvm6jL2NjsXRQ2u7k=
+    ContentPropagator: 001191440300708461136T1XGW3
+    PropagateID: 920b985d2f5d9c3397e2be237fdb8e96_e60d52bc77a011f1a7da5254006c9bbf
+    ReservedCode2: Jjb+2DRpNeA87vcYp5Zre4yN6tgEg8TnmJCA/HTNW2ZRsNYE6gCq62MZqPdD9iNPV6lsxIgm8c/H1aHJxqb6J7+us2bEYi4vUPmBGqxBXjKxWg5Nglzd+2EPg0bJMnnSIoC8u9T4JkndzXQ2bxDihB7s3aqnqpo2v/xw+oLGmKKvm6jL2NjsXRQ2u7k=
+---
 
-> 部署在 Cloudflare Workers 边缘节点的专业级网络诊断工具  
-> 实时监控 · 多维度测试 · 毫秒级响应 · 极光视觉设计 · 企业级安全防护
 
-[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/BlueDriftHK/CF-workers-netdiag)
-[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+
+# 网络洞察专业版 🔍
+
+部署在 Cloudflare Workers 边缘节点的专业级网络诊断工具  
+实时监控 · 多维度测试 · 毫秒级响应 · Apple 极简视觉设计 · 企业级安全防护
+
+[![部署到 Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/BlueDriftHK/CF-workers-netdiag)
+[![许可证：GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-orange)](https://workers.cloudflare.com/)
-[![Version](https://img.shields.io/badge/version-3.5-green)](https://github.com/BlueDriftHK/CF-workers-netdiag)
 
-**版本**: 3.5 | **许可证**: GPL-3.0 | **最后更新**: 2026-06-11
+**版本**: 3.6 | **许可证**: GPL-3.0 | **最后更新**: 2026-07-04
 
 ---
 
@@ -17,16 +29,14 @@
 - [功能特性](#-功能特性)
 - [快速开始](#-快速开始)
 - [API 端点](#-api-端点)
-- [命令行测试](#-命令行测试示例)
+- [命令行测试](#-命令行测试)
 - [配置说明](#-配置说明)
 - [技术架构](#-技术架构)
 - [项目结构](#-项目结构)
-- [本地开发](#-本地开发与测试)
+- [安全策略](#-安全策略)
 - [更新日志](#-更新日志)
 - [常见问题](#-常见问题)
 - [故障排查](#-故障排查)
-- [贡献指南](#-贡献指南)
-- [致谢](#-致谢)
 - [许可证](#-许可证)
 
 ---
@@ -34,52 +44,74 @@
 ## ✨ 功能特性
 
 ### 📡 网络质量检测
+
 | 功能 | 说明 |
 | :--- | :--- |
-| **实时延迟监控** | 每2秒自动测量 RTT，实时趋势图表 |
-| **丢包率测试** | 10次请求测试，实时计算丢包百分比 |
-| **网络抖动评估** | 稳定性分级（非常稳定/稳定/不稳定/极不稳定） |
-| **连接质量评分** | 五档分级（优秀/良好/一般/较差/极差） |
-| **最低/最高 RTT** | 统计周期内的延迟极值 |
+| 实时延迟监控 | 每2秒自动测量 RTT，实时趋势图表 |
+| 丢包率测试 | 10次请求测试，实时计算丢包百分比 |
+| 网络抖动评估 | 稳定性分级（非常稳定/稳定/不稳定/极不稳定） |
+| 连接质量评分 | 五档分级（优秀/良好/一般/较差/极差） |
+| 最低/最高 RTT | 统计周期内的延迟极值 |
+| DNS 解析测试 | 通过代理路由测试 Cloudflare/Google/GitHub 等域名真实延迟 |
 
 ### 🚀 性能测试工具
+
 | 功能 | 说明 | 限制 |
 | :--- | :--- | :--- |
-| **带宽测速** | 多档位测试 | 最大 5MB |
-| **CPU性能测试** | 密集数学运算，返回 ops/ms | 最大 200万次迭代 |
-| **并发请求测试** | 模拟多并发下载 | 内部限制 4 并发 |
-| **流式传输测试** | 测试吞吐量 | 最大 10MB |
+| 带宽测速 | 多档位测试 | 最大 5MB |
+| CPU 性能测试 | 密集数学运算，返回 ops/ms | 最大 200万次迭代，每 IP 每分钟 3 次 |
+| 并发请求测试 | 模拟多并发下载 | 内部限制 4 并发 |
+| 流式传输测试 | 测试吞吐量 | 最大 10MB |
+
+### 📊 测速历史与用量统计（v3.6 新增）
+
+| 功能 | 说明 |
+| :--- | :--- |
+| 测速历史记录 | 自动保存最近 5 条测速结果到 Cloudflare KV |
+| 用量统计面板 | 可视化展示网络质量历史趋势与统计摘要 |
 
 ### 🔒 安全与协议检测
-- **TLS版本检测** - 识别 TLS 1.0/1.1/1.2/1.3
-- **加密套件分析** - 查看协商的加密算法
-- **ECH状态检测** - 检测 Encrypted Client Hello 支持
-- **压缩算法检测** - Brotli/Gzip/Deflate/Zstd
-- **HTTP/2/3 检测** - 识别协议版本和 Early Hints 支持
-- **ALPN 协商** - 查看应用层协议协商结果
+
+- TLS 版本检测 - 识别 TLS 1.0/1.1/1.2/1.3
+- 加密套件分析 - 查看协商的加密算法
+- ECH 状态检测 - 检测 Encrypted Client Hello 支持
+- 压缩算法检测 - Brotli/Gzip/Deflate/Zstd
+- HTTP/2/3 检测 - 识别协议版本和 Early Hints 支持
+- ALPN 协商 - 查看应用层协议协商结果
 
 ### 🌐 网络诊断工具
-- **DNS解析测试** - 测试 Cloudflare/Google/GitHub 等域名
-- **WebSocket测试** - 5次 ping-pong 往返延迟测试，30秒心跳保持
-- **地理位置追踪** - 边缘节点与客户端位置、距离计算
-- **一键导出报告** - 生成完整诊断报告并复制到剪贴板
+
+- DNS 解析测试 - 通过 Worker 代理路由测试域名延迟，绕过浏览器 CORS 限制
+- WebSocket 测试 - 5次 ping-pong 往返延迟测试，30秒心跳保持
+- 地理位置追踪 - 边缘节点与客户端位置、距离计算
+- 一键导出报告 - 生成完整诊断报告并复制到剪贴板
 
 ### 🛡️ 企业级安全
+
 | 安全项 | 配置 | 说明 |
 | :--- | :--- | :--- |
-| **限流保护** | 60次/分钟 | IP 级别限流，超限返回 429 |
-| **CSP 策略** | 动态 nonce | 防止 XSS 和数据注入 |
-| **HSTS** | max-age=31536000 | 强制 HTTPS 连接 |
-| **X-Frame-Options** | DENY | 防止点击劫持 |
-| **X-Content-Type-Options** | nosniff | 防止 MIME 类型混淆 |
-| **X-XSS-Protection** | 1; mode=block | 浏览器 XSS 过滤器 |
+| 双层限流 | 通用 60/min + CPU 3/min | IP 级别限流，超限返回 429 |
+| 输入校验 | parseInt 钳制 + 域名白名单 | 防止恶意参数注入与 SSRF |
+| XSS 防护 | escapeForJS + CSP nonce | 防止跨站脚本攻击 |
+| 安全响应头 | 5 项安全头 | nosniff / DENY / XSS / Referrer / HSTS |
+| KV 类型守卫 | typeof 安全守卫 | 防止 KV 数据注入 |
+
+### 🎨 Apple 极简视觉设计（v3.6）
+
+- 30+ CSS 自定义属性，统一视觉决策
+- 浅色/深色模式自动切换（`prefers-color-scheme`）
+- SF 灰白基调 + Apple 蓝 `#007AFF` + 毛玻璃 `backdrop-filter: blur(24px)`
+- 大圆角 12-24px、低弥散阴影、0.18-0.25s 原生动画曲线
+- 简体中文 / 繁体中文 / English 三语切换
+- 768px / 480px 响应式断点
 
 ---
 
 ## 🚀 快速开始
 
 ### 前置条件
-- [Cloudflare 账号](https://dash.cloudflare.com/sign-up)
+
+- Cloudflare 账号
 - 域名（可选，可使用 `workers.dev` 子域名）
 - Node.js 18+ 和 npm（用于 Wrangler CLI）
 
@@ -96,34 +128,31 @@ wrangler login
 git clone https://github.com/BlueDriftHK/CF-workers-netdiag.git
 cd CF-workers-netdiag
 
-# 4. 部署（注意：核心文件为 _workers.js）
-wrangler deploy --main _workers.js
+# 4. 创建 KV 命名空间（用于测速历史）
+wrangler kv:namespace create SPEED_HISTORY
 
-# 5. （可选）绑定自定义域名
-wrangler routes add https://your-domain.com
+# 5. 将返回的 KV ID 配置到 wrangler.toml
+# kv_namespaces = [
+#   { binding = "SPEED_HISTORY", id = "your-kv-namespace-id" }
+# ]
+
+# 6. 部署
+wrangler deploy --main _workers.js
 ```
 
 ### 方式二：Cloudflare Dashboard 部署
 
 1. 登录 [Cloudflare Dashboard](https://dash.cloudflare.com/)
 2. 进入 **Workers & Pages** > **创建应用程序** > **创建 Worker**
-3. 将 `_workers.js` 文件中的**全部代码**复制并粘贴到编辑器中
-4. 点击 **保存并部署**
-5. （可选）在 **触发器** 选项卡中绑定自定义域名
+3. 将 `_workers.js` 文件中的**完整代码**复制并粘贴到编辑器中
+4. 在 Worker 设置中绑定 KV 命名空间 `SPEED_HISTORY`
+5. 点击 **保存并部署**
 
 ### 方式三：一键部署
 
 点击下方按钮，授权 GitHub 和 Cloudflare 后即可自动部署：
 
-[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/BlueDriftHK/CF-workers-netdiag)
-
-### 方式四：使用 Git 仓库直接部署
-
-1. 在 Cloudflare Dashboard 中进入 **Workers & Pages**
-2. 点击 **创建应用程序** > **Pages** > **连接到 Git**
-3. 连接你的 GitHub 仓库 `BlueDriftHK/CF-workers-netdiag`
-4. 设置框架预设为 **None**
-4. 点击 **保存并部署**
+[![部署到 Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/BlueDriftHK/CF-workers-netdiag)
 
 ---
 
@@ -133,14 +162,17 @@ wrangler routes add https://your-domain.com
 
 | 端点 | 方法 | 参数 | 参数限制 | 限流 | 描述 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
+| `/` | GET | - | - | ❌ | 主诊断页面（HTML） |
 | `/health` | GET | - | - | ❌ | 健康检查 |
 | `/speedtest` | GET | `size` | ≤ 5MB | ✅ | 带宽测速 |
-| `/cpu-test` | GET | `n` | ≤ 200万 | ✅ | CPU 性能基准测试 |
+| `/cpu-test` | GET | `n` | ≤ 200万 | ✅ (3/min) | CPU 性能基准测试 |
 | `/ws-test` | WebSocket | - | - | ✅ | WebSocket 延迟测试 |
 | `/http2-test` | GET | - | - | ✅ | HTTP/2/3 + Early Hints |
-| `/concurrent-test` | GET | `count`, `size` | `count`≤16, `size`≤64KB | ✅ | 并发压力测试 |
+| `/concurrent-test` | GET | `count`, `size` | count≤16, size≤64KB | ✅ | 并发压力测试 |
 | `/stream-test` | GET | `size` | ≤ 10MB | ✅ | 流式吞吐量测试 |
-| `/` | GET | - | - | ❌ | 主诊断页面（HTML） |
+| `/api/log-speed` | POST | JSON body | - | ✅ | 保存测速记录到 KV |
+| `/api/speed-history` | GET | - | - | ✅ | 查询测速历史（最近 5 条） |
+| `/api/usage-stats` | GET | - | - | ✅ | 查询用量统计摘要 |
 
 ### API 响应示例
 
@@ -149,7 +181,7 @@ wrangler routes add https://your-domain.com
 {
   "status": "ok",
   "timestamp": 1704067200000,
-  "version": "3.5",
+  "version": "3.6",
   "uptime": "unknown"
 }
 ```
@@ -177,23 +209,25 @@ wrangler routes add https://your-domain.com
 }
 ```
 
-**📊 并发测试 `/concurrent-test?count=4&size=2048`**
+**📊 测速历史 `/api/speed-history`**
 ```json
-[
-  { "index": 0, "size": 2048, "duration": 12 },
-  { "index": 1, "size": 2048, "duration": 14 },
-  { "index": 2, "size": 2048, "duration": 11 },
-  { "index": 3, "size": 2048, "duration": 13 }
-]
+{
+  "records": [
+    {
+      "timestamp": 1704067200000,
+      "download": 45.2,
+      "upload": 12.8,
+      "latency": 23,
+      "jitter": 2.1,
+      "packetLoss": 0
+    }
+  ]
+}
 ```
-
-**🚀 流式传输测试 `/stream-test?size=1048576`**
-- 返回 `application/octet-stream` 类型的二进制数据流
-- 响应头包含 `content-length` 和 `cache-control: no-store`
 
 ---
 
-## 🧪 命令行测试示例
+## 🧪 命令行测试
 
 ### 基础测试
 
@@ -246,68 +280,63 @@ websocat ws://your-worker.dev/ws-test
 
 ### 限流配置
 
-默认限流规则：**60次/分钟 / IP**
+默认限流规则：
 
-修改 `_workers.js` 中调用 `isRateLimited()` 的参数：
+| 维度 | 限制 | 说明 |
+| :--- | :--- | :--- |
+| 通用 API | 60次/分钟 / IP | 大部分端点 |
+| CPU 测试 | 3次/分钟 / IP | 防止 CPU 资源滥用 |
+
+修改 `_workers.js` 中限流参数：
 
 ```javascript
-// 第58行附近
+// 通用限流（第58行附近）
 if (isRateLimited(clientIp)) {  // 默认 60次/分钟
 // 修改为 100次/分钟
 if (isRateLimited(clientIp, 100)) {
-// 修改为 30次/10秒
-if (isRateLimited(clientIp, 30, 10000)) {
+
+// CPU 限流
+if (cpuRateLimit(clientIp, 3)) {  // 默认 3次/分钟
+// 修改为 5次/分钟
+if (cpuRateLimit(clientIp, 5)) {
 ```
 
 ### 测试参数上限配置
 
 各端点的参数上限可在代码中调整：
 
-| 端点 | 代码位置 | 参数 | 默认上限 | 可修改范围 |
-| :--- | :--- | :--- | :--- | :--- |
-| `/speedtest` | 第181行 | `size` | 5,242,880 (5MB) | 建议 ≤ 10MB |
-| `/cpu-test` | 第199行 | `n` | 2,000,000 | 建议 ≤ 5,000,000 |
-| `/concurrent-test` | 第289行 | `count` | 16 | 建议 ≤ 32 |
-| `/concurrent-test` | 第289行 | `size` | 65,536 (64KB) | 建议 ≤ 256KB |
-| `/stream-test` | 第342行 | `size` | 10,485,760 (10MB) | 建议 ≤ 25MB |
+| 端点 | 参数 | 默认上限 | 建议范围 |
+| :--- | :--- | :--- | :--- |
+| `/speedtest` | `size` | 5,242,880 (5MB) | ≤ 10MB |
+| `/cpu-test` | `n` | 2,000,000 | ≤ 5,000,000 |
+| `/concurrent-test` | `count` | 16 | ≤ 32 |
+| `/concurrent-test` | `size` | 65,536 (64KB) | ≤ 256KB |
+| `/stream-test` | `size` | 10,485,760 (10MB) | ≤ 25MB |
 
-### 并发限制器配置
-
-```javascript
-// 第289行附近，修改 pLimit 的参数
-const limit = pLimit(4);  // 改为 6 可允许更多并发
-```
-
-### 自定义域名绑定
-
-在 `wrangler.toml` 中添加：
+### KV 命名空间配置
 
 ```toml
+# wrangler.toml
 name = "netsight-pro"
 main = "_workers.js"
 compatibility_date = "2024-12-01"
 
-routes = [
-  { pattern = "diagnostics.yourdomain.com", custom_domain = true }
+kv_namespaces = [
+  { binding = "SPEED_HISTORY", id = "your-kv-namespace-id" }
 ]
 ```
 
-### 环境变量配置
-
-如需使用 KV 存储静态资源：
+### 自定义域名绑定
 
 ```toml
-# wrangler.toml
-kv_namespaces = [
-  { binding = "CACHE_KV", id = "your-kv-namespace-id" }
+routes = [
+  { pattern = "diagnostics.yourdomain.com", custom_domain = true }
 ]
 ```
 
 ---
 
 ## 🛠️ 技术架构
-
-### 架构图
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -321,9 +350,9 @@ kv_namespaces = [
 │  ┌─────────────────────────────────────────────────────┐   │
 │  │              Cloudflare Worker                       │   │
 │  │  ┌───────────┐  ┌───────────┐  ┌───────────┐       │   │
-│  │  │ 限流中间件 │─▶│ 路由分发  │─▶│ 响应生成器 │       │   │
-│  │  └───────────┘  └─────┬─────┘  └─────┬─────┘       │   │
-│  │                       │              │               │   │
+│  │  │ 双层限流  │─▶│ 路由分发  │─▶│ 响应生成器 │       │   │
+│  │  │  中间件   │  └─────┬─────┘  └─────┬─────┘       │   │
+│  │  └───────────┘        │              │               │   │
 │  │         ┌─────────────┼──────────────┼─────────────┐ │   │
 │  │         ▼             ▼              ▼             │ │   │
 │  │  ┌───────────┐ ┌───────────┐  ┌───────────┐      │ │   │
@@ -333,9 +362,10 @@ kv_namespaces = [
 │  │                      │              │             │ │   │
 │  │         ┌────────────┴──────────────┘             │ │   │
 │  │         ▼                                          │ │   │
-│  │  ┌───────────┐                                    │ │   │
-│  │  │ 外部 API  │ (ip-api.com, ipify.org)           │ │   │
-│  │  └───────────┘                                    │ │   │
+│  │  ┌─────────────────┐                              │ │   │
+│  │  │ 外部 API        │ (ip-api.com, ipify.org)     │ │   │
+│  │  │ KV 存储         │ (SPEED_HISTORY)             │ │   │
+│  │  └─────────────────┘                              │ │   │
 │  └─────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -344,13 +374,13 @@ kv_namespaces = [
 
 | 技术 | 用途 | 版本/标准 |
 | :--- | :--- | :--- |
-| **Cloudflare Workers** | 边缘计算运行时 | 2024-12-01 API |
-| **WebSocket API** | 实时双向通信测试 | RFC 6455 |
-| **Canvas API** | 实时延迟图表绘制 | HTML5 |
-| **ReadableStream API** | 流式数据传输 | WHATWG Streams |
-| **Web Crypto API** | 随机数据生成 | W3C |
-| **Fetch API** | HTTP 请求处理 | WHATWG |
-| **EventTarget API** | WebSocket 事件处理 | DOM Level 2 |
+| Cloudflare Workers | 边缘计算运行时 | 2024-12-01 API |
+| Cloudflare KV | 测速历史持久化 | SPEED_HISTORY |
+| WebSocket API | 实时双向通信测试 | RFC 6455 |
+| Canvas API | 实时延迟图表绘制 | HTML5 |
+| ReadableStream API | 流式数据传输 | WHATWG Streams |
+| Web Crypto API | 随机数据生成 | W3C |
+| Fetch API | HTTP 请求处理 | WHATWG |
 
 ### 浏览器兼容性
 
@@ -367,13 +397,13 @@ kv_namespaces = [
 
 ```
 CF-workers-netdiag/
-├── _workers.js              # Cloudflare Worker 主文件（~1200行核心代码）
-├── index.html               # 纯前端演示版（无需后端部署）
+├── _workers.js              # Cloudflare Worker 主文件（~2700行核心代码）
+├── index.html               # 产品介绍落地页（三语切换，纯静态）
 ├── README.md                # 项目文档（本文件）
+├── SECURITY.md              # 安全政策
 ├── LICENSE                  # GPL-3.0 许可证
 ├── CODE_OF_CONDUCT.md       # 行为准则
 ├── CONTRIBUTING.md          # 贡献指南
-├── SECURITY.md              # 安全政策
 ├── .github/
 │   ├── workflows/
 │   │   └── build.yml        # GitHub Actions CI/CD
@@ -385,162 +415,120 @@ CF-workers-netdiag/
 
 | 文件 | 大小 | 说明 |
 | :--- | :--- | :--- |
-| `_workers.js` | ~1200行 | Worker 主程序，包含所有 API 逻辑和前端 HTML |
-| `index.html` | ~600行 | 纯前端演示版，可本地运行测试界面 |
+| `_workers.js` | ~2700行 | Worker 主程序，包含所有 API 逻辑、前端 HTML、CSS 设计体系和 KV 集成 |
+| `index.html` | ~2138行 | 产品介绍落地页，含三语切换、深浅色模式，可直接部署到 GitHub Pages |
 
 ---
 
-## 🔧 本地开发与测试
+## 🔒 安全策略
 
-### 使用 Wrangler 本地预览
+完整安全策略请参阅 [SECURITY.md](./SECURITY.md)。
 
-```bash
-# 安装依赖
-npm install -g wrangler
+### 核心安全措施
 
-# 克隆项目
-git clone https://github.com/BlueDriftHK/CF-workers-netdiag.git
-cd CF-workers-netdiag
+| 维度 | 措施 | 说明 |
+| :--- | :--- | :--- |
+| 限流 | 双层（通用 60/min + CPU 3/min） | IP 级别限流，返回 429 + `retry-after` |
+| 输入校验 | parseInt 钳制 + 域名白名单 | `cloudflare.com` / `google.com` / `github.com` |
+| XSS 防护 | escapeForJS + 动态 CSP nonce | 每次响应生成随机 nonce |
+| 响应头 | 5 项安全头 | `nosniff` / `DENY` / `block` / `same-origin` / `HSTS` |
+| CORS | `*` | 开放跨域访问 |
+| KV 安全 | typeof 类型守卫 + 7 天 TTL | 防止数据投毒与过期清理 |
+| DNS 代理 | Worker 服务端代理 | 绕过浏览器 CORS，域名白名单防 SSRF |
 
-# 本地启动（预览模式）
-wrangler dev --main _workers.js --port 8787
+### 安全报告
 
-# 访问 http://localhost:8787
-```
-
-### 使用 curl 测试本地 API
-
-```bash
-# 健康检查
-curl http://localhost:8787/health
-
-# 带宽测试
-curl http://localhost:8787/speedtest?size=1024
-
-# CPU 测试
-curl http://localhost:8787/cpu-test?n=10000
-```
-
-### 使用纯前端演示版
-
-```bash
-# 下载演示文件
-wget https://raw.githubusercontent.com/BlueDriftHK/CF-workers-netdiag/main/index.html
-
-# 在浏览器中打开（仅前端模拟，无后端 API）
-open index.html
-
-# 或使用 Python 启动本地服务器
-python3 -m http.server 8080
-# 访问 http://localhost:8080
-```
-
-### 调试技巧
-
-1. **启用本地日志**：
-   ```bash
-   wrangler dev --log-level debug
-   ```
-
-2. **查看实时日志**（部署后）：
-   ```bash
-   wrangler tail
-   ```
-
-3. **使用 Chrome DevTools 调试**：
-   - 在 `wrangler dev` 模式下，按 `D` 键打开 Devtools
+如发现安全漏洞，请发送邮件至：**asiacomk@gmail.com**
 
 ---
 
 ## 📋 更新日志
 
-### v3.5 (2026-06-11)
-- **提交**: [`f2f5e00`](https://github.com/BlueDriftHK/CF-workers-netdiag/commit/f2f5e00379d276a25e7bf088456bd6fa4f97e17b)
-- **优化**: 限流清理机制从 `setInterval` 改为按需随机抽样清理（约1%概率），提升 Worker 运行时效率
-- **修复**: 全局作用域异步操作问题
-- **增强**: WebSocket 心跳机制更稳定，改善长连接测试可靠性
-- **安全**: 动态 CSP nonce，增强 XSS 防护
+### v3.6 (2026-07-04)
 
-### v3.4 (2026-06-05)
-- **提交**: [`8797a21`](https://github.com/BlueDriftHK/CF-workers-netdiag/commit/8797a2179623f5731bacb48ee0e040b1b41b1e17)
-- **优化**: 静态资源缓存策略调整
-- **修复**: 部分浏览器兼容性问题
+- **新增**: 测速历史记录功能，自动保存最近 5 条结果到 Cloudflare KV
+- **新增**: 用量统计面板，可视化展示网络质量趋势
+- **新增**: 3 个 KV API 端点（`/api/log-speed`、`/api/speed-history`、`/api/usage-stats`）
+- **优化**: UI 全面重构为 Apple 极简设计体系（30+ CSS 变量、深浅色模式、SF 灰白基调）
+- **修复**: DNS 测试全部超时——改用 Worker 代理路由 + Image 对象客户端计时，绕过 CORS
+- **修复**: CPU 测试返回 null——duration=0 导致 Infinity，加除零保护
+- **新增**: CPU 独立限流（每 IP 每分钟 3 次），429 响应
+- **新增**: KV 自动清理机制，写入后删除超出 5 条的旧记录
+- **新增**: 产品介绍落地页 `index.html`，支持简中/繁中/English 三语切换
+
+### v3.5 (2026-06-11)
+
+- 优化: 限流清理机制从 `setInterval` 改为按需随机抽样清理（约1%概率）
+- 修复: 全局作用域异步操作问题
+- 增强: WebSocket 心跳机制更稳定
+- 安全: 动态 CSP nonce，增强 XSS 防护
 
 ### v3.3 (2026-05-28)
-- **提交**: [`509de89`](https://github.com/BlueDriftHK/CF-workers-netdiag/commit/509de890a6b8a5972fe79b5a3fac5a03898998a1)
-- **新增**: `/health` 健康检查端点，支持监控系统集成
-- **新增**: IP 级别请求限流保护（60次/分钟），防止 API 滥用
-- **新增**: 完整安全响应头（CSP、HSTS、X-Frame-Options、X-Content-Type-Options）
-- **新增**: WebSocket 30秒心跳机制，保持长连接稳定
-- **优化**: 并发测试增加内部并发限制器 `pLimit(4)`，避免资源耗尽
-- **优化**: 流式传输使用 `queueMicrotask` 替代 `setTimeout`
-- **优化**: 静态资源缓存策略（24小时/7天分层缓存）
-- **修复**: `event` 变量作用域问题
-- **修复**: WebSocket 连接超时处理
 
-### v3.2 (2026-05-20)
-- **提交**: [`f493b68`](https://github.com/BlueDriftHK/CF-workers-netdiag/commit/f493b68613160b0bdde72c652018872447ea7b4d)
-- **新增**: 多语言支持框架
-- **优化**: UI 响应式布局改进
-
-### v3.1 (2026-05-15)
-- **提交**: [`8111c3e`](https://github.com/BlueDriftHK/CF-workers-netdiag/commit/8111c3eb54a281b36fe1fe8cffd71e251c9750b3)
-- **新增**: 真实 IP 地理位置查询 API 集成
-- **优化**: 前端加载性能
+- 新增: `/health` 健康检查端点
+- 新增: IP 级别请求限流保护（60次/分钟）
+- 新增: 完整安全响应头（CSP、HSTS、X-Frame-Options、X-Content-Type-Options）
+- 新增: WebSocket 30秒心跳机制
+- 优化: 并发测试增加内部并发限制器 `pLimit(4)`
 
 ### v3.0 (2026-05-10)
-- **提交**: [`5c6d5da`](https://github.com/BlueDriftHK/CF-workers-netdiag/commit/5c6d5da7f0f24550aae3b22142cebee320569896)
-- **新增**: 实时延迟监控模块，每2秒自动测量 RTT
-- **新增**: Canvas 实时趋势图表绘制
-- **新增**: 最低/最高 RTT 统计
-- **新增**: 多档位带宽测速功能
-- **新增**: CPU 密集型性能测试
-- **新增**: WebSocket 双向延迟测试
-- **新增**: 真实 IP 地理位置查询（通过 ip-api.com）
-- **UI**: 全新蓝色玻璃态毛玻璃效果主题
-- **UI**: 实时延迟监控模块独占整行展示
 
-### v2.x (2026-05-01 ~ 2026-05-05)
-- 基础框架搭建与迭代优化
+- 新增: 实时延迟监控模块，每2秒自动测量 RTT
+- 新增: Canvas 实时趋势图表绘制
+- 新增: 多档位带宽测速、CPU 密集型性能测试、WebSocket 双向延迟测试
+- 新增: 真实 IP 地理位置查询（通过 ip-api.com）
+- UI: 全新蓝色玻璃态毛玻璃效果主题
 
 ### v1.0 (2026-05-01)
-- **提交**: [`cf1826f`](https://github.com/BlueDriftHK/CF-workers-netdiag/commit/cf1826f5dbb47e5d996b4bfb22adf44a9bb532f3)
-- **项目初始化**: 创建 `_workers.js` 核心文件
-- **基础功能**: IP 地址检测与地区验证
-- **框架搭建**: Cloudflare Worker 基础运行环境
+
+- 项目初始化，创建 `_workers.js` 核心文件
+- 基础功能: IP 地址检测与地区验证
 
 ---
 
 ## ❓ 常见问题
 
 ### 1. 部署后访问出现 404 错误？
+
 - **原因**: 可能未正确部署 `_workers.js` 文件
 - **解决**: 确保复制的是 `_workers.js` 的完整内容，而非 `index.html`
 
 ### 2. 限流触发后如何解除？
-- 限流周期为 **60秒**，等待 60 秒后自动解除
-- 响应头会包含 `retry-after: 60`
+
+- 通用限流周期为 60 秒，CPU 限流周期为 60 秒
+- 等待周期结束后自动解除
+- 响应头会包含 `retry-after` 字段
 
 ### 3. WebSocket 连接失败？
+
 - 确保客户端支持 WebSocket 协议
 - 检查网络环境是否允许 WebSocket 连接
 - 尝试使用 `ws://` 而非 `wss://`（开发环境）
 
 ### 4. 带宽测速结果不准确？
+
 - 测速受网络波动影响，建议多次测试取平均值
 - 使用有线网络比 Wi-Fi 更稳定
 - 测速文件大小建议选择 1MB 以上
 
 ### 5. CPU 测试结果差异大？
+
 - Cloudflare Workers 的 CPU 资源是共享的，结果会有波动
-- 建议多次测试取平均值
+- 建议多次测试取平均值（注意每 IP 每分钟限 3 次）
 - 测试迭代次数越高，结果越稳定
 
-### 6. 如何获取真实客户端 IP？
-- Worker 会自动从 `cf-connecting-ip` 或 `x-forwarded-for` 头获取
-- 地理位置通过调用 `ip-api.com` 获取
+### 6. DNS 测试为什么不再直接 fetch？
 
-### 7. 支持 IPv6 吗？
+- 浏览器直接 fetch 外部 URL 会被 CORS 拦截
+- v3.6 改为通过 Worker 代理路由进行 DNS 解析，客户端使用 `Image` 对象测量真实延迟
+
+### 7. 测速历史数据能存多久？
+
+- 最近 5 条记录永久保存，超出自动清理
+- 每条记录 TTL 为 7 天
+
+### 8. 支持 IPv6 吗？
+
 - 完全支持。Worker 会自动检测并显示 IPv4 和 IPv6 地址
 
 ---
@@ -572,77 +560,10 @@ wrangler tail --format json
 
 ### 性能优化建议
 
-1. **启用 KV 缓存**：配置 `CACHE_KV` 绑定可缓存静态资源
-2. **使用自定义域名**：减少 DNS 解析时间
-3. **调整限流阈值**：根据实际使用量调整
-4. **压缩响应**：Worker 默认支持 Brotli/Gzip
-
----
-
-## 🤝 贡献指南
-
-### 贡献流程
-
-```bash
-# 1. Fork 本项目
-# 2. 克隆到本地
-git clone https://github.com/YOUR_USERNAME/CF-workers-netdiag.git
-
-# 3. 创建特性分支
-git checkout -b feature/AmazingFeature
-
-# 4. 提交更改
-git add .
-git commit -m '✨ Add some AmazingFeature'
-
-# 5. 推送并开启 Pull Request
-git push origin feature/AmazingFeature
-```
-
-### 代码规范
-
-- 使用 **2 空格缩进**
-- 变量命名使用 **camelCase**
-- 常量使用 **UPPER_SNAKE_CASE**
-- 添加必要的注释
-
-### 提交信息格式
-
-| 类型 | 图标 | 说明 | 示例 |
-| :--- | :--- | :--- | :--- |
-| feat | ✨ | 新功能 | `feat: add health check endpoint` |
-| fix | 🐛 | 修复问题 | `fix: websocket timeout issue` |
-| docs | 📝 | 文档更新 | `docs: update API documentation` |
-| style | 🎨 | 代码格式 | `style: update card hover effect` |
-| refactor | ♻️ | 代码重构 | `refactor: extract common functions` |
-| perf | ⚡ | 性能优化 | `perf: optimize concurrent test` |
-| test | ✅ | 测试相关 | `test: add unit tests` |
-| chore | 🔧 | 构建/工具 | `chore: update wrangler config` |
-| security | 🔒 | 安全相关 | `security: add rate limiting` |
-
-### Pull Request 检查清单
-
-- [ ] 代码符合项目规范
-- [ ] 已测试通过
-- [ ] 更新了相关文档
-- [ ] 提交信息格式正确
-- [ ] 未引入破坏性变更
-
----
-
-## 🙏 致谢
-
-### 开源项目与服务
-
-- [Cloudflare Workers](https://workers.cloudflare.com/) - 边缘计算平台
-- [Font Awesome](https://fontawesome.com/) - 图标库
-- [Google Fonts](https://fonts.google.com/) - Inter 字体
-- [ip-api.com](http://ip-api.com/) - IP 地理位置服务
-- [ipify.org](https://www.ipify.org/) - IP 地址检测服务
-
-### 贡献者
-
-感谢所有为本项目做出贡献的开发者！
+1. **启用 KV 缓存**: 配置 `SPEED_HISTORY` KV 绑定存储测速历史
+2. **使用自定义域名**: 减少 DNS 解析时间
+3. **调整限流阈值**: 根据实际使用量调整
+4. **压缩响应**: Worker 默认支持 Brotli/Gzip
 
 ---
 
@@ -652,16 +573,15 @@ git push origin feature/AmazingFeature
 
 | 项目 | 说明 |
 | :--- | :--- |
-| **商业使用** | ✅ 允许 |
-| **修改代码** | ✅ 允许 |
-| **分发代码** | ✅ 允许 |
-| **公开源代码** | ✅ 必须（修改后） |
-| **保留版权声明** | ✅ 必须 |
-| **专利授权** | ✅ 包含 |
-| **私人使用** | ✅ 允许 |
-| **许可和版权声明** | ✅ 必须保留 |
+| 商业使用 | ✅ 允许 |
+| 修改代码 | ✅ 允许 |
+| 分发代码 | ✅ 允许 |
+| 公开源代码 | ✅ 必须（修改后） |
+| 保留版权声明 | ✅ 必须 |
+| 专利授权 | ✅ 包含 |
+| 私人使用 | ✅ 允许 |
 
-> 完整许可证文本请查看 [LICENSE](./LICENSE) 文件
+完整许可证文本请查看 [LICENSE](./LICENSE) 文件。
 
 ---
 
@@ -669,25 +589,12 @@ git push origin feature/AmazingFeature
 
 | 渠道 | 链接 |
 | :--- | :--- |
-| **GitHub Issues** | [提交问题](https://github.com/BlueDriftHK/CF-workers-netdiag/issues) |
-| **GitHub Discussions** | [讨论区](https://github.com/BlueDriftHK/CF-workers-netdiag/discussions) |
-| **📖 中文 Wiki** | [完整文档](https://github.com/BlueDriftHK/CF-workers-netdiag/wiki) |
-| **📖 English Wiki** | [Full Documentation](https://github.com/BlueDriftHK/CF-workers-netdiag/wiki) |
+| GitHub Issues | [提交问题](https://github.com/BlueDriftHK/CF-workers-netdiag/issues) |
+| 安全报告 | asiacomk@gmail.com |
 
 ---
 
-## ⭐ Star History
+*由 BlueDriftHK 用 ❤️ 制作*
 
-如果这个项目对你有帮助，欢迎 Star 支持！
-
-[![Star History Chart](https://api.star-history.com/svg?repos=BlueDriftHK/CF-workers-netdiag&type=Date)](https://star-history.com/#BlueDriftHK/CF-workers-netdiag&Date)
-
----
-
-**Made with ❤️ by [BlueDriftHK](https://github.com/BlueDriftHK)**
-
-**GNU General Public License v3.0 · 开源自由 · 持续更新**
-
----
-
-[⬆️ 返回顶部](#netsight-pro-)
+*GNU 通用公共许可证 v3.0 · 开源自由 · 持续更新*
+*（内容由AI生成，仅供参考）*
