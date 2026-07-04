@@ -584,4 +584,3 @@ wrangler tail --format json
 *由 BlueDriftHK 用 ❤️ 制作*
 
 *GNU 通用公共许可证 v3.0 · 开源自由 · 持续更新*
-*（内容由AI生成，仅供参考）*
