@@ -1,7 +1,7 @@
 // ============================================================
 // NetSight Pro - Apple 极简网络诊断工具
 // Cloudflare Worker 完整优化版 | iOS/macOS 原生设计体系
-// 版本: 3.6 | 视觉重构: 苹果极简风格
+// 版本: 4.0 | 深色模式手动切换 + 多节点对比
 // ============================================================
 
 // ==================== 常量定义 ====================
@@ -25,7 +25,6 @@ const SECURITY_HEADERS = {
 const rateLimit = new Map();
 const cpuRateLimit = new Map();
 
-// 注意：清理函数将在 fetch 事件中按需调用，而不是使用 setInterval
 function cleanupRateLimit() {
   const now = Date.now();
   let cleanedCount = 0;
@@ -51,7 +50,6 @@ function isRateLimited(ip, maxRequests = 60, windowMs = 60000) {
   recent.push(now);
   rateLimit.set(ip, recent);
   
-  // 每 100 次请求清理一次，而不是使用 setInterval
   if (rateLimit.size > 0 && Math.random() < 0.01) {
     cleanupRateLimit();
   }
@@ -70,7 +68,6 @@ function escapeForJS(str) {
     .replace(/\t/g, '\\t');
 }
 
-// 修复后的并发限制器
 function pLimit(concurrency) {
   const queue = [];
   let activeCount = 0;
@@ -129,6 +126,31 @@ function handleOptions(request) {
   });
 }
 
+// ==================== IP 欺诈评分函数 ====================
+async function getIpFraudScore(ip) {
+  if (!ip || ip === 'unknown') return null;
+  try {
+    const url = `https://scamalytics.com/api/ip/${ip}`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 4000);
+    const resp = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeout);
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    return {
+      score: data.score !== undefined ? data.score : null,
+      isProxy: data.is_proxy || false,
+      isVpn: data.is_vpn || false,
+      isTor: data.is_tor || false,
+      isHosting: data.is_hosting || false,
+      riskLevel: data.score >= 80 ? 'high' : (data.score >= 50 ? 'medium' : 'low')
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
+// ==================== 主请求处理 ====================
 async function handleRequest(event) {
   const request = event.request;
   const url = new URL(request.url);
@@ -165,7 +187,7 @@ async function handleRequest(event) {
     return new Response(JSON.stringify({
       status: 'ok',
       timestamp: Date.now(),
-      version: '3.5',
+      version: '4.0',
       uptime: performance.timeOrigin ? Date.now() - performance.timeOrigin : 'unknown'
     }), {
       headers: {
@@ -223,7 +245,6 @@ async function handleRequest(event) {
   
   // ==================== CPU 密集型测试端点 ====================
   if (url.pathname === '/cpu-test') {
-    // CPU 速率限制：每IP每分钟最多3次
     const clientIP = request.headers.get('CF-Connecting-IP') || 'unknown';
     const now = Date.now();
     let cpulimit = cpuRateLimit.get(clientIP);
@@ -336,9 +357,7 @@ async function handleRequest(event) {
       }
     };
     
-    // 心跳保持
     const startHeartbeat = () => {
-      // 发送 ping 的间隔
       pingInterval = setInterval(() => {
         if (closed || server.readyState !== 1) {
           cleanup();
@@ -351,7 +370,6 @@ async function handleRequest(event) {
         }
       }, 30000);
       
-      // 心跳超时检测
       heartbeatInterval = setInterval(() => {
         if (closed) {
           cleanup();
@@ -500,11 +518,9 @@ async function handleRequest(event) {
             sent += currentChunk;
             
             if (sent < size) {
-              // 检查背压
               if (controller.desiredSize > 0) {
                 queueMicrotask(pushChunk);
               } else {
-                // 等待背压解除
                 const waitForDrain = () => {
                   if (cancelled) return;
                   if (controller.desiredSize > 0) {
@@ -562,7 +578,6 @@ async function handleRequest(event) {
       if (typeof SPEED_HISTORY !== 'undefined' && SPEED_HISTORY) {
         const key = `speed:${record.timestamp}`;
         await SPEED_HISTORY.put(key, JSON.stringify(record), { expirationTtl: 86400 * 7 });
-        // 仅保留最近5条记录
         const allKeys = await SPEED_HISTORY.list({ prefix: 'speed:' });
         if (allKeys.keys.length > 5) {
           const sorted = allKeys.keys.sort((a, b) => b.name.localeCompare(a.name));
@@ -616,6 +631,25 @@ async function handleRequest(event) {
     
     return new Response(JSON.stringify(stats), {
       headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...CORS_HEADERS, ...SECURITY_HEADERS }
+    });
+  }
+  
+  // ==================== IP 欺诈评分端点 ====================
+  if (url.pathname === '/api/ip-fraud') {
+    const ip = clientIp;
+    const fraudData = await getIpFraudScore(ip);
+    if (!fraudData) {
+      return new Response(JSON.stringify({ error: '无法获取风险数据' }), {
+        status: 503,
+        headers: { 'content-type': 'application/json', ...CORS_HEADERS, ...SECURITY_HEADERS }
+      });
+    }
+    return new Response(JSON.stringify(fraudData), {
+      headers: {
+        'content-type': 'application/json',
+        ...CORS_HEADERS,
+        ...SECURITY_HEADERS
+      }
     });
   }
   
@@ -715,10 +749,10 @@ async function handleRequest(event) {
   
   // 生成随机 nonce 用于 CSP
   const nonce = crypto.randomUUID();
-  const cspHeader = `default-src 'self'; script-src 'self' 'nonce-${nonce}' https://cdnjs.cloudflare.com https://fonts.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://ipapi.co https://api4.ipify.org https://api6.ipify.org https://ipv4.icanhazip.com https://ipv6.icanhazip.com https://ip4.seeip.org; img-src 'self' data:;`;
-  
+  const cspHeader = `default-src 'self'; script-src 'self' 'nonce-${nonce}' https://cdnjs.cloudflare.com https://fonts.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://ipapi.co https://api4.ipify.org https://api6.ipify.org https://ipv4.icanhazip.com https://ipv6.icanhazip.com https://ip4.seeip.org https://scamalytics.com; img-src 'self' data: https://www.netflix.com https://www.disneyplus.com https://www.youtube.com https://chat.openai.com;`;
+
   const html = `<!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="auto">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
@@ -729,6 +763,7 @@ async function handleRequest(event) {
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
+        /* ==================== 全局重置 & 变量 ==================== */
         * {
             margin: 0;
             padding: 0;
@@ -772,6 +807,7 @@ async function handleRequest(event) {
             --chart-teal: #22d3ee;
         }
 
+        /* 深色模式（跟随系统） */
         @media (prefers-color-scheme: dark) {
             :root {
                 --bg-primary: #1c1c1e;
@@ -805,6 +841,70 @@ async function handleRequest(event) {
             }
         }
 
+        /* 手动设置深色模式 */
+        [data-theme="dark"] {
+            --bg-primary: #1c1c1e;
+            --bg-card: rgba(255, 255, 255, 0.08);
+            --bg-card-hover: rgba(255, 255, 255, 0.12);
+            --bg-glass: rgba(255, 255, 255, 0.06);
+            --text-primary: #f5f5f7;
+            --text-secondary: #a1a1a6;
+            --text-tertiary: #636366;
+            --text-quaternary: #48484a;
+            --accent: #0A84FF;
+            --accent-hover: #409cff;
+            --accent-light: rgba(10, 132, 255, 0.12);
+            --accent-glass: rgba(10, 132, 255, 0.08);
+            --success: #30d158;
+            --success-light: rgba(48, 209, 88, 0.15);
+            --warning: #ff9f0a;
+            --warning-light: rgba(255, 159, 10, 0.15);
+            --danger: #ff453a;
+            --danger-light: rgba(255, 69, 58, 0.12);
+            --border: rgba(255, 255, 255, 0.1);
+            --border-accent: rgba(10, 132, 255, 0.2);
+            --divider: rgba(255, 255, 255, 0.06);
+            --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.3);
+            --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
+            --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.3);
+            --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.3);
+            --chart-cyan: #22d3ee;
+            --chart-green: #34d399;
+            --chart-teal: #2dd4bf;
+        }
+
+        /* 手动设置浅色模式 */
+        [data-theme="light"] {
+            --bg-primary: #f5f5f7;
+            --bg-card: rgba(255, 255, 255, 0.72);
+            --bg-card-hover: rgba(255, 255, 255, 0.88);
+            --bg-glass: rgba(255, 255, 255, 0.64);
+            --text-primary: #1d1d1f;
+            --text-secondary: #86868b;
+            --text-tertiary: #aeaeb2;
+            --text-quaternary: #c7c7cc;
+            --accent: #007AFF;
+            --accent-hover: #0066d6;
+            --accent-light: rgba(0, 122, 255, 0.08);
+            --accent-glass: rgba(0, 122, 255, 0.06);
+            --success: #34c759;
+            --success-light: rgba(52, 199, 89, 0.1);
+            --warning: #ff9f0a;
+            --warning-light: rgba(255, 159, 10, 0.1);
+            --danger: #ff3b30;
+            --danger-light: rgba(255, 59, 48, 0.08);
+            --border: rgba(0, 0, 0, 0.06);
+            --border-accent: rgba(0, 122, 255, 0.12);
+            --divider: rgba(0, 0, 0, 0.04);
+            --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.03);
+            --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.04);
+            --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.05);
+            --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.07);
+            --chart-cyan: #06b6d4;
+            --chart-green: #34d399;
+            --chart-teal: #22d3ee;
+        }
+
         html {
             -webkit-font-smoothing: antialiased;
             -moz-osx-font-smoothing: grayscale;
@@ -817,9 +917,9 @@ async function handleRequest(event) {
             padding: 28px;
             color: var(--text-primary);
             position: relative;
+            transition: background 0.3s ease, color 0.3s ease;
         }
 
-        /* Subtle background texture */
         body::before {
             content: '';
             position: fixed;
@@ -842,7 +942,7 @@ async function handleRequest(event) {
             z-index: 1;
         }
 
-        /* ========== Header ========== */
+        /* ==================== 头部 ==================== */
         .header {
             display: flex;
             justify-content: space-between;
@@ -892,6 +992,35 @@ async function handleRequest(event) {
             letter-spacing: 0.2px;
         }
 
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        /* ====== 主题切换按钮 ====== */
+        .theme-toggle {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 30px;
+            padding: 6px 12px;
+            cursor: pointer;
+            font-size: 18px;
+            line-height: 1;
+            color: var(--text-secondary);
+            transition: all var(--transition-fast);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .theme-toggle:hover {
+            background: var(--bg-card-hover);
+            border-color: var(--border-accent);
+        }
+        .theme-toggle i {
+            font-size: 16px;
+        }
+
         .lang-switcher {
             display: flex;
             gap: 3px;
@@ -925,7 +1054,7 @@ async function handleRequest(event) {
             background: rgba(0, 0, 0, 0.04);
         }
 
-        /* ========== Hero Card ========== */
+        /* ==================== 卡片通用 ==================== */
         .hero-card {
             background: var(--bg-card);
             backdrop-filter: blur(24px) saturate(180%);
@@ -1026,7 +1155,6 @@ async function handleRequest(event) {
             50% { opacity: 0.45; transform: scale(1.25); }
         }
 
-        /* ========== Grid & Cards ========== */
         .grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
@@ -1099,7 +1227,6 @@ async function handleRequest(event) {
             padding: 20px 24px;
         }
 
-        /* ========== Info Rows ========== */
         .info-row {
             display: flex;
             justify-content: space-between;
@@ -1134,7 +1261,6 @@ async function handleRequest(event) {
             color: var(--text-primary);
         }
 
-        /* ========== Badges ========== */
         .badge {
             padding: 4px 12px;
             border-radius: 14px;
@@ -1175,7 +1301,7 @@ async function handleRequest(event) {
             border: 1px solid rgba(175, 82, 222, 0.18);
         }
 
-        /* ========== RTT Display ========== */
+        /* ==================== RTT 显示 ==================== */
         .rtt-display {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
@@ -1212,7 +1338,6 @@ async function handleRequest(event) {
             letter-spacing: 0.2px;
         }
 
-        /* ========== Chart ========== */
         .chart-container {
             background: rgba(0, 0, 0, 0.015);
             border-radius: var(--radius-md);
@@ -1226,7 +1351,6 @@ async function handleRequest(event) {
             height: 180px;
         }
 
-        /* ========== Quality Grid ========== */
         .quality-grid {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
@@ -1271,7 +1395,7 @@ async function handleRequest(event) {
             font-weight: 600;
         }
 
-        /* ========== Buttons ========== */
+        /* ==================== 按钮和结果 ==================== */
         .button-group {
             display: flex;
             flex-wrap: wrap;
@@ -1341,7 +1465,6 @@ async function handleRequest(event) {
             transform: translateY(-1px);
         }
 
-        /* ========== Result Area ========== */
         .result-area {
             margin-top: 16px;
             padding: 14px 18px;
@@ -1393,7 +1516,6 @@ async function handleRequest(event) {
             font-size: 11px;
         }
 
-        /* ========== Footer ========== */
         .footer {
             margin-top: 28px;
             padding: 18px 28px;
@@ -1464,7 +1586,6 @@ async function handleRequest(event) {
             opacity: 0.4;
         }
 
-        /* ========== Loading ========== */
         @keyframes spin {
             from { transform: rotate(0deg); }
             to { transform: rotate(360deg); }
@@ -1482,7 +1603,7 @@ async function handleRequest(event) {
             vertical-align: middle;
         }
 
-        /* ========== Stats & History ========== */
+        /* ==================== 统计卡片 ==================== */
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -1619,127 +1740,140 @@ async function handleRequest(event) {
             font-size: 13px;
         }
 
-        /* ========== Scrollbar ========== */
+        /* ====== 新增：多节点对比表格 ====== */
+        .node-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 12px;
+            font-size: 13px;
+        }
+        .node-table th {
+            text-align: left;
+            padding: 8px 12px;
+            background: rgba(0,0,0,0.02);
+            border-bottom: 2px solid var(--border);
+            color: var(--text-secondary);
+            font-weight: 600;
+        }
+        .node-table td {
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--divider);
+            color: var(--text-primary);
+        }
+        .node-table .good { color: var(--success); font-weight: 600; }
+        .node-table .mid { color: var(--warning); font-weight: 600; }
+        .node-table .bad { color: var(--danger); font-weight: 600; }
+
+        /* ====== 新增：对话框 ====== */
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5);
+            backdrop-filter: blur(4px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.2s ease;
+        }
+        .modal-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+        .modal-box {
+            background: var(--bg-card);
+            backdrop-filter: blur(24px);
+            border-radius: var(--radius-lg);
+            padding: 28px 32px;
+            max-width: 560px;
+            width: 90%;
+            box-shadow: var(--shadow-lg);
+            border: 1px solid var(--border);
+        }
+        .modal-box h3 {
+            margin-bottom: 16px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+        .modal-box p {
+            color: var(--text-secondary);
+            font-size: 13px;
+            margin-bottom: 12px;
+        }
+        .modal-box textarea {
+            width: 100%;
+            padding: 12px;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 14px;
+            resize: vertical;
+            min-height: 80px;
+        }
+        .modal-box .btn-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 16px;
+            justify-content: flex-end;
+        }
+
+        /* ==================== 滚动条 ==================== */
         ::-webkit-scrollbar {
             width: 5px;
             height: 5px;
         }
-
         ::-webkit-scrollbar-track {
             background: transparent;
             border-radius: 10px;
         }
-
         ::-webkit-scrollbar-thumb {
             background: rgba(0, 0, 0, 0.15);
             border-radius: 10px;
         }
-
         ::-webkit-scrollbar-thumb:hover {
             background: rgba(0, 0, 0, 0.25);
         }
 
-        /* ========== Responsive ========== */
+        /* ==================== 响应式 ==================== */
         @media (max-width: 1024px) {
-            .rtt-display {
-                grid-template-columns: repeat(2, 1fr);
-            }
-            .quality-grid {
-                grid-template-columns: repeat(2, 1fr);
-            }
+            .rtt-display { grid-template-columns: repeat(2, 1fr); }
+            .quality-grid { grid-template-columns: repeat(2, 1fr); }
         }
-
         @media (max-width: 768px) {
-            body {
-                padding: 14px;
-            }
-            .container {
-                max-width: 100%;
-            }
-            .grid {
-                grid-template-columns: 1fr;
-                gap: 14px;
-            }
-            .ip-val {
-                font-size: 18px;
-            }
-            .ip-val-small {
-                font-size: 15px;
-            }
-            .header {
-                flex-direction: column;
-                text-align: center;
-                padding: 14px 20px;
-                border-radius: var(--radius-lg);
-            }
-            .logo {
-                flex-direction: column;
-                gap: 8px;
-            }
-            .logo-icon {
-                width: 44px;
-                height: 44px;
-                font-size: 20px;
-                border-radius: var(--radius-sm);
-            }
-            .logo h1 {
-                font-size: 22px;
-            }
-            .button-group {
-                justify-content: center;
-            }
-            .btn {
-                padding: 9px 18px;
-                font-size: 12px;
-            }
-            .rtt-value {
-                font-size: 36px;
-            }
-            .rtt-display {
-                grid-template-columns: 1fr;
-                gap: 12px;
-            }
-            .rtt-box {
-                padding: 18px 14px;
-            }
-            .stats-row {
-                justify-content: center;
-            }
-            .footer {
-                flex-direction: column;
-                text-align: center;
-                padding: 14px 20px;
-                border-radius: var(--radius-md);
-            }
-            .quality-grid {
-                grid-template-columns: 1fr;
-                gap: 10px;
-            }
-            .hero-card {
-                padding: 20px;
-                border-radius: var(--radius-lg);
-            }
-            .rtt-card {
-                min-height: auto;
-            }
-            .rtt-card .card-body {
-                padding: 16px;
-            }
-            .card-header {
-                padding: 14px 18px;
-            }
-            .card-body {
-                padding: 14px 18px;
-            }
-            .stats-grid {
-                grid-template-columns: 1fr;
-                gap: 14px;
-            }
+            body { padding: 14px; }
+            .container { max-width: 100%; }
+            .grid { grid-template-columns: 1fr; gap: 14px; }
+            .ip-val { font-size: 18px; }
+            .ip-val-small { font-size: 15px; }
+            .header { flex-direction: column; text-align: center; padding: 14px 20px; border-radius: var(--radius-lg); }
+            .logo { flex-direction: column; gap: 8px; }
+            .logo-icon { width: 44px; height: 44px; font-size: 20px; border-radius: var(--radius-sm); }
+            .logo h1 { font-size: 22px; }
+            .button-group { justify-content: center; }
+            .btn { padding: 9px 18px; font-size: 12px; }
+            .rtt-value { font-size: 36px; }
+            .rtt-display { grid-template-columns: 1fr; gap: 12px; }
+            .rtt-box { padding: 18px 14px; }
+            .stats-row { justify-content: center; }
+            .footer { flex-direction: column; text-align: center; padding: 14px 20px; border-radius: var(--radius-md); }
+            .quality-grid { grid-template-columns: 1fr; gap: 10px; }
+            .hero-card { padding: 20px; border-radius: var(--radius-lg); }
+            .rtt-card { min-height: auto; }
+            .rtt-card .card-body { padding: 16px; }
+            .card-header { padding: 14px 18px; }
+            .card-body { padding: 14px 18px; }
+            .stats-grid { grid-template-columns: 1fr; gap: 14px; }
+            .header-right { flex-wrap: wrap; justify-content: center; }
         }
     </style>
 </head>
 <body>
     <div class="container">
+        <!-- ==================== 头部 ==================== -->
         <div class="header">
             <div class="logo">
                 <div class="logo-icon">
@@ -1750,13 +1884,21 @@ async function handleRequest(event) {
                     <p><i class="fas fa-bolt"></i> 极光诊断 · 实时网络分析</p>
                 </div>
             </div>
-            <div class="lang-switcher">
-                <button class="lang-btn" data-lang="en" onclick="setLang('en')">EN</button>
-                <button class="lang-btn" data-lang="zh-CN" onclick="setLang('zh-CN')">简体</button>
-                <button class="lang-btn" data-lang="zh-TW" onclick="setLang('zh-TW')">繁體</button>
+            <div class="header-right">
+                <!-- 主题切换 -->
+                <button class="theme-toggle" id="themeToggle" title="切换主题">
+                    <i class="fas fa-moon"></i>
+                </button>
+                <!-- 语言切换 -->
+                <div class="lang-switcher">
+                    <button class="lang-btn" data-lang="en" onclick="setLang('en')">EN</button>
+                    <button class="lang-btn" data-lang="zh-CN" onclick="setLang('zh-CN')">简体</button>
+                    <button class="lang-btn" data-lang="zh-TW" onclick="setLang('zh-TW')">繁體</button>
+                </div>
             </div>
         </div>
 
+        <!-- ==================== Hero 卡片 ==================== -->
         <div class="hero-card">
             <div class="ip-row">
                 <span class="ip-label"><i class="fas fa-globe"></i> IPv4</span>
@@ -1773,6 +1915,7 @@ async function handleRequest(event) {
             </div>
         </div>
 
+        <!-- ==================== RTT 监控卡片 ==================== -->
         <div class="card rtt-card">
             <div class="card-header">
                 <i class="fas fa-waveform"></i>
@@ -1826,7 +1969,9 @@ async function handleRequest(event) {
             </div>
         </div>
 
+        <!-- ==================== 三栏信息卡片 ==================== -->
         <div class="grid">
+            <!-- 安全与协议 -->
             <div class="card">
                 <div class="card-header">
                     <i class="fas fa-shield-haltered"></i>
@@ -1879,6 +2024,7 @@ async function handleRequest(event) {
                 </div>
             </div>
 
+            <!-- 边缘节点位置 -->
             <div class="card">
                 <div class="card-header">
                     <i class="fas fa-map-pin"></i>
@@ -1906,12 +2052,13 @@ async function handleRequest(event) {
                 </div>
             </div>
 
+            <!-- 真实 IP 位置 + 欺诈评分 -->
             <div class="card">
                 <div class="card-header">
                     <i class="fas fa-user-secret"></i>
                     <div>
                         <h3 id="t-user-geo">真实 IP 位置</h3>
-                        <p>客户端地理位置</p>
+                        <p>客户端地理位置 & 风险评分</p>
                     </div>
                 </div>
                 <div class="card-body" id="user-geo-info">
@@ -1922,6 +2069,7 @@ async function handleRequest(event) {
             </div>
         </div>
 
+        <!-- ==================== 诊断工具集 ==================== -->
         <div class="card" style="margin-bottom: 28px;">
             <div class="card-header">
                 <i class="fas fa-flask"></i>
@@ -1939,8 +2087,12 @@ async function handleRequest(event) {
                     <button class="btn btn-purple" id="btn-ws-test"><i class="fas fa-bolt"></i> <span id="t-ws-btn">WebSocket</span></button>
                     <button class="btn btn-cyan" id="btn-concurrent-test"><i class="fas fa-layer-group"></i> <span id="t-concurrent-btn">并发测试</span></button>
                     <button class="btn btn-outline" id="btn-stream-test"><i class="fas fa-stream"></i> <span id="t-stream-btn">流式传输</span></button>
+                    <button class="btn btn-outline" id="btn-media-unlock"><i class="fas fa-play-circle"></i> <span id="t-media-btn">流媒体连通性</span></button>
+                    <!-- 多节点对比 -->
+                    <button class="btn btn-outline" id="btn-multi-node"><i class="fas fa-globe-asia"></i> <span id="t-multi-btn">多节点对比</span></button>
                 </div>
 
+                <!-- 结果区域 -->
                 <div id="loss-result" class="result-area" style="display: none;"></div>
                 <div id="speed-result" style="display: none;"></div>
                 <div id="dns-result" class="result-area" style="display: none;"></div>
@@ -1948,9 +2100,12 @@ async function handleRequest(event) {
                 <div id="ws-result" class="result-area" style="display: none;"></div>
                 <div id="concurrent-result" class="result-area" style="display: none;"></div>
                 <div id="stream-result" class="result-area" style="display: none;"></div>
+                <div id="media-result" class="result-area" style="display: none;"></div>
+                <div id="multi-node-result" class="result-area" style="display: none;"></div>
             </div>
         </div>
 
+        <!-- ==================== 硬件信息 ==================== -->
         <div class="card">
             <div class="card-header">
                 <i class="fas fa-desktop"></i>
@@ -1960,13 +2115,11 @@ async function handleRequest(event) {
                 </div>
             </div>
             <div class="card-body">
-                <div id="hw-info" class="hw-grid">
-                    加载中...
-                </div>
+                <div id="hw-info" class="hw-grid">加载中...</div>
             </div>
         </div>
 
-        
+        <!-- ==================== 历史与统计 ==================== -->
         <div class="stats-grid">
             <div class="stats-card">
                 <div class="card-header">
@@ -1994,14 +2147,13 @@ async function handleRequest(event) {
             </div>
         </div>
 
-
+        <!-- ==================== 底部 ==================== -->
         <div class="footer">
             <span><i class="fas fa-fingerprint"></i> RAY ID: <span style="font-family: monospace;">${data.rayId}</span></span>
             <span><i class="fas fa-ip"></i> 客户端: ${data.clientIp}</span>
             <span class="copy-btn" id="copy-report"><i class="fas fa-copy"></i> <span id="t-copy">复制报告</span></span>
         </div>
 
-        <!-- CF-workers-netdiag 驱动声明 -->
         <div class="driver-badge">
             <i class="fas fa-bolt"></i>
             由 
@@ -2016,10 +2168,24 @@ async function handleRequest(event) {
         </div>
     </div>
 
+    <!-- ====== 多节点对比对话框 ====== -->
+    <div class="modal-overlay" id="nodeModal">
+        <div class="modal-box">
+            <h3><i class="fas fa-globe-asia"></i> <span id="modal-title">多节点对比</span></h3>
+            <p id="modal-desc">输入其他 Worker 节点的完整 URL（每行一个），将并行测试延迟。</p>
+            <textarea id="nodeUrls" placeholder="https://node1.example.com&#10;https://node2.example.com"></textarea>
+            <div class="btn-group">
+                <button class="btn btn-outline" id="modalCancel"><span id="modal-cancel">取消</span></button>
+                <button class="btn btn-primary" id="modalStart"><span id="modal-start">开始测试</span></button>
+            </div>
+        </div>
+    </div>
+
     <script nonce="${nonce}">
         (function(){
+            // ==================== 国际化 ====================
             const i18n = {
-                'en': { 
+                'en': {
                     sec: 'Security & Protocol', geo: 'Edge Location', userGeo: 'Client Location',
                     rtt: 'Real-time RTT', hw: 'Hardware Info', live: 'Live Monitoring',
                     risk: 'Risk Level', clean: 'Low Risk', high: 'High Risk', yes: 'YES', no: 'NO',
@@ -2034,9 +2200,22 @@ async function handleRequest(event) {
                     wsTesting: 'WebSocket latency...', concurrentTesting: 'Concurrency test...',
                     streamTesting: 'Stream throughput...', compressLabel: 'Compression',
                     http2Label: 'HTTP/2', lossResult: 'Loss', http2Enabled: 'HTTP/2 Enabled',
-                    http2Disabled: 'HTTP/1.1', earlyHints: 'Early Hints'
+                    http2Disabled: 'HTTP/1.1', earlyHints: 'Early Hints',
+                    mediaTesting: 'Testing connectivity from your IP...', mediaBtn: 'Streaming Connectivity',
+                    fraudScore: 'Fraud Score', proxy: 'Proxy', vpn: 'VPN', tor: 'Tor', hosting: 'Hosting',
+                    fraudLow: 'Low Risk', fraudMedium: 'Medium Risk', fraudHigh: 'High Risk',
+                    fraudUnknown: 'Unknown',
+                    multiBtn: 'Multi-Node Compare',
+                    multiTesting: 'Comparing nodes...',
+                    multiResult: 'Node Comparison Result',
+                    nodeName: 'Node',
+                    latency: 'Latency (ms)',
+                    status: 'Status',
+                    enterNodeUrls: 'Enter node URLs (one per line)',
+                    cancel: 'Cancel',
+                    start: 'Start Test'
                 },
-                'zh-CN': { 
+                'zh-CN': {
                     sec: '安全与协议', geo: '边缘节点位置', userGeo: '真实 IP 位置',
                     rtt: '实时延迟监控', hw: '硬件信息', live: '实时监控',
                     risk: '风险等级', clean: '低风险', high: '高风险', yes: '是', no: '否',
@@ -2051,9 +2230,22 @@ async function handleRequest(event) {
                     wsTesting: 'WebSocket 延迟测试...', concurrentTesting: '并发测试中...',
                     streamTesting: '流式吞吐量测试...', compressLabel: '压缩算法',
                     http2Label: 'HTTP/2 状态', lossResult: '丢包率', http2Enabled: 'HTTP/2 已启用',
-                    http2Disabled: 'HTTP/1.1', earlyHints: 'Early Hints'
+                    http2Disabled: 'HTTP/1.1', earlyHints: 'Early Hints',
+                    mediaTesting: '正在检测您 IP 的连通性...', mediaBtn: '流媒体连通性',
+                    fraudScore: '欺诈评分', proxy: '代理', vpn: 'VPN', tor: 'Tor', hosting: '托管',
+                    fraudLow: '低风险', fraudMedium: '中风险', fraudHigh: '高风险',
+                    fraudUnknown: '未知',
+                    multiBtn: '多节点对比',
+                    multiTesting: '正在对比节点...',
+                    multiResult: '节点对比结果',
+                    nodeName: '节点',
+                    latency: '延迟 (ms)',
+                    status: '状态',
+                    enterNodeUrls: '输入节点 URL（每行一个）',
+                    cancel: '取消',
+                    start: '开始测试'
                 },
-                'zh-TW': { 
+                'zh-TW': {
                     sec: '安全與協議', geo: '邊緣節點位置', userGeo: '真實 IP 位置',
                     rtt: '即時延遲監控', hw: '硬體資訊', live: '即時監控',
                     risk: '風險等級', clean: '低風險', high: '高風險', yes: '是', no: '否',
@@ -2068,10 +2260,24 @@ async function handleRequest(event) {
                     wsTesting: 'WebSocket 延遲測試...', concurrentTesting: '併發測試中...',
                     streamTesting: '串流吞吐量測試...', compressLabel: '壓縮演算法',
                     http2Label: 'HTTP/2 狀態', lossResult: '丟包率', http2Enabled: 'HTTP/2 已啟用',
-                    http2Disabled: 'HTTP/1.1', earlyHints: 'Early Hints'
+                    http2Disabled: 'HTTP/1.1', earlyHints: 'Early Hints',
+                    mediaTesting: '正在檢測您 IP 的連通性...', mediaBtn: '串流媒體連通性',
+                    fraudScore: '詐欺評分', proxy: '代理', vpn: 'VPN', tor: 'Tor', hosting: '託管',
+                    fraudLow: '低風險', fraudMedium: '中風險', fraudHigh: '高風險',
+                    fraudUnknown: '未知',
+                    multiBtn: '多節點對比',
+                    multiTesting: '正在對比節點...',
+                    multiResult: '節點對比結果',
+                    nodeName: '節點',
+                    latency: '延遲 (ms)',
+                    status: '狀態',
+                    enterNodeUrls: '輸入節點 URL（每行一個）',
+                    cancel: '取消',
+                    start: '開始測試'
                 }
             };
-            
+
+            // ==================== 后端数据 ====================
             const BACKEND_DATA = {
                 asOrg: "${data.asOrg}", asn: "${data.asn}", colo: "${data.colo}",
                 city: "${data.city}", region: "${data.region}", country: "${data.country}",
@@ -2086,7 +2292,8 @@ async function handleRequest(event) {
                 realGeoLat: ${realGeoJS.lat}, realGeoLon: ${realGeoJS.lon},
                 realGeoOrg: "${realGeoJS.org}", realGeoIp: "${realGeoJS.ip}"
             };
-            
+
+            // ==================== DOM 引用 ====================
             const elements = {
                 v4: document.getElementById('v4'), v6: document.getElementById('v6'),
                 rttNum: document.getElementById('rtt-num'), chart: document.getElementById('chart'),
@@ -2103,9 +2310,11 @@ async function handleRequest(event) {
                 cpuResult: document.getElementById('cpu-result'), wsBtn: document.getElementById('btn-ws-test'),
                 wsResult: document.getElementById('ws-result'), concurrentBtn: document.getElementById('btn-concurrent-test'),
                 concurrentResult: document.getElementById('concurrent-result'), streamBtn: document.getElementById('btn-stream-test'),
-                streamResult: document.getElementById('stream-result')
+                streamResult: document.getElementById('stream-result'),
+                mediaBtn: document.getElementById('btn-media-unlock'), mediaResult: document.getElementById('media-result'),
+                multiBtn: document.getElementById('btn-multi-node'), multiResult: document.getElementById('multi-node-result')
             };
-            
+
             let currentLang = localStorage.getItem('pref-lang') || '${defaultLang}';
             const rttData = [];
             const MAX_RTT_POINTS = 40;
@@ -2118,19 +2327,20 @@ async function handleRequest(event) {
             let minRtt = Infinity;
             let maxRtt = 0;
             let rttTestRunning = true;
-            
+
+            // ==================== 工具函数 ====================
             function isDataCenter() {
                 const patterns = /data center|hosting|cloud|akamai|google|amazon|microsoft|aliyun|tencent|fastly|cloudflare|incapsula|leaseweb|ovh|digitalocean|vultr|linode/i;
                 return patterns.test(BACKEND_DATA.asOrg);
             }
-            
+
             function fetchWithTimeout(url, options = {}, timeout = 3000) {
                 const controller = new AbortController();
                 const id = setTimeout(() => controller.abort(), timeout);
                 return fetch(url, { ...options, signal: controller.signal })
                     .finally(() => clearTimeout(id));
             }
-            
+
             function calculateDistance(lat1, lon1, lat2, lon2) {
                 const R = 6371;
                 const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -2141,7 +2351,7 @@ async function handleRequest(event) {
                 const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
                 return Math.round(R * c);
             }
-            
+
             function showResult(element, html, isError = false) {
                 if (element) {
                     element.style.display = 'block';
@@ -2161,7 +2371,8 @@ async function handleRequest(event) {
                     }, 5000);
                 }
             }
-            
+
+            // ==================== UI 更新 ====================
             function updateUI() {
                 const t = i18n[currentLang];
                 const textIds = {
@@ -2174,7 +2385,10 @@ async function handleRequest(event) {
                     't-speed-btn': t.speedBtn, 't-dns-btn': t.dnsBtn,
                     't-cpu-btn': t.cpuBtn, 't-ws-btn': t.wsBtn,
                     't-concurrent-btn': t.concurrentBtn, 't-stream-btn': t.streamBtn,
-                    't-compress-label': t.compressLabel, 't-http2-label': t.http2Label
+                    't-compress-label': t.compressLabel, 't-http2-label': t.http2Label,
+                    't-media-btn': t.mediaBtn, 't-multi-btn': t.multiBtn,
+                    'modal-title': t.multiBtn, 'modal-desc': t.enterNodeUrls,
+                    'modal-cancel': t.cancel, 'modal-start': t.start
                 };
                 Object.entries(textIds).forEach(([id, text]) => {
                     const el = document.getElementById(id);
@@ -2229,13 +2443,14 @@ async function handleRequest(event) {
                     elements.botScoreVal.innerHTML = '<span class="badge ' + badgeClass + '">' + score + '</span>';
                 }
             }
-            
+
             window.setLang = function(lang) {
                 currentLang = lang;
                 localStorage.setItem('pref-lang', lang);
                 updateUI();
             };
-            
+
+            // ==================== 图表 ====================
             function resizeCanvas() {
                 const canvas = elements.chart;
                 if (!canvas || !canvas.parentElement) return;
@@ -2247,7 +2462,7 @@ async function handleRequest(event) {
                     drawChart();
                 }
             }
-            
+
             function drawChart() {
                 const canvas = elements.chart;
                 const ctx = elements.ctx;
@@ -2276,7 +2491,8 @@ async function handleRequest(event) {
                 ctx.lineTo(0, canvas.height);
                 ctx.fill();
             }
-            
+
+            // ==================== IP 获取 ====================
             async function getIP(version) {
                 const el = version === 'v4' ? elements.v4 : elements.v6;
                 if (!el) return;
@@ -2298,7 +2514,8 @@ async function handleRequest(event) {
                 el.textContent = i18n[currentLang].unavailable;
                 el.style.opacity = '0.5';
             }
-            
+
+            // ==================== RTT 监控 ====================
             function updateQuality(currentRtt) {
                 const qualityEl = document.getElementById('quality-badge');
                 const stabilityEl = document.getElementById('stability-badge');
@@ -2325,7 +2542,7 @@ async function handleRequest(event) {
                     stabilityEl.style.color = stabilityColor;
                 }
             }
-            
+
             function updateLossRate() {
                 const lossRateEl = document.getElementById('loss-rate');
                 if (lossRateEl) {
@@ -2334,7 +2551,7 @@ async function handleRequest(event) {
                     lossRateEl.style.color = rate === 0 ? '#34d399' : (rate < 5 ? '#fbbf24' : '#f87171');
                 }
             }
-            
+
             function updateMinMax(currentRtt) {
                 const minEl = document.getElementById('min-rtt');
                 const maxEl = document.getElementById('max-rtt');
@@ -2348,7 +2565,7 @@ async function handleRequest(event) {
                     if (maxEl) maxEl.textContent = maxRtt;
                 }
             }
-            
+
             async function testRtt() {
                 if (!rttTestRunning) return;
                 const start = performance.now();
@@ -2387,7 +2604,8 @@ async function handleRequest(event) {
                 }
                 setTimeout(testRtt, 2000);
             }
-            
+
+            // ==================== HTTP/2 检测 ====================
             async function testHttp2() {
                 if (!elements.http2Val) return;
                 const t = i18n[currentLang];
@@ -2415,7 +2633,60 @@ async function handleRequest(event) {
                     elements.http2Val.innerHTML = '<span class="badge">N/A</span>';
                 }
             }
-            
+
+            // ==================== 欺诈评分 ====================
+            async function loadFraudScore() {
+                try {
+                    const res = await fetch('/api/ip-fraud');
+                    if (!res.ok) return;
+                    const data = await res.json();
+                    const t = i18n[currentLang];
+                    const geoCard = elements.userGeoInfo;
+                    if (!geoCard) return;
+                    let fraudSection = geoCard.querySelector('.fraud-info');
+                    if (!fraudSection) {
+                        fraudSection = document.createElement('div');
+                        fraudSection.className = 'fraud-info';
+                        fraudSection.style.marginTop = '15px';
+                        fraudSection.style.paddingTop = '15px';
+                        fraudSection.style.borderTop = '1px solid var(--divider)';
+                        geoCard.appendChild(fraudSection);
+                    }
+                    
+                    let riskLabel = t.fraudUnknown;
+                    let riskBadge = 'badge-info';
+                    if (data.score !== null) {
+                        if (data.score >= 80) { riskLabel = t.fraudHigh; riskBadge = 'badge-danger'; }
+                        else if (data.score >= 50) { riskLabel = t.fraudMedium; riskBadge = 'badge-warning'; }
+                        else { riskLabel = t.fraudLow; riskBadge = 'badge-success'; }
+                    }
+                    
+                    fraudSection.innerHTML = \`
+                        <div class="info-row">
+                            <span class="info-label"><i class="fas fa-shield-alt"></i> \${t.fraudScore}</span>
+                            <span class="info-value"><span class="badge \${riskBadge}">\${data.score !== null ? data.score + ' - ' + riskLabel : 'N/A'}</span></span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label"><i class="fas fa-user-secret"></i> \${t.proxy}</span>
+                            <span class="info-value"><span class="badge \${data.isProxy ? 'badge-danger' : 'badge-success'}">\${data.isProxy ? '⚠️ ' + t.yes : '✅ ' + t.no}</span></span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label"><i class="fas fa-shield-virus"></i> \${t.vpn}</span>
+                            <span class="info-value"><span class="badge \${data.isVpn ? 'badge-danger' : 'badge-success'}">\${data.isVpn ? '⚠️ ' + t.yes : '✅ ' + t.no}</span></span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label"><i class="fas fa-route"></i> \${t.tor}</span>
+                            <span class="info-value"><span class="badge \${data.isTor ? 'badge-danger' : 'badge-success'}">\${data.isTor ? '⚠️ ' + t.yes : '✅ ' + t.no}</span></span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label"><i class="fas fa-server"></i> \${t.hosting}</span>
+                            <span class="info-value"><span class="badge \${data.isHosting ? 'badge-warning' : 'badge-success'}">\${data.isHosting ? '⚠️ ' + t.yes : '✅ ' + t.no}</span></span>
+                        </div>
+                    \`;
+                } catch (e) {}
+            }
+
+            // ==================== 地理位置 ====================
             async function fetchUserGeo() {
                 if (!elements.userGeoInfo) return;
                 
@@ -2443,6 +2714,7 @@ async function handleRequest(event) {
                             <span class="info-value"><code>\${BACKEND_DATA.realGeoIp}</code></span>
                         </div>
                     \`;
+                    loadFraudScore();
                     return;
                 }
                 
@@ -2483,11 +2755,13 @@ async function handleRequest(event) {
                             <span class="info-value"><code>\${ip}</code></span>
                         </div>
                     \`;
+                    loadFraudScore();
                 } catch (e) {
                     elements.userGeoInfo.innerHTML = '<div style="text-align: center; padding: 30px; color: #f87171;"><i class="fas fa-exclamation-triangle"></i> 地理位置查询失败</div>';
                 }
             }
-            
+
+            // ==================== 硬件信息 ====================
             function updateHardwareInfo() {
                 if (!elements.hwInfo) return;
                 const cores = navigator.hardwareConcurrency || 'N/A';
@@ -2504,6 +2778,7 @@ async function handleRequest(event) {
                 \`;
             }
 
+            // ==================== 各测试函数 ====================
             let cpuTestRunning = false;
             async function runCpuTest() {
                 if (cpuTestRunning) return;
@@ -2773,9 +3048,128 @@ async function handleRequest(event) {
                 dnsTestRunning = false;
             }
 
+            // ==================== 流媒体连通性（客户端检测） ====================
+            let mediaTestRunning = false;
+            async function runClientMediaTest() {
+                if (mediaTestRunning) return;
+                mediaTestRunning = true;
+                const t = i18n[currentLang];
+                showResult(elements.mediaResult, '<span class="loading"></span> ' + t.mediaTesting);
+                
+                const services = [
+                    { name: 'Netflix', url: 'https://www.netflix.com/favicon.ico' },
+                    { name: 'Disney+', url: 'https://www.disneyplus.com/favicon.ico' },
+                    { name: 'YouTube', url: 'https://www.youtube.com/favicon.ico' },
+                    { name: 'ChatGPT', url: 'https://chat.openai.com/favicon.ico' }
+                ];
+                
+                const checkService = (service) => {
+                    return new Promise((resolve) => {
+                        const img = new Image();
+                        const timeout = setTimeout(() => {
+                            img.src = '';
+                            resolve({ name: service.name, status: 'blocked', icon: '❌', color: '#f87171', detail: '超时或被阻' });
+                        }, 5000);
+                        img.onload = () => {
+                            clearTimeout(timeout);
+                            resolve({ name: service.name, status: 'available', icon: '✅', color: '#34d399', detail: '可访问' });
+                        };
+                        img.onerror = () => {
+                            clearTimeout(timeout);
+                            resolve({ name: service.name, status: 'blocked', icon: '❌', color: '#f87171', detail: '连接失败' });
+                        };
+                        img.src = service.url;
+                    });
+                };
+                
+                const results = await Promise.all(services.map(s => checkService(s)));
+                
+                let html = '<i class="fas fa-play-circle"></i> 您的 IP 连通性检测结果：<br><div class="speed-result" style="flex-wrap: wrap;">';
+                results.forEach(r => {
+                    html += \`<div class="speed-item" style="border-left-color: \${r.color};"><strong>\${r.name}</strong> \${r.icon} \${r.detail}</div>\`;
+                });
+                html += '</div>';
+                showResult(elements.mediaResult, html);
+                mediaTestRunning = false;
+            }
+
+            // ==================== 多节点对比 ====================
+            const modal = document.getElementById('nodeModal');
+            const nodeUrlsInput = document.getElementById('nodeUrls');
+            const modalCancel = document.getElementById('modalCancel');
+            const modalStart = document.getElementById('modalStart');
+
+            elements.multiBtn.addEventListener('click', () => {
+                const saved = localStorage.getItem('nodeUrls') || '';
+                nodeUrlsInput.value = saved;
+                modal.classList.add('active');
+            });
+
+            modalCancel.addEventListener('click', () => {
+                modal.classList.remove('active');
+            });
+
+            modalStart.addEventListener('click', async () => {
+                const urls = nodeUrlsInput.value.split('\\n').map(s => s.trim()).filter(s => s);
+                if (urls.length === 0) {
+                    alert('请至少输入一个节点 URL');
+                    return;
+                }
+                localStorage.setItem('nodeUrls', nodeUrlsInput.value);
+                modal.classList.remove('active');
+                await runMultiNodeTest(urls);
+            });
+
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) modal.classList.remove('active');
+            });
+
+            async function runMultiNodeTest(urls) {
+                const t = i18n[currentLang];
+                showResult(elements.multiResult, '<span class="loading"></span> ' + t.multiTesting);
+                
+                const nodes = urls.map(u => {
+                    if (!/^https?:\\/\\//i.test(u)) u = 'https://' + u;
+                    return u.replace(/\\/+$/, '');
+                });
+
+                const results = await Promise.all(nodes.map(async (node) => {
+                    const start = performance.now();
+                    let latency = null;
+                    let status = 'error';
+                    let errorMsg = '';
+                    try {
+                        const testUrl = node + '/speedtest?size=1';
+                        const res = await fetch(testUrl, { method: 'GET', cache: 'no-store', signal: AbortSignal.timeout(5000) });
+                        if (res.ok) {
+                            latency = Math.round(performance.now() - start);
+                            status = 'success';
+                        } else {
+                            status = 'http_' + res.status;
+                            errorMsg = 'HTTP ' + res.status;
+                        }
+                    } catch (e) {
+                        status = 'error';
+                        errorMsg = e.message || '请求失败';
+                    }
+                    return { node, latency, status, errorMsg };
+                }));
+
+                let html = '<i class="fas fa-globe-asia"></i> ' + t.multiResult + '：<br><table class="node-table"><thead><tr><th>' + t.nodeName + '</th><th>' + t.latency + '</th><th>' + t.status + '</th></tr></thead><tbody>';
+                results.forEach(r => {
+                    let statusText = r.status === 'success' ? '✅' : '❌ ' + r.errorMsg;
+                    let latencyText = r.latency !== null ? r.latency + ' ms' : '—';
+                    let cls = r.status === 'success' ? (r.latency < 100 ? 'good' : (r.latency < 300 ? 'mid' : 'bad')) : 'bad';
+                    html += \`<tr><td>\${r.node}</td><td class="\${cls}">\${latencyText}</td><td>\${statusText}</td></tr>\`;
+                });
+                html += '</tbody></table>';
+                showResult(elements.multiResult, html);
+            }
+
+            // ==================== 报告生成（优化版） ====================
             function generateReportText() {
                 const t = i18n[currentLang];
-                const now = new Date().toLocaleString('zh-CN');
+                const now = new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
                 const currentRtt = elements.rttNum ? elements.rttNum.textContent : '--';
                 const currentJitter = elements.jitterVal ? elements.jitterVal.textContent : '--';
                 const quality = document.getElementById('quality-badge') ? document.getElementById('quality-badge').textContent : '--';
@@ -2786,43 +3180,54 @@ async function handleRequest(event) {
                 const maxRttVal = document.getElementById('max-rtt') ? document.getElementById('max-rtt').textContent : '--';
                 const clientLocation = BACKEND_DATA.realGeoCity ? BACKEND_DATA.realGeoCity + ', ' + BACKEND_DATA.realGeoCountry : '未知';
                 const http2Status = elements.http2Val ? elements.http2Val.textContent.trim() : '--';
-                
-                return \`【NetSight Pro 极光网络诊断报告】
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📅 生成时间: \${now}
-📍 边缘节点: \${BACKEND_DATA.colo} (\${BACKEND_DATA.city})
-🌐 客户端 IPv4: \${elements.v4 ? elements.v4.textContent : 'N/A'}
-🔑 RAY ID: \${BACKEND_DATA.rayId}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📡 网络指标
-   当前 RTT: \${currentRtt} ms
-   网络抖动: \${currentJitter} ms
-   最低 RTT: \${minRttVal} ms
-   最高 RTT: \${maxRttVal} ms
-   连接质量: \${quality}
-   网络稳定性: \${stability}
-   丢包率: \${lossRate}
-   样本数量: \${sampleCountVal}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🔒 安全与协议
-   协议: \${BACKEND_DATA.httpProtocolRaw}
-   TLS 版本: \${BACKEND_DATA.tlsVersion}
-   加密套件: \${BACKEND_DATA.tlsCipher}
-   ECH: \${BACKEND_DATA.tlsClientHelloLength > 0 ? '已启用' : '未启用'}
-   压缩算法: \${BACKEND_DATA.compressionBrotli ? 'Brotli ' : ''}\${BACKEND_DATA.compressionGzip ? 'Gzip' : '无'}
-   HTTP/2 状态: \${http2Status}
-   机器人评分: \${BACKEND_DATA.botScore}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📍 位置信息
-   边缘节点: \${BACKEND_DATA.city}, \${BACKEND_DATA.region}, \${BACKEND_DATA.country}
-   客户端: \${clientLocation}
-   运营商: \${BACKEND_DATA.realGeoOrg || BACKEND_DATA.asOrg}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🚀 NetSight Pro - 极光网络诊断工具
-💡 由 CF-workers-netdiag · 强力驱动
-\`;
+
+                // 获取欺诈评分
+                let fraudInfo = '';
+                const fraudSection = document.querySelector('.fraud-info');
+                if (fraudSection) {
+                    const rows = fraudSection.querySelectorAll('.info-row');
+                    rows.forEach(row => {
+                        const label = row.querySelector('.info-label')?.textContent?.trim() || '';
+                        const value = row.querySelector('.info-value')?.textContent?.trim() || '';
+                        fraudInfo += \`    \${label}: \${value}\\n\`;
+                    });
+                }
+
+                return \`# NetSight Pro 网络诊断报告
+**生成时间**: \${now}
+**边缘节点**: \${BACKEND_DATA.colo} (\${BACKEND_DATA.city})
+**客户端 IPv4**: \${elements.v4 ? elements.v4.textContent : 'N/A'}
+**RAY ID**: \${BACKEND_DATA.rayId}
+
+## 📡 网络指标
+- **当前 RTT**: \${currentRtt} ms
+- **网络抖动**: \${currentJitter} ms
+- **最低 RTT**: \${minRttVal} ms
+- **最高 RTT**: \${maxRttVal} ms
+- **连接质量**: \${quality}
+- **网络稳定性**: \${stability}
+- **丢包率**: \${lossRate}
+- **样本数量**: \${sampleCountVal}
+
+## 🔒 安全与协议
+- **协议**: \${BACKEND_DATA.httpProtocolRaw}
+- **TLS 版本**: \${BACKEND_DATA.tlsVersion}
+- **加密套件**: \${BACKEND_DATA.tlsCipher}
+- **ECH**: \${BACKEND_DATA.tlsClientHelloLength > 0 ? '已启用' : '未启用'}
+- **压缩算法**: \${BACKEND_DATA.compressionBrotli ? 'Brotli ' : ''}\${BACKEND_DATA.compressionGzip ? 'Gzip' : '无'}
+- **HTTP/2 状态**: \${http2Status}
+- **机器人评分**: \${BACKEND_DATA.botScore}
+
+## 📍 位置信息
+- **边缘节点**: \${BACKEND_DATA.city}, \${BACKEND_DATA.region}, \${BACKEND_DATA.country}
+- **客户端位置**: \${clientLocation}
+- **运营商**: \${BACKEND_DATA.realGeoOrg || BACKEND_DATA.asOrg}
+
+\${fraudInfo ? '## 🛡️ IP 风险信息\\n' + fraudInfo : ''}
+---
+*报告由 NetSight Pro 自动生成 · 由 CF-workers-netdiag 强力驱动*\`;
             }
-            
+
             async function copyReport() {
                 const text = generateReportText();
                 try {
@@ -2840,7 +3245,7 @@ async function handleRequest(event) {
                 }
             }
 
-
+            // ==================== 历史记录 & 统计 ====================
             async function logSpeedTest(avgSpeed, results) {
                 try {
                     await fetch('/api/log-speed', {
@@ -2850,7 +3255,7 @@ async function handleRequest(event) {
                     });
                 } catch (e) {}
             }
-            
+
             async function loadSpeedHistory() {
                 const panel = document.getElementById('speed-history-panel');
                 if (!panel) return;
@@ -2876,7 +3281,7 @@ async function handleRequest(event) {
                     panel.innerHTML = '<div class="no-data"><i class="fas fa-exclamation-circle"></i> 加载失败</div>';
                 }
             }
-            
+
             async function loadUsageStats() {
                 const panel = document.getElementById('usage-stats-panel');
                 if (!panel) return;
@@ -2898,8 +3303,30 @@ async function handleRequest(event) {
                     panel.innerHTML = '<div class="no-data"><i class="fas fa-exclamation-circle"></i> 加载失败</div>';
                 }
             }
-            
 
+            // ==================== 主题切换 ====================
+            const themeToggle = document.getElementById('themeToggle');
+            let currentTheme = localStorage.getItem('theme') || 'auto';
+            function applyTheme(theme) {
+                const html = document.documentElement;
+                if (theme === 'auto') {
+                    html.removeAttribute('data-theme');
+                    themeToggle.innerHTML = '<i class="fas fa-adjust"></i>';
+                } else {
+                    html.setAttribute('data-theme', theme);
+                    themeToggle.innerHTML = theme === 'dark' ? '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>';
+                }
+                localStorage.setItem('theme', theme);
+                currentTheme = theme;
+            }
+            themeToggle.addEventListener('click', () => {
+                if (currentTheme === 'auto') applyTheme('dark');
+                else if (currentTheme === 'dark') applyTheme('light');
+                else applyTheme('auto');
+            });
+            applyTheme(localStorage.getItem('theme') || 'auto');
+
+            // ==================== 初始化 ====================
             function init() {
                 minRtt = Infinity;
                 maxRtt = 0;
@@ -2927,6 +3354,9 @@ async function handleRequest(event) {
                 if (elements.wsBtn) elements.wsBtn.addEventListener('click', runWsTest);
                 if (elements.concurrentBtn) elements.concurrentBtn.addEventListener('click', runConcurrentTest);
                 if (elements.streamBtn) elements.streamBtn.addEventListener('click', runStreamTest);
+                if (elements.mediaBtn) elements.mediaBtn.addEventListener('click', runClientMediaTest);
+                // 多节点按钮已绑定
+                
                 loadSpeedHistory();
                 loadUsageStats();
                 setInterval(() => { loadSpeedHistory(); loadUsageStats(); }, 30000);
@@ -2937,7 +3367,7 @@ async function handleRequest(event) {
     </script>
 </body>
 </html>`;
-  
+
   return new Response(html, {
     headers: {
       'content-type': 'text/html;charset=UTF-8',
