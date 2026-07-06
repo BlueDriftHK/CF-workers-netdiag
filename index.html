@@ -1,1207 +1,907 @@
 <!DOCTYPE html>
-<html lang="zh-CN" data-theme="auto">
+<html lang="zh-CN">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
-  <title>NetSight Pro | 极光网络诊断 · Cloudflare Worker 全功能网络工具箱</title>
-  <meta name="description" content="NetSight Pro 是运行在 Cloudflare Workers 上的极简网络诊断工具，支持 IP 查询、测速、CPU基准、WebSocket 测试、HTTP/3 检测、IP风险评分等 15+ 诊断功能，Apple 原生设计风格。"/>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <!-- Prism 代码高亮 -->
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-javascript.min.js"></script>
-  
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      darkMode: ['class', '[data-theme="dark"]'],
-      theme: {
-        extend: {
-          colors: {
-            accent: '#007AFF',
-            accentDark: '#0A84FF',
-            success: '#34c759',
-            warning: '#ff9f0a',
-            danger: '#ff3b30',
-            purple: '#5856d6',
-            cyan: '#5ac8fa',
-            gray: {
-              50: '#f5f5f7',
-              100: '#e8e8ed',
-              200: '#d1d1d6',
-              300: '#aeaeb2',
-              400: '#86868b',
-              500: '#636366',
-              600: '#48484a',
-              700: '#3a3a3c',
-              800: '#2c2c2e',
-              900: '#1c1c1e',
-              950: '#0b0b0d',
-            }
-          },
-          fontFamily: {
-            inter: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'SF Pro Display', 'sans-serif'],
-            mono: ['JetBrains Mono', 'SF Mono', 'Monaco', 'Consolas', 'monospace'],
-          },
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>NetSight Pro · 极光网络诊断</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700;14..32,800;14..32,900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Prism.js 代码高亮 (轻量) -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
+    <style>
+        /* ============================================================
+           全局重置 & 变量 (支持深色/浅色)
+           ============================================================ */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
-      }
-    }
-  </script>
-  <style>
-    :root {
-      --bg-primary: #f5f5f7;
-      --bg-secondary: #ffffff;
-      --bg-card: rgba(255, 255, 255, 0.72);
-      --bg-glass: rgba(255, 255, 255, 0.64);
-      --text-primary: #1d1d1f;
-      --text-secondary: #86868b;
-      --text-tertiary: #aeaeb2;
-      --border: rgba(0, 0, 0, 0.08);
-      --divider: rgba(0, 0, 0, 0.04);
-      --shadow-card: 0 4px 20px rgba(0, 0, 0, 0.04);
-      --shadow-hover: 0 12px 40px rgba(0, 0, 0, 0.08);
-    }
-    [data-theme="dark"] {
-      --bg-primary: #0b0b0d;
-      --bg-secondary: #1c1c1e;
-      --bg-card: rgba(28, 28, 30, 0.72);
-      --bg-glass: rgba(28, 28, 30, 0.64);
-      --text-primary: #f5f5f7;
-      --text-secondary: #a1a1a6;
-      --text-tertiary: #636366;
-      --border: rgba(255, 255, 255, 0.1);
-      --divider: rgba(255, 255, 255, 0.06);
-      --shadow-card: 0 4px 20px rgba(0, 0, 0, 0.3);
-      --shadow-hover: 0 12px 40px rgba(0, 0, 0, 0.5);
-    }
 
-    * { box-sizing: border-box; }
-    html, body {
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
-      background: var(--bg-primary);
-      color: var(--text-primary);
-      -webkit-font-smoothing: antialiased;
-      scroll-behavior: smooth;
-      overflow-x: hidden;
-    }
+        :root {
+            --bg-primary: #f5f5f7;
+            --bg-card: rgba(255, 255, 255, 0.72);
+            --bg-card-hover: rgba(255, 255, 255, 0.88);
+            --bg-glass: rgba(255, 255, 255, 0.64);
+            --text-primary: #1d1d1f;
+            --text-secondary: #86868b;
+            --text-tertiary: #aeaeb2;
+            --text-quaternary: #c7c7cc;
+            --accent: #007AFF;
+            --accent-hover: #0066d6;
+            --accent-light: rgba(0, 122, 255, 0.08);
+            --border: rgba(0, 0, 0, 0.06);
+            --border-accent: rgba(0, 122, 255, 0.12);
+            --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.04);
+            --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.05);
+            --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.07);
+            --radius-lg: 20px;
+            --radius-xl: 24px;
+            --transition: 0.35s cubic-bezier(0.25, 0.1, 0.25, 1);
+            --glow-color: rgba(0, 122, 255, 0.15);
+        }
 
-    /* 顶部滚动进度条 */
-    #scroll-progress {
-      position: fixed;
-      top: 0;
-      left: 0;
-      height: 3px;
-      background: linear-gradient(90deg, #007AFF, #5856d6, #5ac8fa);
-      z-index: 9999;
-      width: 0%;
-      transition: width 0.1s linear;
-    }
+        [data-theme="dark"] {
+            --bg-primary: #1c1c1e;
+            --bg-card: rgba(255, 255, 255, 0.08);
+            --bg-card-hover: rgba(255, 255, 255, 0.12);
+            --bg-glass: rgba(255, 255, 255, 0.06);
+            --text-primary: #f5f5f7;
+            --text-secondary: #a1a1a6;
+            --text-tertiary: #636366;
+            --text-quaternary: #48484a;
+            --accent: #0A84FF;
+            --accent-hover: #409cff;
+            --accent-light: rgba(10, 132, 255, 0.12);
+            --border: rgba(255, 255, 255, 0.1);
+            --border-accent: rgba(10, 132, 255, 0.2);
+            --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
+            --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.3);
+            --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.3);
+            --glow-color: rgba(10, 132, 255, 0.2);
+        }
 
-    /* 网格背景底纹 */
-    .grid-bg {
-      background-image: 
-        linear-gradient(var(--border) 1px, transparent 1px),
-        linear-gradient(90deg, var(--border) 1px, transparent 1px);
-      background-size: 40px 40px;
-      mask-image: radial-gradient(ellipse at center, black 40%, transparent 75%);
-      -webkit-mask-image: radial-gradient(ellipse at center, black 40%, transparent 75%);
-    }
+        [data-theme="light"] {
+            --bg-primary: #f5f5f7;
+            --bg-card: rgba(255, 255, 255, 0.72);
+            --bg-card-hover: rgba(255, 255, 255, 0.88);
+            --bg-glass: rgba(255, 255, 255, 0.64);
+            --text-primary: #1d1d1f;
+            --text-secondary: #86868b;
+            --text-tertiary: #aeaeb2;
+            --text-quaternary: #c7c7cc;
+            --accent: #007AFF;
+            --accent-hover: #0066d6;
+            --accent-light: rgba(0, 122, 255, 0.08);
+            --border: rgba(0, 0, 0, 0.06);
+            --border-accent: rgba(0, 122, 255, 0.12);
+            --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.04);
+            --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.05);
+            --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.07);
+            --glow-color: rgba(0, 122, 255, 0.15);
+        }
 
-    /* 极光浮动背景（视差效果） */
-    .aurora {
-      position: absolute;
-      width: 700px;
-      height: 700px;
-      border-radius: 50%;
-      filter: blur(100px);
-      opacity: 0.18;
-      pointer-events: none;
-      animation: float 18s ease-in-out infinite;
-      will-change: transform;
-      z-index: 0;
-    }
-    .aurora-1 { background: #007AFF; top: -300px; left: -200px; animation-delay: 0s; }
-    .aurora-2 { background: #5856d6; top: 50px; right: -300px; animation-delay: -6s; }
-    .aurora-3 { background: #5ac8fa; bottom: -300px; left: 30%; animation-delay: -12s; }
-    @keyframes float {
-      0%, 100% { transform: translate(0, 0) scale(1); }
-      33% { transform: translate(40px, -40px) scale(1.08); }
-      66% { transform: translate(-30px, 30px) scale(0.95); }
-    }
+        html {
+            scroll-behavior: smooth;
+            -webkit-font-smoothing: antialiased;
+        }
 
-    /* 玻璃拟态卡片 */
-    .glass-card {
-      background: var(--bg-card);
-      backdrop-filter: blur(24px) saturate(180%);
-      -webkit-backdrop-filter: blur(24px) saturate(180%);
-      border: 1px solid var(--border);
-      border-radius: 20px;
-      box-shadow: var(--shadow-card);
-      transition: all 0.3s cubic-bezier(0.25, 0.1, 0.25, 1);
-      transform-style: preserve-3d;
-    }
-    .glass-card:hover {
-      box-shadow: var(--shadow-hover);
-      border-color: rgba(0, 122, 255, 0.2);
-      transform: translateY(-4px);
-    }
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
+            background: var(--bg-primary);
+            min-height: 100vh;
+            padding: 28px 28px 0;
+            color: var(--text-primary);
+            transition: background 0.3s, color 0.3s;
+            overflow-x: hidden;
+        }
 
-    /* 渐变边框效果 */
-    .gradient-border {
-      position: relative;
-      background: var(--bg-card);
-      border-radius: 20px;
-    }
-    .gradient-border::before {
-      content: '';
-      position: absolute;
-      inset: -1px;
-      border-radius: 21px;
-      background: linear-gradient(135deg, rgba(0,122,255,0.3), rgba(88,86,214,0.3), rgba(90,200,250,0.3));
-      z-index: -1;
-      opacity: 0;
-      transition: opacity 0.3s;
-    }
-    .gradient-border:hover::before { opacity: 1; }
+        /* 背景光晕动画 */
+        body::before {
+            content: '';
+            position: fixed;
+            top: -30%;
+            left: -20%;
+            width: 80%;
+            height: 80%;
+            background: radial-gradient(ellipse, var(--glow-color), transparent 70%);
+            pointer-events: none;
+            z-index: 0;
+            animation: glowFloat 20s infinite alternate ease-in-out;
+        }
+        body::after {
+            content: '';
+            position: fixed;
+            bottom: -20%;
+            right: -20%;
+            width: 70%;
+            height: 70%;
+            background: radial-gradient(ellipse, var(--glow-color), transparent 70%);
+            pointer-events: none;
+            z-index: 0;
+            animation: glowFloat 25s infinite alternate-reverse ease-in-out;
+        }
 
-    /* 打字机光标 */
-    .cursor {
-      display: inline-block;
-      width: 3px;
-      height: 1em;
-      background: #007AFF;
-      margin-left: 4px;
-      animation: blink 1s step-end infinite;
-      vertical-align: text-bottom;
-    }
-    @keyframes blink { 50% { opacity: 0; } }
+        @keyframes glowFloat {
+            0% { transform: translate(0, 0) scale(1); opacity: 0.6; }
+            100% { transform: translate(10%, 10%) scale(1.2); opacity: 1; }
+        }
 
-    /* 功能图标呼吸动画 */
-    .feature-icon {
-      width: 52px;
-      height: 52px;
-      border-radius: 14px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 22px;
-      color: white;
-      transition: transform 0.3s;
-    }
-    .glass-card:hover .feature-icon {
-      transform: scale(1.1) rotate(-5deg);
-    }
+        .container {
+            max-width: 1150px;
+            margin: 0 auto;
+            position: relative;
+            z-index: 1;
+        }
 
-    /* 标签样式 */
-    .tag {
-      display: inline-block;
-      padding: 4px 12px;
-      border-radius: 20px;
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: 0.3px;
-      transition: all 0.2s;
-    }
-    .tag:hover { transform: translateY(-1px); }
-    .tag-blue { background: rgba(0, 122, 255, 0.1); color: #007AFF; border: 1px solid rgba(0, 122, 255, 0.18); }
-    .tag-green { background: rgba(52, 199, 89, 0.1); color: #34c759; border: 1px solid rgba(52, 199, 89, 0.18); }
-    .tag-purple { background: rgba(88, 86, 214, 0.1); color: #5856d6; border: 1px solid rgba(88, 86, 214, 0.18); }
-    .tag-orange { background: rgba(255, 159, 10, 0.1); color: #ff9f0a; border: 1px solid rgba(255, 159, 10, 0.18); }
-    .tag-red { background: rgba(255, 59, 48, 0.1); color: #ff3b30; border: 1px solid rgba(255, 59, 48, 0.18); }
-    .tag-cyan { background: rgba(90, 200, 250, 0.12); color: #5ac8fa; border: 1px solid rgba(90, 200, 250, 0.2); }
+        /* ============================================================
+           头部
+           ============================================================ */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 28px;
+            margin-bottom: 40px;
+            flex-wrap: wrap;
+            gap: 16px;
+            background: var(--bg-glass);
+            backdrop-filter: blur(24px) saturate(180%);
+            -webkit-backdrop-filter: blur(24px) saturate(180%);
+            border-radius: var(--radius-xl);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow-sm);
+            transition: all var(--transition);
+            position: relative;
+            overflow: hidden;
+        }
+        .header::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(90deg, transparent, var(--accent-light), transparent);
+            opacity: 0.3;
+            transform: translateX(-100%);
+            animation: shimmer 6s infinite;
+        }
+        @keyframes shimmer {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
 
-    /* 代码窗口 */
-    .code-window {
-      border-radius: 12px;
-      overflow: hidden;
-      border: 1px solid rgba(255,255,255,0.08);
-      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-    }
-    .code-header {
-      background: #24283b;
-      padding: 10px 16px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      border-bottom: 1px solid rgba(255,255,255,0.06);
-    }
-    .code-dot { width: 12px; height: 12px; border-radius: 50%; }
-    .dot-red { background: #f7768e; }
-    .dot-yellow { background: #e0af68; }
-    .dot-green { background: #9ece6a; }
-    pre[class*="language-"] {
-      margin: 0;
-      background: #1a1b26 !important;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 13px;
-      line-height: 1.7;
-      padding: 20px !important;
-      max-height: 480px;
-      overflow-y: auto;
-    }
-    pre[class*="language-"]::-webkit-scrollbar { width: 6px; }
-    pre[class*="language-"]::-webkit-scrollbar-thumb { background: #414868; border-radius: 3px; }
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            position: relative;
+            z-index: 1;
+        }
+        .logo-icon {
+            width: 48px;
+            height: 48px;
+            background: var(--accent);
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            color: #fff;
+            box-shadow: 0 4px 14px rgba(0, 122, 255, 0.2);
+            transition: transform 0.3s;
+        }
+        .logo:hover .logo-icon {
+            transform: rotate(-8deg) scale(1.05);
+        }
+        .logo h1 {
+            font-size: 24px;
+            font-weight: 800;
+            letter-spacing: -0.3px;
+        }
+        .logo p {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-top: 2px;
+        }
 
-    /* 时间线 */
-    .timeline-item {
-      position: relative;
-      padding-left: 28px;
-      padding-bottom: 24px;
-      border-left: 2px solid var(--border);
-    }
-    .timeline-item:last-child { border-left: 2px solid transparent; }
-    .timeline-dot {
-      position: absolute;
-      left: -7px;
-      top: 0;
-      width: 12px;
-      height: 12px;
-      border-radius: 50%;
-      background: #007AFF;
-      box-shadow: 0 0 0 4px rgba(0,122,255,0.15);
-    }
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            position: relative;
+            z-index: 1;
+        }
 
-    /* 回到顶部按钮 */
-    #back-top {
-      position: fixed;
-      bottom: 30px;
-      right: 30px;
-      width: 48px;
-      height: 48px;
-      border-radius: 50%;
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      backdrop-filter: blur(20px);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      opacity: 0;
-      visibility: hidden;
-      transform: translateY(20px);
-      transition: all 0.3s;
-      z-index: 1000;
-      box-shadow: var(--shadow-card);
-    }
-    #back-top.show {
-      opacity: 1;
-      visibility: visible;
-      transform: translateY(0);
-    }
-    #back-top:hover {
-      background: #007AFF;
-      color: white;
-      border-color: #007AFF;
-    }
+        .theme-toggle {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 30px;
+            padding: 6px 12px;
+            cursor: pointer;
+            font-size: 18px;
+            color: var(--text-secondary);
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .theme-toggle:hover {
+            background: var(--bg-card-hover);
+            border-color: var(--border-accent);
+            transform: scale(1.03);
+        }
 
-    /* 导航栏 */
-    .nav-link {
-      position: relative;
-      color: var(--text-secondary);
-      transition: color 0.2s;
-      font-size: 14px;
-    }
-    .nav-link:hover { color: var(--text-primary); }
-    .nav-link::after {
-      content: '';
-      position: absolute;
-      bottom: -4px;
-      left: 0;
-      width: 0;
-      height: 2px;
-      background: #007AFF;
-      border-radius: 2px;
-      transition: width 0.25s ease;
-    }
-    .nav-link:hover::after { width: 100%; }
+        .github-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 20px;
+            background: var(--accent);
+            color: #fff;
+            border-radius: 30px;
+            font-size: 13px;
+            font-weight: 600;
+            text-decoration: none;
+            transition: all 0.25s;
+            box-shadow: 0 2px 8px rgba(0, 122, 255, 0.25);
+        }
+        .github-btn:hover {
+            background: var(--accent-hover);
+            box-shadow: 0 4px 18px rgba(0, 122, 255, 0.4);
+            transform: translateY(-2px);
+        }
 
-    /* 数字等宽 */
-    .metric-number {
-      font-variant-numeric: tabular-nums;
-      font-feature-settings: 'tnum';
-    }
+        /* ============================================================
+           Hero 区域（带动态粒子效果 - 纯CSS）
+           ============================================================ */
+        .hero {
+            position: relative;
+            text-align: center;
+            padding: 70px 20px 50px;
+            background: var(--bg-card);
+            backdrop-filter: blur(24px) saturate(180%);
+            -webkit-backdrop-filter: blur(24px) saturate(180%);
+            border-radius: var(--radius-xl);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow-md);
+            margin-bottom: 50px;
+            overflow: hidden;
+        }
+        .hero::after {
+            content: '';
+            position: absolute;
+            inset: -50%;
+            background: conic-gradient(from 0deg at 50% 50%, var(--accent-light), transparent 30%, transparent 70%, var(--accent-light));
+            opacity: 0.1;
+            animation: spin 20s linear infinite;
+            pointer-events: none;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
 
-    /* 滚动入场动画 */
-    .reveal {
-      opacity: 0;
-      transform: translateY(30px);
-      transition: all 0.8s cubic-bezier(0.25, 0.1, 0.25, 1);
-    }
-    .reveal.active {
-      opacity: 1;
-      transform: translateY(0);
-    }
+        .hero * {
+            position: relative;
+            z-index: 2;
+        }
+        .hero h2 {
+            font-size: 56px;
+            font-weight: 900;
+            letter-spacing: -2px;
+            margin-bottom: 16px;
+            background: linear-gradient(135deg, var(--accent), #5856d6, var(--accent));
+            background-size: 200% 200%;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            animation: gradShift 8s ease infinite;
+        }
+        @keyframes gradShift {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+        }
 
-    /* 按钮涟漪效果 */
-    .btn-ripple {
-      position: relative;
-      overflow: hidden;
-    }
-    .ripple {
-      position: absolute;
-      border-radius: 50%;
-      background: rgba(255,255,255,0.3);
-      transform: scale(0);
-      animation: ripple 0.6s linear;
-      pointer-events: none;
-    }
-    @keyframes ripple {
-      to { transform: scale(4); opacity: 0; }
-    }
+        .hero p {
+            font-size: 21px;
+            color: var(--text-secondary);
+            max-width: 680px;
+            margin: 0 auto 28px;
+            line-height: 1.7;
+        }
 
-    /* 表格样式 */
-    .table-row {
-      border-bottom: 1px solid var(--divider);
-      transition: background 0.15s;
-    }
-    .table-row:hover { background: rgba(0, 122, 255, 0.03); }
-    .method-badge {
-      padding: 3px 10px;
-      border-radius: 6px;
-      font-size: 11px;
-      font-weight: 700;
-      font-family: monospace;
-    }
-    .method-get { background: rgba(52, 199, 89, 0.12); color: #34c759; }
-    .method-post { background: rgba(255, 159, 10, 0.12); color: #ff9f0a; }
+        .hero .badge-group {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 12px;
+        }
+        .hero .badge-group span {
+            background: var(--accent-light);
+            border: 1px solid var(--border-accent);
+            padding: 8px 20px;
+            border-radius: 40px;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--accent);
+            transition: all 0.25s;
+            cursor: default;
+            backdrop-filter: blur(4px);
+        }
+        .hero .badge-group span:hover {
+            transform: translateY(-3px);
+            box-shadow: var(--shadow-md);
+            background: var(--bg-card-hover);
+        }
+        .hero .badge-group span i {
+            margin-right: 6px;
+        }
 
-    /* FAQ折叠 */
-    details summary { list-style: none; }
-    details summary::-webkit-details-marker { display: none; }
+        /* ============================================================
+           通用动画类 (滚动入场)
+           ============================================================ */
+        .reveal {
+            opacity: 0;
+            transform: translateY(40px);
+            transition: opacity 0.7s ease, transform 0.7s ease;
+        }
+        .reveal.active {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        .reveal-delay-1 { transition-delay: 0.05s; }
+        .reveal-delay-2 { transition-delay: 0.1s; }
+        .reveal-delay-3 { transition-delay: 0.15s; }
+        .reveal-delay-4 { transition-delay: 0.2s; }
 
-    /* 预览窗口3D效果 */
-    .mockup-3d {
-      transition: transform 0.2s ease-out;
-      transform-style: preserve-3d;
-      perspective: 1000px;
-    }
+        /* ============================================================
+           章节标题
+           ============================================================ */
+        .section-title {
+            font-size: 32px;
+            font-weight: 800;
+            margin-bottom: 12px;
+            letter-spacing: -0.5px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .section-title i {
+            color: var(--accent);
+            font-size: 28px;
+        }
+        .section-desc {
+            color: var(--text-secondary);
+            font-size: 17px;
+            margin-bottom: 36px;
+            max-width: 700px;
+            line-height: 1.6;
+        }
 
-    /* 状态指示灯 */
-    .live-dot {
-      display: inline-block;
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: #34c759;
-      animation: pulse 2s ease-in-out infinite;
-      margin-right: 8px;
-    }
-    @keyframes pulse {
-      0%, 100% { opacity: 1; transform: scale(1); }
-      50% { opacity: 0.4; transform: scale(1.3); }
-    }
+        /* ============================================================
+           功能卡片网格
+           ============================================================ */
+        .grid-2 {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 28px;
+            margin-bottom: 56px;
+        }
 
-    /* 使用场景卡片图标 */
-    .scene-icon {
-      width: 40px;
-      height: 40px;
-      border-radius: 12px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 18px;
-    }
+        .card {
+            background: var(--bg-card);
+            backdrop-filter: blur(24px) saturate(180%);
+            -webkit-backdrop-filter: blur(24px) saturate(180%);
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--border);
+            padding: 30px 26px;
+            transition: all var(--transition);
+            box-shadow: var(--shadow-sm);
+            position: relative;
+            overflow: hidden;
+        }
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--accent), transparent);
+            opacity: 0;
+            transition: opacity 0.4s;
+        }
+        .card:hover::before {
+            opacity: 1;
+        }
+        .card:hover {
+            transform: translateY(-6px);
+            box-shadow: var(--shadow-lg);
+            border-color: var(--border-accent);
+            background: var(--bg-card-hover);
+        }
+        .card i {
+            font-size: 32px;
+            color: var(--accent);
+            margin-bottom: 16px;
+            display: inline-block;
+            transition: transform 0.3s;
+        }
+        .card:hover i {
+            transform: scale(1.1) rotate(-4deg);
+        }
+        .card h3 {
+            font-size: 19px;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+        .card p {
+            font-size: 14px;
+            color: var(--text-secondary);
+            line-height: 1.7;
+        }
+        .card .tag {
+            display: inline-block;
+            margin-top: 16px;
+            padding: 4px 14px;
+            background: var(--accent-light);
+            border-radius: 30px;
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--accent);
+            border: 1px solid var(--border-accent);
+            letter-spacing: 0.3px;
+            transition: all 0.2s;
+        }
+        .card:hover .tag {
+            background: var(--accent);
+            color: #fff;
+            border-color: var(--accent);
+        }
 
-    /* 移动端适配 */
-    @media (max-width: 768px) {
-      .aurora { width: 400px; height: 400px; }
-      .hero-title { font-size: 2.5rem; }
-    }
-  </style>
+        /* ============================================================
+           技术栈 (带徽章动画)
+           ============================================================ */
+        .tech-stack {
+            background: var(--bg-glass);
+            backdrop-filter: blur(24px) saturate(180%);
+            -webkit-backdrop-filter: blur(24px) saturate(180%);
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--border);
+            padding: 32px 36px;
+            margin-bottom: 56px;
+        }
+        .tech-stack .stack-items {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 14px;
+            margin-top: 20px;
+        }
+        .tech-stack .stack-items span {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            padding: 8px 22px;
+            border-radius: 40px;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            transition: all 0.25s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .tech-stack .stack-items span i {
+            color: var(--accent);
+            font-size: 16px;
+        }
+        .tech-stack .stack-items span:hover {
+            transform: translateY(-3px);
+            box-shadow: var(--shadow-md);
+            border-color: var(--border-accent);
+            background: var(--bg-card-hover);
+        }
+
+        /* ============================================================
+           代码高亮区块
+           ============================================================ */
+        .code-block {
+            background: var(--bg-card);
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--border);
+            padding: 24px 28px;
+            margin-bottom: 56px;
+            overflow: hidden;
+        }
+        .code-block .code-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 14px;
+        }
+        .code-block .code-header span {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+        .code-block .code-header i {
+            color: var(--accent);
+        }
+        .code-block pre {
+            margin: 0;
+            border-radius: var(--radius-sm);
+            background: #1e1e2f !important;
+            padding: 16px 20px !important;
+            font-size: 13px;
+            line-height: 1.6;
+            overflow-x: auto;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.3);
+        }
+        .code-block pre code {
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+        }
+
+        /* ============================================================
+           部署指南 (带步骤图标)
+           ============================================================ */
+        .deploy-box {
+            background: var(--bg-card);
+            backdrop-filter: blur(24px) saturate(180%);
+            -webkit-backdrop-filter: blur(24px) saturate(180%);
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--border);
+            padding: 32px 36px;
+            margin-bottom: 56px;
+            box-shadow: var(--shadow-sm);
+            transition: all var(--transition);
+        }
+        .deploy-box:hover {
+            box-shadow: var(--shadow-md);
+            border-color: var(--border-accent);
+        }
+        .deploy-box ol {
+            padding-left: 28px;
+            color: var(--text-secondary);
+            line-height: 2;
+            font-size: 15px;
+            counter-reset: step;
+        }
+        .deploy-box ol li {
+            list-style: none;
+            position: relative;
+            padding-left: 8px;
+            counter-increment: step;
+        }
+        .deploy-box ol li::before {
+            content: counter(step);
+            position: absolute;
+            left: -28px;
+            top: 2px;
+            width: 22px;
+            height: 22px;
+            background: var(--accent-light);
+            border-radius: 50%;
+            text-align: center;
+            line-height: 22px;
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--accent);
+            border: 1px solid var(--border-accent);
+        }
+        .deploy-box ol li strong {
+            color: var(--text-primary);
+        }
+        .deploy-box code {
+            background: var(--bg-primary);
+            padding: 2px 12px;
+            border-radius: 6px;
+            font-size: 13px;
+            border: 1px solid var(--border);
+            color: var(--accent);
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .deploy-box .note {
+            margin-top: 18px;
+            padding: 14px 20px;
+            background: var(--accent-light);
+            border-radius: var(--radius-sm);
+            border-left: 4px solid var(--accent);
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        /* ============================================================
+           底部
+           ============================================================ */
+        .footer {
+            margin-top: 32px;
+            padding: 20px 28px;
+            text-align: center;
+            font-size: 13px;
+            color: var(--text-tertiary);
+            background: var(--bg-glass);
+            backdrop-filter: blur(24px) saturate(180%);
+            -webkit-backdrop-filter: blur(24px) saturate(180%);
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 14px;
+            transition: all var(--transition);
+        }
+        .footer a {
+            color: var(--accent);
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+        .footer a:hover {
+            text-decoration: underline;
+        }
+        .footer .heart {
+            color: #ff3b30;
+            animation: heartBeat 1.5s infinite;
+        }
+        @keyframes heartBeat {
+            0%, 100% { transform: scale(1); }
+            15% { transform: scale(1.2); }
+            30% { transform: scale(1); }
+            45% { transform: scale(1.15); }
+            60% { transform: scale(1); }
+        }
+
+        /* ============================================================
+           响应式
+           ============================================================ */
+        @media (max-width: 768px) {
+            body { padding: 14px 14px 0; }
+            .hero h2 { font-size: 34px; }
+            .hero p { font-size: 17px; }
+            .header { flex-direction: column; text-align: center; }
+            .header-right { flex-wrap: wrap; justify-content: center; }
+            .grid-2 { grid-template-columns: 1fr; gap: 20px; }
+            .section-title { font-size: 26px; }
+            .footer { flex-direction: column; text-align: center; }
+            .code-block pre { font-size: 11px; padding: 12px 14px; }
+            .deploy-box { padding: 24px 20px; }
+            .tech-stack { padding: 24px 20px; }
+        }
+    </style>
 </head>
-<body class="relative">
-  <!-- 滚动进度条 -->
-  <div id="scroll-progress"></div>
-
-  <!-- 极光背景 -->
-  <div class="aurora aurora-1"></div>
-  <div class="aurora aurora-2"></div>
-  <div class="aurora aurora-3"></div>
-
-  <!-- 导航栏 -->
-  <nav class="sticky top-0 z-50">
-    <div class="max-w-7xl mx-auto px-6 py-4">
-      <div class="glass-card px-6 py-3 flex justify-between items-center">
-        <div class="flex items-center gap-3">
-          <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-accent to-purple flex items-center justify-center text-white text-lg shadow-lg">
-            <i class="fa-solid fa-wifi"></i>
-          </div>
-          <div>
-            <h1 class="text-lg font-bold">NetSight Pro</h1>
-            <p class="text-xs" style="color: var(--text-secondary)">极光网络诊断 v4.0</p>
-          </div>
-        </div>
-        <div class="hidden md:flex items-center gap-8 text-sm">
-          <a href="#features" class="nav-link">功能特性</a>
-          <a href="#scenes" class="nav-link">使用场景</a>
-          <a href="#api" class="nav-link">API 文档</a>
-          <a href="#deploy" class="nav-link">部署教程</a>
-          <a href="#changelog" class="nav-link">更新日志</a>
-          <a href="#faq" class="nav-link">常见问题</a>
-        </div>
-        <div class="flex items-center gap-3">
-          <a href="https://github.com/BlueDriftHK/CF-workers-netdiag" target="_blank" 
-             class="text-sm px-4 py-2 rounded-full border transition hover:bg-black/5 dark:hover:bg-white/5"
-             style="border-color: var(--border); color: var(--text-secondary)">
-            <i class="fa-brands fa-github mr-1"></i> GitHub
-          </a>
-          <button id="themeToggle" class="w-9 h-9 rounded-full flex items-center justify-center transition hover:bg-black/5 dark:hover:bg-white/5"
-                  style="color: var(--text-secondary)">
-            <i class="fa-solid fa-moon dark:hidden"></i>
-            <i class="fa-solid fa-sun hidden dark:inline"></i>
-          </button>
-        </div>
-      </div>
-    </div>
-  </nav>
-
-  <!-- Hero 主视觉 -->
-  <header class="max-w-7xl mx-auto px-6 pt-12 pb-20 relative grid-bg">
-    <div class="grid lg:grid-cols-2 gap-12 items-center">
-      <div class="reveal">
-        <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full mb-6"
-             style="background: rgba(0, 122, 255, 0.08); border: 1px solid rgba(0, 122, 255, 0.15)">
-          <span class="live-dot"></span>
-          <span class="text-sm font-medium text-accent">单文件部署 · 零依赖 · 永久免费</span>
-        </div>
-        <h2 class="text-5xl lg:text-6xl font-extrabold leading-tight mb-6 tracking-tight hero-title">
-          极简网络诊断<br/>
-          <span class="bg-gradient-to-r from-accent via-purple to-cyan bg-clip-text text-transparent">
-            一个 Worker 全部搞定
-          </span>
-        </h2>
-        <p class="text-lg mb-3 leading-relaxed" style="color: var(--text-secondary)">
-          运行在 Cloudflare Workers 上的全功能网络诊断工具箱
-        </p>
-        <div class="text-lg mb-8 h-8 font-medium text-accent">
-          <span id="typewriter"></span><span class="cursor"></span>
-        </div>
-        <div class="flex flex-wrap gap-4 mb-10">
-          <a href="#deploy" class="btn-ripple px-7 py-3.5 bg-accent hover:bg-accent/90 text-white rounded-full font-medium shadow-lg shadow-accent/25 transition hover:-translate-y-0.5">
-            <i class="fa-solid fa-rocket mr-2"></i>立即部署
-          </a>
-          <a href="#features" class="btn-ripple px-7 py-3.5 rounded-full font-medium transition hover:-translate-y-0.5"
-             style="background: var(--bg-card); border: 1px solid var(--border)">
-            <i class="fa-solid fa-layer-group mr-2"></i>查看全部功能
-          </a>
-        </div>
-        <div class="flex flex-wrap gap-3">
-          <span class="tag tag-blue">Cloudflare Workers</span>
-          <span class="tag tag-green">零依赖单文件</span>
-          <span class="tag tag-purple">Apple 设计风格</span>
-          <span class="tag tag-orange">15+ 诊断能力</span>
-          <span class="tag tag-cyan">深色模式</span>
-          <span class="tag tag-green">KV 持久化</span>
-        </div>
-      </div>
-
-      <!-- 产品预览模拟窗口 -->
-      <div class="reveal mockup-3d relative" id="mockupCard">
-        <div class="code-window">
-          <div class="code-header">
-            <div class="flex items-center gap-2">
-              <div class="code-dot dot-red"></div>
-              <div class="code-dot dot-yellow"></div>
-              <div class="code-dot dot-green"></div>
-            </div>
-            <div class="text-xs text-gray-400 font-mono">netsight.example.workers.dev</div>
-            <div class="w-12"></div>
-          </div>
-          <div class="p-6" style="background: var(--bg-primary)">
-            <!-- IP 信息卡片 -->
-            <div class="rounded-2xl p-5 mb-4" style="background: var(--bg-card); border: 1px solid var(--border)">
-              <div class="text-xs font-semibold uppercase tracking-wider text-accent mb-2">Your IP Address</div>
-              <div class="text-2xl font-bold font-mono">203.0.113.45</div>
-              <div class="flex gap-3 mt-4 flex-wrap">
-                <div class="text-xs px-3 py-1 rounded-full" style="background: rgba(0,0,0,0.04)">
-                  <i class="fa-solid fa-location-dot mr-1 text-accent"></i> 中国 · 广东
+<body>
+    <div class="container">
+        <!-- ===== 头部 ===== -->
+        <header class="header">
+            <div class="logo">
+                <div class="logo-icon"><i class="fas fa-chart-network"></i></div>
+                <div>
+                    <h1>NetSight Pro</h1>
+                    <p><i class="fas fa-bolt"></i> 极光诊断 · 实时网络分析</p>
                 </div>
-                <div class="text-xs px-3 py-1 rounded-full" style="background: rgba(0,0,0,0.04)">
-                  <i class="fa-solid fa-building mr-1 text-accent"></i> AS4808 联通
-                </div>
-                <div class="text-xs px-3 py-1 rounded-full" style="background: rgba(0,0,0,0.04)">
-                  <i class="fa-solid fa-server mr-1 text-accent"></i> HKG 节点
-                </div>
-              </div>
             </div>
-            <!-- 测速数据卡片 -->
-            <div class="grid grid-cols-4 gap-3 mb-4">
-              <div class="text-center p-3 rounded-xl" style="background: var(--bg-card); border: 1px solid var(--border)">
-                <div class="text-2xl font-bold text-accent metric-number">32</div>
-                <div class="text-xs mt-1" style="color: var(--text-secondary)">延迟 ms</div>
-              </div>
-              <div class="text-center p-3 rounded-xl" style="background: var(--bg-card); border: 1px solid var(--border)">
-                <div class="text-2xl font-bold text-success metric-number">0%</div>
-                <div class="text-xs mt-1" style="color: var(--text-secondary)">丢包</div>
-              </div>
-              <div class="text-center p-3 rounded-xl" style="background: var(--bg-card); border: 1px solid var(--border)">
-                <div class="text-2xl font-bold text-purple metric-number">85</div>
-                <div class="text-xs mt-1" style="color: var(--text-secondary)">下载 Mbps</div>
-              </div>
-              <div class="text-center p-3 rounded-xl" style="background: var(--bg-card); border: 1px solid var(--border)">
-                <div class="text-2xl font-bold text-warning metric-number">42</div>
-                <div class="text-xs mt-1" style="color: var(--text-secondary)">上传 Mbps</div>
-              </div>
+            <div class="header-right">
+                <button class="theme-toggle" id="themeToggle" title="切换主题">
+                    <i class="fas fa-moon"></i>
+                </button>
+                <a href="https://github.com/BlueDriftHK/CF-workers-netdiag" target="_blank" class="github-btn">
+                    <i class="fab fa-github"></i> GitHub
+                </a>
             </div>
-            <!-- 功能标签栏 -->
-            <div class="flex gap-2 flex-wrap">
-              <span class="text-xs px-3 py-1.5 rounded-lg font-medium bg-accent/10 text-accent">IP 查询</span>
-              <span class="text-xs px-3 py-1.5 rounded-lg font-medium" style="background: rgba(0,0,0,0.04); color: var(--text-secondary)">测速</span>
-              <span class="text-xs px-3 py-1.5 rounded-lg font-medium" style="background: rgba(0,0,0,0.04); color: var(--text-secondary)">CPU</span>
-              <span class="text-xs px-3 py-1.5 rounded-lg font-medium" style="background: rgba(0,0,0,0.04); color: var(--text-secondary)">WebSocket</span>
-              <span class="text-xs px-3 py-1.5 rounded-lg font-medium" style="background: rgba(0,0,0,0.04); color: var(--text-secondary)">HTTP/3</span>
+        </header>
+
+        <!-- ===== Hero ===== -->
+        <section class="hero">
+            <h2>网络诊断，极简之美</h2>
+            <p>基于 Cloudflare Workers 构建的轻量级网络工具，集实时监控、安全检测、多节点对比于一体，为开发者和运维人员提供「苹果级」体验。</p>
+            <div class="badge-group">
+                <span><i class="fas fa-bolt"></i> 实时 RTT</span>
+                <span><i class="fas fa-shield-alt"></i> 安全协议检测</span>
+                <span><i class="fas fa-user-secret"></i> IP 欺诈评分</span>
+                <span><i class="fas fa-globe-asia"></i> 多节点对比</span>
+                <span><i class="fas fa-chart-line"></i> 历史统计</span>
             </div>
-          </div>
-        </div>
-        <!-- 浮动装饰标签 -->
-        <div class="absolute -top-4 -right-4 glass-card px-4 py-2 text-sm">
-          <i class="fa-solid fa-bolt text-warning mr-2"></i>
-          <span class="font-semibold">全球 300+ 节点</span>
-        </div>
-        <div class="absolute -bottom-4 -left-4 glass-card px-4 py-2 text-sm">
-          <i class="fa-solid fa-shield-halved text-success mr-2"></i>
-          <span class="font-semibold">内置限流防护</span>
-        </div>
-      </div>
-    </div>
-  </header>
+        </section>
 
-  <!-- 数据统计条 -->
-  <section class="max-w-7xl mx-auto px-6 pb-16">
-    <div class="glass-card p-8 grid grid-cols-2 md:grid-cols-4 gap-6 text-center reveal">
-      <div>
-        <div class="text-4xl font-bold text-accent mb-1 metric-number count-up" data-target="15" data-suffix="+">0</div>
-        <div class="text-sm" style="color: var(--text-secondary)">诊断功能</div>
-      </div>
-      <div>
-        <div class="text-4xl font-bold text-purple mb-1 metric-number count-up" data-target="1">0</div>
-        <div class="text-sm" style="color: var(--text-secondary)">单 JS 文件</div>
-      </div>
-      <div>
-        <div class="text-4xl font-bold text-success mb-1 metric-number count-up" data-target="300" data-suffix="+">0</div>
-        <div class="text-sm" style="color: var(--text-secondary)">CF 全球节点</div>
-      </div>
-      <div>
-        <div class="text-4xl font-bold text-warning mb-1 metric-number count-up" data-target="0">0</div>
-        <div class="text-sm" style="color: var(--text-secondary)">外部依赖</div>
-      </div>
-    </div>
-  </section>
-
-  <!-- 核心功能 -->
-  <section id="features" class="max-w-7xl mx-auto px-6 py-16">
-    <div class="text-center mb-14 reveal">
-      <h3 class="text-3xl font-bold mb-4">全功能网络诊断工具箱</h3>
-      <p class="text-lg max-w-2xl mx-auto" style="color: var(--text-secondary)">
-        从基础 IP 查询到深度网络协议检测，覆盖日常运维与排障所需的全部能力
-      </p>
-    </div>
-
-    <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-      <!-- 功能卡片 1 -->
-      <div class="glass-card p-6 reveal gradient-border">
-        <div class="feature-icon bg-gradient-to-br from-accent to-cyan mb-5">
-          <i class="fa-solid fa-location-crosshairs"></i>
-        </div>
-        <h4 class="text-lg font-bold mb-2">IP 信息深度查询</h4>
-        <p class="text-sm mb-4" style="color: var(--text-secondary)">
-          自动获取访客 IP、归属地、运营商、ASN 信息，结合 Cloudflare 自带地理数据与第三方接口，双重数据源保证精度。
-        </p>
-        <div class="flex gap-2 flex-wrap">
-          <span class="text-xs px-2 py-1 rounded" style="background: rgba(0,122,255,0.08); color: #007AFF">IPv4 / IPv6</span>
-          <span class="text-xs px-2 py-1 rounded" style="background: rgba(0,122,255,0.08); color: #007AFF">ASN 信息</span>
-          <span class="text-xs px-2 py-1 rounded" style="background: rgba(0,122,255,0.08); color: #007AFF">经纬度</span>
-        </div>
-      </div>
-
-      <!-- 功能卡片 2 -->
-      <div class="glass-card p-6 reveal gradient-border">
-        <div class="feature-icon bg-gradient-to-br from-success to-emerald-500 mb-5">
-          <i class="fa-solid fa-gauge-high"></i>
-        </div>
-        <h4 class="text-lg font-bold mb-2">带宽测速与流式传输</h4>
-        <p class="text-sm mb-4" style="color: var(--text-secondary)">
-          支持单文件下载测速、多并发吞吐测试、流式大文件传输，最大支持 10MB 流式测试，真实反映带宽与连接质量。
-        </p>
-        <div class="flex gap-2 flex-wrap">
-          <span class="text-xs px-2 py-1 rounded" style="background: rgba(52,199,89,0.1); color: #34c759">下载测速</span>
-          <span class="text-xs px-2 py-1 rounded" style="background: rgba(52,199,89,0.1); color: #34c759">并发测试</span>
-          <span class="text-xs px-2 py-1 rounded" style="background: rgba(52,199,89,0.1); color: #34c759">流式传输</span>
-        </div>
-      </div>
-
-      <!-- 功能卡片 3 -->
-      <div class="glass-card p-6 reveal gradient-border">
-        <div class="feature-icon bg-gradient-to-br from-purple to-fuchsia-500 mb-5">
-          <i class="fa-solid fa-shield-virus"></i>
-        </div>
-        <h4 class="text-lg font-bold mb-2">IP 欺诈风险评分</h4>
-        <p class="text-sm mb-4" style="color: var(--text-secondary)">
-          对接 Scamalytics API，检测 IP 是否为代理、VPN、Tor 节点或机房 IP，自动分级风险等级，超时自动降级不影响主功能。
-        </p>
-        <div class="flex gap-2 flex-wrap">
-          <span class="text-xs px-2 py-1 rounded" style="background: rgba(88,86,214,0.1); color: #5856d6">VPN 检测</span>
-          <span class="text-xs px-2 py-1 rounded" style="background: rgba(88,86,214,0.1); color: #5856d6">风险评分</span>
-          <span class="text-xs px-2 py-1 rounded" style="background: rgba(88,86,214,0.1); color: #5856d6">机房识别</span>
-        </div>
-      </div>
-
-      <!-- 功能卡片 4 -->
-      <div class="glass-card p-6 reveal gradient-border">
-        <div class="feature-icon bg-gradient-to-br from-warning to-orange-500 mb-5">
-          <i class="fa-solid fa-plug"></i>
-        </div>
-        <h4 class="text-lg font-bold mb-2">协议与连接检测</h4>
-        <p class="text-sm mb-4" style="color: var(--text-secondary)">
-          自动识别 HTTP/2、HTTP/3、TLS 版本、ALPN 协议，支持 WebSocket 回声测试，全面掌握当前连接的协议细节。
-        </p>
-        <div class="flex gap-2 flex-wrap">
-          <span class="text-xs px-2 py-1 rounded" style="background: rgba(255,159,10,0.1); color: #ff9f0a">HTTP/3</span>
-          <span class="text-xs px-2 py-1 rounded" style="background: rgba(255,159,10,0.1); color: #ff9f0a">WebSocket</span>
-          <span class="text-xs px-2 py-1 rounded" style="background: rgba(255,159,10,0.1); color: #ff9f0a">TLS 1.3</span>
-        </div>
-      </div>
-
-      <!-- 功能卡片 5 -->
-      <div class="glass-card p-6 reveal gradient-border">
-        <div class="feature-icon bg-gradient-to-br from-danger to-rose-500 mb-5">
-          <i class="fa-solid fa-microchip"></i>
-        </div>
-        <h4 class="text-lg font-bold mb-2">CPU 性能基准测试</h4>
-        <p class="text-sm mb-4" style="color: var(--text-secondary)">
-          Worker 节点 CPU 浮点运算性能基准测试，可对比不同 Cloudflare 边缘节点的计算能力，评估边缘算力水平。
-        </p>
-        <div class="flex gap-2 flex-wrap">
-          <span class="text-xs px-2 py-1 rounded" style="background: rgba(255,59,48,0.08); color: #ff3b30">浮点运算</span>
-          <span class="text-xs px-2 py-1 rounded" style="background: rgba(255,59,48,0.08); color: #ff3b30">节点对比</span>
-          <span class="text-xs px-2 py-1 rounded" style="background: rgba(255,59,48,0.08); color: #ff3b30">单独限流</span>
-        </div>
-      </div>
-
-      <!-- 功能卡片 6 -->
-      <div class="glass-card p-6 reveal gradient-border">
-        <div class="feature-icon bg-gradient-to-br from-cyan to-sky-500 mb-5">
-          <i class="fa-solid fa-shield-halved"></i>
-        </div>
-        <h4 class="text-lg font-bold mb-2">安全防护与限流</h4>
-        <p class="text-sm mb-4" style="color: var(--text-secondary)">
-          内置 IP 级每分钟限流，CPU 密集接口单独限流，全套安全响应头（CSP/HSTS/XSS防护），防止滥用与攻击。
-        </p>
-        <div class="flex gap-2 flex-wrap">
-          <span class="text-xs px-2 py-1 rounded" style="background: rgba(90,200,250,0.12); color: #5ac8fa">IP 限流</span>
-          <span class="text-xs px-2 py-1 rounded" style="background: rgba(90,200,250,0.12); color: #5ac8fa">安全头</span>
-          <span class="text-xs px-2 py-1 rounded" style="background: rgba(90,200,250,0.12); color: #5ac8fa">CORS 跨域</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- 更多特性网格 -->
-    <div class="mt-10 grid md:grid-cols-4 gap-4">
-      <div class="glass-card p-5 text-center reveal">
-        <i class="fa-solid fa-moon text-accent text-xl mb-3"></i>
-        <div class="text-sm font-medium">深浅色模式</div>
-        <div class="text-xs mt-1" style="color: var(--text-tertiary)">自动跟随 + 手动切换</div>
-      </div>
-      <div class="glass-card p-5 text-center reveal">
-        <i class="fa-solid fa-globe text-purple text-xl mb-3"></i>
-        <div class="text-sm font-medium">多语言支持</div>
-        <div class="text-xs mt-1" style="color: var(--text-tertiary)">简中 / 繁中 / 英文</div>
-      </div>
-      <div class="glass-card p-5 text-center reveal">
-        <i class="fa-solid fa-database text-success text-xl mb-3"></i>
-        <div class="text-sm font-medium">KV 持久化</div>
-        <div class="text-xs mt-1" style="color: var(--text-tertiary)">测速历史与用量统计</div>
-      </div>
-      <div class="glass-card p-5 text-center reveal">
-        <i class="fa-solid fa-mobile-screen text-warning text-xl mb-3"></i>
-        <div class="text-sm font-medium">移动端适配</div>
-        <div class="text-xs mt-1" style="color: var(--text-tertiary)">iOS 原生设计体验</div>
-      </div>
-    </div>
-  </section>
-
-  <!-- 使用场景 -->
-  <section id="scenes" class="py-16" style="background: var(--bg-glass)">
-    <div class="max-w-7xl mx-auto px-6">
-      <div class="text-center mb-12 reveal">
-        <h3 class="text-3xl font-bold mb-4">适用场景</h3>
-        <p class="text-lg max-w-2xl mx-auto" style="color: var(--text-secondary)">
-          个人开发者、运维工程师、网络爱好者的实用诊断利器
-        </p>
-      </div>
-
-      <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-5">
-        <div class="glass-card p-6 reveal">
-          <div class="scene-icon bg-accent/10 text-accent mb-4">
-            <i class="fa-solid fa-user-gear"></i>
-          </div>
-          <h4 class="font-bold mb-2">个人开发者</h4>
-          <p class="text-sm" style="color: var(--text-secondary)">
-            快速测试接口连通性、验证 CDN 节点、检测跨域配置，调试前端网络问题。
-          </p>
-        </div>
-        <div class="glass-card p-6 reveal">
-          <div class="scene-icon bg-purple/10 text-purple mb-4">
-            <i class="fa-solid fa-server"></i>
-          </div>
-          <h4 class="font-bold mb-2">运维工程师</h4>
-          <p class="text-sm" style="color: var(--text-secondary)">
-            批量节点质量对比、边缘算力评估、协议兼容性检测，快速定位网络故障。
-          </p>
-        </div>
-        <div class="glass-card p-6 reveal">
-          <div class="scene-icon bg-success/10 text-success mb-4">
-            <i class="fa-solid fa-network-wired"></i>
-          </div>
-          <h4 class="font-bold mb-2">网络爱好者</h4>
-          <p class="text-sm" style="color: var(--text-secondary)">
-            测试运营商线路质量、对比不同地区节点、探索 HTTP/3 等新协议特性。
-          </p>
-        </div>
-        <div class="glass-card p-6 reveal">
-          <div class="scene-icon bg-warning/10 text-warning mb-4">
-            <i class="fa-solid fa-chart-line"></i>
-          </div>
-          <h4 class="font-bold mb-2">监控集成</h4>
-          <p class="text-sm" style="color: var(--text-secondary)">
-            标准化 API 接口，可接入自有监控系统，定期探测边缘节点可用性与延迟。
-          </p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- API 接口文档 -->
-  <section id="api" class="max-w-7xl mx-auto px-6 py-16">
-    <div class="text-center mb-12 reveal">
-      <h3 class="text-3xl font-bold mb-4">完整 API 接口清单</h3>
-      <p class="text-lg max-w-2xl mx-auto" style="color: var(--text-secondary)">
-        所有接口均支持 CORS 跨域调用，可直接集成到自有系统或监控脚本中
-      </p>
-    </div>
-
-    <div class="glass-card overflow-hidden reveal">
-      <div class="overflow-x-auto">
-        <table class="w-full text-sm">
-          <thead>
-            <tr style="background: rgba(0,0,0,0.02); border-bottom: 1px solid var(--border)">
-              <th class="text-left px-6 py-4 font-semibold">接口路径</th>
-              <th class="text-left px-6 py-4 font-semibold">方法</th>
-              <th class="text-left px-6 py-4 font-semibold">功能说明</th>
-              <th class="text-left px-6 py-4 font-semibold">参数说明</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr class="table-row">
-              <td class="px-6 py-3.5 font-mono text-accent">/</td>
-              <td class="px-6 py-3.5"><span class="method-badge method-get">GET</span></td>
-              <td class="px-6 py-3.5">主诊断面板 HTML 页面</td>
-              <td class="px-6 py-3.5" style="color: var(--text-tertiary)">无</td>
-            </tr>
-            <tr class="table-row">
-              <td class="px-6 py-3.5 font-mono text-accent">/health</td>
-              <td class="px-6 py-3.5"><span class="method-badge method-get">GET</span></td>
-              <td class="px-6 py-3.5">健康检查，返回版本与运行时间</td>
-              <td class="px-6 py-3.5" style="color: var(--text-tertiary)">无</td>
-            </tr>
-            <tr class="table-row">
-              <td class="px-6 py-3.5 font-mono text-accent">/speedtest</td>
-              <td class="px-6 py-3.5"><span class="method-badge method-get">GET</span></td>
-              <td class="px-6 py-3.5">下载测速，返回随机二进制数据</td>
-              <td class="px-6 py-3.5"><code class="text-xs">size</code> 字节数，最大 5MB</td>
-            </tr>
-            <tr class="table-row">
-              <td class="px-6 py-3.5 font-mono text-accent">/stream-test</td>
-              <td class="px-6 py-3.5"><span class="method-badge method-get">GET</span></td>
-              <td class="px-6 py-3.5">流式传输大文件测试</td>
-              <td class="px-6 py-3.5"><code class="text-xs">size</code> 最大 10MB</td>
-            </tr>
-            <tr class="table-row">
-              <td class="px-6 py-3.5 font-mono text-accent">/concurrent-test</td>
-              <td class="px-6 py-3.5"><span class="method-badge method-get">GET</span></td>
-              <td class="px-6 py-3.5">多并发下载吞吐测试</td>
-              <td class="px-6 py-3.5"><code class="text-xs">count</code> / <code class="text-xs">size</code></td>
-            </tr>
-            <tr class="table-row">
-              <td class="px-6 py-3.5 font-mono text-accent">/cpu-test</td>
-              <td class="px-6 py-3.5"><span class="method-badge method-get">GET</span></td>
-              <td class="px-6 py-3.5">CPU 浮点运算性能基准测试</td>
-              <td class="px-6 py-3.5"><code class="text-xs">n</code> 迭代次数，单独限流</td>
-            </tr>
-            <tr class="table-row">
-              <td class="px-6 py-3.5 font-mono text-accent">/dns-proxy</td>
-              <td class="px-6 py-3.5"><span class="method-badge method-get">GET</span></td>
-              <td class="px-6 py-3.5">Worker 端代理探测目标 URL 连通性</td>
-              <td class="px-6 py-3.5"><code class="text-xs">url</code> 目标地址，白名单域名</td>
-            </tr>
-            <tr class="table-row">
-              <td class="px-6 py-3.5 font-mono text-accent">/ws-test</td>
-              <td class="px-6 py-3.5"><span class="method-badge method-get">GET</span></td>
-              <td class="px-6 py-3.5">WebSocket 回声测试端点</td>
-              <td class="px-6 py-3.5" style="color: var(--text-tertiary)">协议升级，心跳机制</td>
-            </tr>
-            <tr class="table-row">
-              <td class="px-6 py-3.5 font-mono text-accent">/http2-test</td>
-              <td class="px-6 py-3.5"><span class="method-badge method-get">GET</span></td>
-              <td class="px-6 py-3.5">检测 HTTP/2、HTTP/3、TLS 版本</td>
-              <td class="px-6 py-3.5" style="color: var(--text-tertiary)">返回协议、TLS、ALPN信息</td>
-            </tr>
-            <tr class="table-row">
-              <td class="px-6 py-3.5 font-mono text-accent">/api/ip-fraud</td>
-              <td class="px-6 py-3.5"><span class="method-badge method-get">GET</span></td>
-              <td class="px-6 py-3.5">当前 IP 欺诈风险评分</td>
-              <td class="px-6 py-3.5" style="color: var(--text-tertiary)">超时自动降级</td>
-            </tr>
-            <tr class="table-row">
-              <td class="px-6 py-3.5 font-mono text-accent">/api/log-speed</td>
-              <td class="px-6 py-3.5"><span class="method-badge method-post">POST</span></td>
-              <td class="px-6 py-3.5">提交测速结果到 KV 存储</td>
-              <td class="px-6 py-3.5">JSON Body，需绑定 KV</td>
-            </tr>
-            <tr class="table-row">
-              <td class="px-6 py-3.5 font-mono text-accent">/api/speed-history</td>
-              <td class="px-6 py-3.5"><span class="method-badge method-get">GET</span></td>
-              <td class="px-6 py-3.5">查询历史测速记录</td>
-              <td class="px-6 py-3.5"><code class="text-xs">limit</code> 返回条数</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </section>
-
-  <!-- 部署教程 -->
-  <section id="deploy" class="py-16" style="background: var(--bg-glass)">
-    <div class="max-w-7xl mx-auto px-6">
-      <div class="text-center mb-12 reveal">
-        <h3 class="text-3xl font-bold mb-4">三分钟快速部署</h3>
-        <p class="text-lg max-w-2xl mx-auto" style="color: var(--text-secondary)">
-          无需本地环境，无需安装依赖，复制粘贴即可上线
-        </p>
-      </div>
-
-      <div class="grid lg:grid-cols-2 gap-8">
-        <!-- 左侧步骤时间线 -->
-        <div class="space-y-0 reveal">
-          <div class="timeline-item">
-            <div class="timeline-dot"></div>
-            <h4 class="font-bold text-lg mb-1">创建 Cloudflare Worker</h4>
-            <p class="text-sm" style="color: var(--text-secondary)">
-              登录 Cloudflare 控制台 → Workers & Pages → Create application → Create Worker，输入名称后点击 Deploy。
-            </p>
-          </div>
-          <div class="timeline-item">
-            <div class="timeline-dot"></div>
-            <h4 class="font-bold text-lg mb-1">替换完整源码</h4>
-            <p class="text-sm mb-3" style="color: var(--text-secondary)">
-              点击 Quick edit 进入编辑器，删除默认全部代码，粘贴 <code>_workers.js</code> 完整源码。
-            </p>
-            <button onclick="copySource()" class="btn-ripple text-sm px-4 py-2 rounded-full bg-accent text-white font-medium hover:bg-accent/90 transition">
-              <i class="fa-regular fa-copy mr-1"></i>一键复制 Raw 源码链接
-            </button>
-          </div>
-          <div class="timeline-item">
-            <div class="timeline-dot"></div>
-            <h4 class="font-bold text-lg mb-1">保存并访问</h4>
-            <p class="text-sm" style="color: var(--text-secondary)">
-              点击 Save and deploy，等待部署完成。访问分配的 <code>*.workers.dev</code> 域名即可打开诊断面板。
-            </p>
-          </div>
-          <div class="timeline-item">
-            <div class="timeline-dot"></div>
-            <h4 class="font-bold text-lg mb-1">（可选）绑定 KV 命名空间</h4>
-            <p class="text-sm" style="color: var(--text-secondary)">
-              创建 KV 命名空间，在 Worker 设置中绑定变量名为 <code>SPEED_HISTORY</code>，即可启用测速历史与用量统计功能。
-            </p>
-          </div>
-        </div>
-
-        <!-- 右侧代码高亮窗口（真实源码片段） -->
+        <!-- ===== 功能特色 ===== -->
         <div class="reveal">
-          <div class="code-window">
-            <div class="code-header">
-              <div class="flex items-center gap-2">
-                <div class="code-dot dot-red"></div>
-                <div class="code-dot dot-yellow"></div>
-                <div class="code-dot dot-green"></div>
-                <span class="ml-3 text-xs text-gray-400 font-mono">_workers.js</span>
-              </div>
-              <button onclick="copySource()" class="text-xs text-gray-400 hover:text-white transition">
-                <i class="fa-solid fa-arrow-up-right-from-square mr-1"></i>Raw
-              </button>
+            <h2 class="section-title"><i class="fas fa-star"></i> 核心功能</h2>
+            <p class="section-desc">从延迟监控到流媒体连通性，一站式诊断工具集，所有测试均在边缘执行，毫秒级响应。</p>
+        </div>
+        <div class="grid-2">
+            <div class="card reveal reveal-delay-1">
+                <i class="fas fa-waveform"></i>
+                <h3>实时 RTT 监控</h3>
+                <p>每 2 秒自动探测延迟，绘制动态曲线图，同时计算抖动、丢包率，并提供网络质量评级。</p>
+                <span class="tag">Canvas 图表</span>
             </div>
-<pre><code class="language-javascript">// ============================================================
-// NetSight Pro - Apple 极简网络诊断工具
-// Cloudflare Worker 完整优化版 | v4.0
-// ============================================================
+            <div class="card reveal reveal-delay-2">
+                <i class="fas fa-lock"></i>
+                <h3>安全与协议检测</h3>
+                <p>显示 TLS 版本、加密套件、ECH 状态、HTTP/2/3 支持、压缩算法以及机器人评分。</p>
+                <span class="tag">TLS · HTTP/2</span>
+            </div>
+            <div class="card reveal reveal-delay-3">
+                <i class="fas fa-map-pin"></i>
+                <h3>边缘 & 客户端定位</h3>
+                <p>展示 Cloudflare 边缘节点位置，同时通过 ip-api.com 获取客户端真实地理位置并计算距离。</p>
+                <span class="tag">地理位置</span>
+            </div>
+            <div class="card reveal reveal-delay-4">
+                <i class="fas fa-user-secret"></i>
+                <h3>IP 欺诈评分</h3>
+                <p>调用 scamalytics.com API 评估 IP 风险（代理/VPN/Tor/托管标记），识别异常流量。</p>
+                <span class="tag">风险等级</span>
+            </div>
+            <div class="card reveal reveal-delay-1">
+                <i class="fas fa-flask"></i>
+                <h3>一键诊断工具集</h3>
+                <p>包含丢包率、带宽测速、DNS 解析、CPU 性能、WebSocket 延迟、并发请求、流式吞吐量、流媒体连通性等 8 项测试。</p>
+                <span class="tag">8 合 1</span>
+            </div>
+            <div class="card reveal reveal-delay-2">
+                <i class="fas fa-globe-asia"></i>
+                <h3>多节点对比</h3>
+                <p>同时测试多个 Worker 节点的延迟，以表格形式直观对比，便于评估全球网络性能。</p>
+                <span class="tag">并行测试</span>
+            </div>
+            <div class="card reveal reveal-delay-3">
+                <i class="fas fa-chart-line"></i>
+                <h3>测速历史 & 用量统计</h3>
+                <p>带宽测速记录自动保存至 KV 存储，并统计各 API 端点调用次数，方便追踪使用情况。</p>
+                <span class="tag">KV 持久化</span>
+            </div>
+            <div class="card reveal reveal-delay-4">
+                <i class="fas fa-palette"></i>
+                <h3>深色 / 浅色 / 自动</h3>
+                <p>主题跟随系统或手动切换，适配不同光线环境。国际化支持 3 种语言（英文、简体、繁体）。</p>
+                <span class="tag">i18n · 主题</span>
+            </div>
+        </div>
 
-// CORS & 安全响应头
-const CORS_HEADERS = {
-  'access-control-allow-origin': '*',
-  'access-control-allow-methods': 'GET, HEAD, OPTIONS',
-  'cache-control': 'no-store'
-};
+        <!-- ===== 技术栈 ===== -->
+        <div class="tech-stack reveal">
+            <h3 style="font-size: 22px; font-weight: 700; margin-bottom: 4px; display: flex; align-items: center; gap: 10px;">
+                <i class="fas fa-cogs" style="color: var(--accent);"></i> 技术栈
+            </h3>
+            <p style="color: var(--text-secondary); font-size: 15px;">纯前端 + Cloudflare Workers 边缘计算</p>
+            <div class="stack-items">
+                <span><i class="fab fa-cloudflare"></i> Cloudflare Workers</span>
+                <span><i class="fas fa-database"></i> KV 存储</span>
+                <span><i class="fas fa-code"></i> Vanilla JS</span>
+                <span><i class="fas fa-css3-alt"></i> CSS 变量</span>
+                <span><i class="fas fa-chart-simple"></i> Canvas</span>
+                <span><i class="fas fa-plug"></i> WebSocket</span>
+                <span><i class="fas fa-google-font"></i> Inter 字体</span>
+                <span><i class="fab fa-font-awesome"></i> Font Awesome</span>
+                <span><i class="fas fa-shield-alt"></i> CSP · HSTS</span>
+            </div>
+        </div>
 
-const SECURITY_HEADERS = {
-  'x-content-type-options': 'nosniff',
-  'x-frame-options': 'DENY',
-  'x-xss-protection': '1; mode=block',
-  'strict-transport-security': 'max-age=31536000'
-};
-
-// 内置限流机制
-const rateLimit = new Map();
-function isRateLimited(ip, maxRequests = 60, windowMs = 60000) {
-  const now = Date.now();
-  const requests = rateLimit.get(ip) || [];
-  const recent = requests.filter(t => now - t < windowMs);
-  if (recent.length >= maxRequests) return true;
-  recent.push(now);
-  rateLimit.set(ip, recent);
-  return false;
+        <!-- ===== 代码高亮 ===== -->
+        <div class="code-block reveal">
+            <div class="code-header">
+                <span><i class="fas fa-code"></i> 核心路由示例 (Worker 端)</span>
+                <span style="font-size: 12px; background: var(--accent-light); padding: 2px 12px; border-radius: 20px;">_workers.js</span>
+            </div>
+            <pre><code class="language-javascript">// 实时 RTT 监控端点
+if (url.pathname === '/rtt') {
+    const start = Date.now();
+    await fetch('https://example.com', { method: 'HEAD' });
+    const rtt = Date.now() - start;
+    return new Response(JSON.stringify({ rtt }), {
+        headers: { 'Content-Type': 'application/json' }
+    });
 }
 
-// 主入口
-addEventListener('fetch', event => {
-  event.respondWith(handleRequest(event));
-});
-
-async function handleRequest(event) {
-  const url = new URL(event.request.url);
-  const clientIp = request.headers.get('cf-connecting-ip');
-  
-  // 限流拦截
-  if (isRateLimited(clientIp)) {
-    return new Response(JSON.stringify({ error: 'Too Many Requests' }), { status: 429 });
-  }
-  
-  // 路由分发
-  switch(url.pathname) {
-    case '/':           return renderMainPage();
-    case '/health':     return handleHealth();
-    case '/speedtest':  return handleSpeedTest(url);
-    case '/cpu-test':   return handleCpuTest(event);
-    case '/ws-test':    return handleWebSocket(event);
-    case '/http2-test': return handleHttp2Test(event);
-    // ... 更多接口实现
-  }
-}
-
-// IP 欺诈风险评分
+// IP 欺诈评分 (调用 Scamalytics)
 async function getIpFraudScore(ip) {
-  try {
     const resp = await fetch(`https://scamalytics.com/api/ip/${ip}`);
     const data = await resp.json();
     return {
-      score: data.score,
-      riskLevel: data.score >= 80 ? 'high' : 'low'
+        score: data.score,
+        isProxy: data.is_proxy,
+        isVpn: data.is_vpn,
+        riskLevel: data.score >= 80 ? 'high' : 'low'
     };
-  } catch (e) {
-    return null; // 超时降级，不影响主功能
-  }
-}</code></pre>
-          </div>
+}
+
+// WebSocket 延迟测试
+const webSocketPair = new WebSocketPair();
+const [client, server] = Object.values(webSocketPair);
+server.accept();
+server.addEventListener('message', event => {
+    server.send(JSON.stringify({ type: 'pong', echo: event.data }));
+});
+return new Response(null, { status: 101, webSocket: client });</code></pre>
         </div>
-      </div>
-    </div>
-  </section>
 
-  <!-- 技术架构 -->
-  <section class="max-w-7xl mx-auto px-6 py-16">
-    <div class="text-center mb-12 reveal">
-      <h3 class="text-3xl font-bold mb-4">技术架构与设计</h3>
-      <p class="text-lg max-w-2xl mx-auto" style="color: var(--text-secondary)">
-        纯边缘计算架构，无后端服务器，无数据库，所有逻辑运行在 Cloudflare 全球边缘节点
-      </p>
-    </div>
-
-    <div class="grid md:grid-cols-3 gap-6">
-      <div class="glass-card p-6 reveal">
-        <div class="text-accent text-2xl mb-4"><i class="fa-solid fa-cloud"></i></div>
-        <h4 class="font-bold text-lg mb-3">边缘计算层</h4>
-        <ul class="space-y-2 text-sm" style="color: var(--text-secondary)">
-          <li class="flex items-start gap-2">
-            <i class="fa-solid fa-check text-success mt-0.5"></i>
-            <span>Cloudflare Workers V8 运行时</span>
-          </li>
-          <li class="flex items-start gap-2">
-            <i class="fa-solid fa-check text-success mt-0.5"></i>
-            <span>Isolate 轻量隔离，冷启动 < 5ms</span>
-          </li>
-          <li class="flex items-start gap-2">
-            <i class="fa-solid fa-check text-success mt-0.5"></i>
-            <span>全球 300+ 城市边缘节点覆盖</span>
-          </li>
-          <li class="flex items-start gap-2">
-            <i class="fa-solid fa-check text-success mt-0.5"></i>
-            <span>原生支持 HTTP/3 与 WebSocket</span>
-          </li>
-        </ul>
-      </div>
-
-      <div class="glass-card p-6 reveal">
-        <div class="text-purple text-2xl mb-4"><i class="fa-solid fa-cubes"></i></div>
-        <h4 class="font-bold text-lg mb-3">存储层（可选）</h4>
-        <ul class="space-y-2 text-sm" style="color: var(--text-secondary)">
-          <li class="flex items-start gap-2">
-            <i class="fa-solid fa-check text-success mt-0.5"></i>
-            <span>Workers KV 全局键值存储</span>
-          </li>
-          <li class="flex items-start gap-2">
-            <i class="fa-solid fa-check text-success mt-0.5"></i>
-            <span>测速历史自动过期清理</span>
-          </li>
-          <li class="flex items-start gap-2">
-            <i class="fa-solid fa-check text-success mt-0.5"></i>
-            <span>接口调用量日维度统计</span>
-          </li>
-          <li class="flex items-start gap-2">
-            <i class="fa-solid fa-check text-success mt-0.5"></i>
-            <span>CDN 缓存静态资源加速</span>
-          </li>
-        </ul>
-      </div>
-
-      <div class="glass-card p-6 reveal">
-        <div class="text-success text-2xl mb-4"><i class="fa-solid fa-shield-halved"></i></div>
-        <h4 class="font-bold text-lg mb-3">安全与防护</h4>
-        <ul class="space-y-2 text-sm" style="color: var(--text-secondary)">
-          <li class="flex items-start gap-2">
-            <i class="fa-solid fa-check text-success mt-0.5"></i>
-            <span>IP 级每分钟 60 次限流</span>
-          </li>
-          <li class="flex items-start gap-2">
-            <i class="fa-solid fa-check text-success mt-0.5"></i>
-            <span>CPU 密集接口单独限流保护</span>
-          </li>
-          <li class="flex items-start gap-2">
-            <i class="fa-solid fa-check text-success mt-0.5"></i>
-            <span>全套安全响应头 + HSTS</span>
-          </li>
-          <li class="flex items-start gap-2">
-            <i class="fa-solid fa-check text-success mt-0.5"></i>
-            <span>第三方接口超时降级机制</span>
-          </li>
-        </ul>
-      </div>
-    </div>
-
-    <!-- 技术栈标签墙 -->
-    <div class="mt-10 glass-card p-8 reveal">
-      <h4 class="font-bold text-center mb-6">完整技术栈</h4>
-      <div class="flex flex-wrap justify-center gap-3">
-        <span class="tag tag-blue">Vanilla JavaScript</span>
-        <span class="tag tag-green">Cloudflare Workers</span>
-        <span class="tag tag-purple">Workers KV</span>
-        <span class="tag tag-orange">Fetch API</span>
-        <span class="tag tag-cyan">ReadableStream</span>
-        <span class="tag tag-green">WebSocket</span>
-        <span class="tag tag-purple">Web Crypto</span>
-        <span class="tag tag-orange">AbortController</span>
-        <span class="tag tag-blue">CORS 跨域</span>
-        <span class="tag tag-green">CSP 安全策略</span>
-        <span class="tag tag-purple">HSTS 强制加密</span>
-        <span class="tag tag-orange">Scamalytics API</span>
-        <span class="tag tag-blue">ip-api 地理数据</span>
-        <span class="tag tag-green">Canvas 实时图表</span>
-        <span class="tag tag-purple">CSS Variables</span>
-        <span class="tag tag-cyan">深色模式</span>
-      </div>
-    </div>
-  </section>
-
-  <!-- 更新日志 -->
-  <section id="changelog" class="py-16" style="background: var(--bg-glass)">
-    <div class="max-w-4xl mx-auto px-6">
-      <div class="text-center mb-12 reveal">
-        <h3 class="text-3xl font-bold mb-4">更新日志</h3>
-        <p class="text-lg" style="color: var(--text-secondary)">版本迭代与功能演进记录</p>
-      </div>
-
-      <div class="space-y-6 reveal">
-        <div class="glass-card p-6">
-          <div class="flex items-center justify-between mb-3">
-            <h4 class="font-bold text-lg">v4.0 · 极光版</h4>
-            <span class="tag tag-green">最新版本</span>
-          </div>
-          <p class="text-sm mb-3" style="color: var(--text-tertiary)">2025 年 7 月</p>
-          <ul class="space-y-2 text-sm" style="color: var(--text-secondary)">
-            <li>• 全新 Apple 风格 UI 全面重构，严格遵循 HIG 设计规范</li>
-            <li>• 新增 IP 欺诈风险评分接口，对接 Scamalytics 数据库</li>
-            <li>• 新增 CPU 性能基准测试，计算密集接口单独限流</li>
-            <li>• 新增流式大文件传输测试，最大支持 10MB</li>
-            <li>• 优化内置限流机制，区分普通接口与计算密集接口</li>
-            <li>• 新增全套安全响应头，加固安全防护</li>
-            <li>• 深色模式手动切换 + 系统自动跟随双模式</li>
-          </ul>
+        <!-- ===== 部署指南 ===== -->
+        <div class="deploy-box reveal">
+            <h3 style="font-size: 22px; font-weight: 700; margin-bottom: 16px; display: flex; align-items: center; gap: 12px;">
+                <i class="fas fa-rocket" style="color: var(--accent);"></i> 快速部署
+            </h3>
+            <ol>
+                <li><strong>克隆仓库：</strong> <code>git clone https://github.com/BlueDriftHK/CF-workers-netdiag.git</code></li>
+                <li><strong>登录 Cloudflare：</strong> 安装 Wrangler CLI 并执行 <code>wrangler login</code></li>
+                <li><strong>创建 KV 命名空间：</strong> <code>wrangler kv:namespace create "SPEED_HISTORY"</code></li>
+                <li><strong>绑定 KV 到 Worker：</strong> 在 <code>wrangler.toml</code> 中配置 <code>kv_namespaces</code></li>
+                <li><strong>部署 Worker：</strong> <code>wrangler deploy --name netsight-pro</code></li>
+                <li><strong>访问：</strong> 浏览器打开您的 Worker 域名，立即体验。</li>
+            </ol>
+            <div class="note">
+                <i class="fas fa-info-circle" style="color: var(--accent); margin-right: 8px;"></i>
+                详细配置请参考项目 README，支持自定义限流阈值、白名单域名、CORS 策略等。
+            </div>
         </div>
-        <div class="glass-card p-6">
-          <div class="flex items-center justify-between mb-3">
-            <h4 class="font-bold text-lg">v3.0 · 星轨版</h4>
-            <span class="tag tag-blue">稳定版本</span>
-          </div>
-          <p class="text-sm mb-3" style="color: var(--text-tertiary)">2025 年 4 月</p>
-          <ul class="space-y-2 text-sm" style="color: var(--text-secondary)">
-            <li>• 新增 HTTP/2、HTTP/3、TLS 版本检测接口</li>
-            <li>• 新增 WebSocket 回声测试端点，内置心跳机制</li>
-            <li>• 支持多并发下载吞吐测试</li>
-            <li>• 修复大文件传输内存占用过高问题</li>
-            <li>• 新增 CORS 跨域支持与 OPTIONS 预检处理</li>
-          </ul>
-        </div>
-        <div class="glass-card p-6">
-          <div class="flex items-center justify-between mb-3">
-            <h4 class="font-bold text-lg">v2.0 · 初版</h4>
-            <span class="tag tag-orange">历史版本</span>
-          </div>
-          <p class="text-sm mb-3" style="color: var(--text-tertiary)">2025 年 1 月</p>
-          <ul class="space-y-2 text-sm" style="color: var(--text-secondary)">
-            <li>• 基础 IP 查询与地理信息展示功能</li>
-            <li>• HTTP Ping 实时延迟测试</li>
-            <li>• 基础单文件下载测速功能</li>
-            <li>• 单文件 Worker 架构定型，零外部依赖</li>
-          </ul>
-        </div>
-      </div>
-    </div>
-  </section>
 
-  <!-- FAQ -->
-  <section id="faq" class="max-w-4xl mx-auto px-6 py-16">
-    <div class="text-center mb-12 reveal">
-      <h3 class="text-3xl font-bold mb-4">常见问题</h3>
-      <p class="text-lg" style="color: var(--text-secondary)">关于部署、使用与限制的常见疑问解答</p>
+        <!-- ===== 底部 ===== -->
+        <footer class="footer">
+            <span>
+                <i class="far fa-copyright"></i> 2026 NetSight Pro · 由 <a href="https://github.com/BlueDriftHK" target="_blank">BlueDriftHK</a> 维护
+            </span>
+            <span>
+                <span class="heart">❤️</span> 开源协议 MIT ·
+                <a href="https://github.com/BlueDriftHK/CF-workers-netdiag/issues" target="_blank">报告问题</a>
+            </span>
+        </footer>
     </div>
 
-    <div class="space-y-4 reveal">
-      <details class="glass-card p-5 group">
-        <summary class="cursor-pointer font-medium flex justify-between items-center">
-          <span>部署这个工具需要付费吗？</span>
-          <i class="fa-solid fa-chevron-down transition group-open:rotate-180 text-sm" style="color: var(--text-tertiary)"></i>
-        </summary>
-        <p class="mt-4 text-sm leading-relaxed" style="color: var(--text-secondary)">
-          完全免费。Cloudflare Workers 免费套餐每天提供 10 万次请求额度，个人使用完全足够。
-          KV 存储也有免费额度，测速历史等功能同样可以免费使用。如需更高配额可按需升级付费套餐。
-        </p>
-      </details>
+    <!-- ===== Prism.js 代码高亮 ===== -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-javascript.min.js"></script>
 
-      <details class="glass-card p-5 group">
-        <summary class="cursor-pointer font-medium flex justify-between items-center">
-          <span>为什么 Worker 不能做 TCP ping / traceroute？</span>
-          <i class="fa-solid fa-chevron-down transition group-open:rotate-180 text-sm" style="color: var(--text-tertiary)"></i>
-        </summary>
-        <p class="mt-4 text-sm leading-relaxed" style="color: var(--text-secondary)">
-          Cloudflare Workers 运行在 JavaScript 沙箱中，仅支持 HTTP / WebSocket 协议，无法发送原始 ICMP 或 TCP 数据包。
-          本项目通过 HTTP 请求耗时来模拟延迟测试（HTTP Ping），结果可近似反映网络质量。如需真正的 MTR 路由追踪，需要配合支持 TCP 的边缘计算服务。
-        </p>
-      </details>
+    <!-- ===== 主题切换 & 滚动动画 ===== -->
+    <script>
+        (function() {
+            // --- 主题切换 ---
+            const toggle = document.getElementById('themeToggle');
+            const html = document.documentElement;
+            let current = localStorage.getItem('theme') || 'auto';
 
-      <details class="glass-card p-5 group">
-        <summary class="cursor-pointer font-medium flex justify-between items-center">
-          <span>IP 欺诈评分的数据来源是什么？</span>
-          <i class="fa-solid fa-chevron-down transition group-open:rotate-180 text-sm" style="color: var(--text-tertiary)"></i>
-        </summary>
-        <p class="mt-4 text
+            function applyTheme(theme) {
+                if (theme === 'auto') {
+                    html.removeAttribute('data-theme');
+                    toggle.innerHTML = '<i class="fas fa-adjust"></i>';
+                } else {
+                    html.setAttribute('data-theme', theme);
+                    toggle.innerHTML = theme === 'dark' ? '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>';
+                }
+                localStorage.setItem('theme', theme);
+                current = theme;
+            }
+
+            toggle.addEventListener('click', () => {
+                if (current === 'auto') applyTheme('dark');
+                else if (current === 'dark') applyTheme('light');
+                else applyTheme('auto');
+            });
+            applyTheme(current);
+
+            // --- 滚动入场 (Intersection Observer) ---
+            const reveals = document.querySelectorAll('.reveal');
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        entry.target.classList.add('active');
+                    }
+                });
+            }, {
+                threshold: 0.12,
+                rootMargin: '0px 0px -40px 0px'
+            });
+
+            reveals.forEach(el => observer.observe(el));
+
+            // --- 手动触发一次，让首屏可见元素立即出现 ---
+            setTimeout(() => {
+                reveals.forEach(el => {
+                    const rect = el.getBoundingClientRect();
+                    if (rect.top < window.innerHeight) {
+                        el.classList.add('active');
+                    }
+                });
+            }, 100);
+        })();
+    </script>
+</body>
+</html>
