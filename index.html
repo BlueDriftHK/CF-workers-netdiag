@@ -4,12 +4,12 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>NetSight Pro | 极光网络诊断 · Cloudflare Worker 全功能网络工具箱</title>
-  <meta name="description" content="NetSight Pro 是基于 Cloudflare Workers 构建的极简网络诊断工具，支持 IP 查询、测速、路由追踪、WebSocket 测试、HTTP/3 检测等 15+ 诊断功能，Apple 原生设计风格。"/>
+  <meta name="description" content="NetSight Pro 是运行在 Cloudflare Workers 上的极简网络诊断工具，支持 IP 查询、测速、CPU基准、WebSocket 测试、HTTP/3 检测、IP风险评分等 15+ 诊断功能，Apple 原生设计风格。"/>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <!-- 代码高亮主题 -->
+  <!-- Prism 代码高亮 -->
   <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-javascript.min.js"></script>
@@ -28,6 +28,19 @@
             danger: '#ff3b30',
             purple: '#5856d6',
             cyan: '#5ac8fa',
+            gray: {
+              50: '#f5f5f7',
+              100: '#e8e8ed',
+              200: '#d1d1d6',
+              300: '#aeaeb2',
+              400: '#86868b',
+              500: '#636366',
+              600: '#48484a',
+              700: '#3a3a3c',
+              800: '#2c2c2e',
+              900: '#1c1c1e',
+              950: '#0b0b0d',
+            }
           },
           fontFamily: {
             inter: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'SF Pro Display', 'sans-serif'],
@@ -97,7 +110,7 @@
       -webkit-mask-image: radial-gradient(ellipse at center, black 40%, transparent 75%);
     }
 
-    /* 极光浮动背景 */
+    /* 极光浮动背景（视差效果） */
     .aurora {
       position: absolute;
       width: 700px;
@@ -108,6 +121,7 @@
       pointer-events: none;
       animation: float 18s ease-in-out infinite;
       will-change: transform;
+      z-index: 0;
     }
     .aurora-1 { background: #007AFF; top: -300px; left: -200px; animation-delay: 0s; }
     .aurora-2 { background: #5856d6; top: 50px; right: -300px; animation-delay: -6s; }
@@ -165,7 +179,7 @@
     }
     @keyframes blink { 50% { opacity: 0; } }
 
-    /* 功能图标 */
+    /* 功能图标呼吸动画 */
     .feature-icon {
       width: 52px;
       height: 52px;
@@ -197,6 +211,7 @@
     .tag-purple { background: rgba(88, 86, 214, 0.1); color: #5856d6; border: 1px solid rgba(88, 86, 214, 0.18); }
     .tag-orange { background: rgba(255, 159, 10, 0.1); color: #ff9f0a; border: 1px solid rgba(255, 159, 10, 0.18); }
     .tag-red { background: rgba(255, 59, 48, 0.1); color: #ff3b30; border: 1px solid rgba(255, 59, 48, 0.18); }
+    .tag-cyan { background: rgba(90, 200, 250, 0.12); color: #5ac8fa; border: 1px solid rgba(90, 200, 250, 0.2); }
 
     /* 代码窗口 */
     .code-window {
@@ -210,7 +225,7 @@
       padding: 10px 16px;
       display: flex;
       align-items: center;
-      gap: 8px;
+      justify-content: space-between;
       border-bottom: 1px solid rgba(255,255,255,0.06);
     }
     .code-dot { width: 12px; height: 12px; border-radius: 50%; }
@@ -224,7 +239,11 @@
       font-size: 13px;
       line-height: 1.7;
       padding: 20px !important;
+      max-height: 480px;
+      overflow-y: auto;
     }
+    pre[class*="language-"]::-webkit-scrollbar { width: 6px; }
+    pre[class*="language-"]::-webkit-scrollbar-thumb { background: #414868; border-radius: 3px; }
 
     /* 时间线 */
     .timeline-item {
@@ -278,11 +297,12 @@
       border-color: #007AFF;
     }
 
-    /* 导航 */
+    /* 导航栏 */
     .nav-link {
       position: relative;
       color: var(--text-secondary);
       transition: color 0.2s;
+      font-size: 14px;
     }
     .nav-link:hover { color: var(--text-primary); }
     .nav-link::after {
@@ -332,7 +352,7 @@
       to { transform: scale(4); opacity: 0; }
     }
 
-    /* 表格 */
+    /* 表格样式 */
     .table-row {
       border-bottom: 1px solid var(--divider);
       transition: background 0.15s;
@@ -359,9 +379,36 @@
       perspective: 1000px;
     }
 
+    /* 状态指示灯 */
+    .live-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #34c759;
+      animation: pulse 2s ease-in-out infinite;
+      margin-right: 8px;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(1.3); }
+    }
+
+    /* 使用场景卡片图标 */
+    .scene-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+    }
+
     /* 移动端适配 */
     @media (max-width: 768px) {
       .aurora { width: 400px; height: 400px; }
+      .hero-title { font-size: 2.5rem; }
     }
   </style>
 </head>
@@ -389,6 +436,7 @@
         </div>
         <div class="hidden md:flex items-center gap-8 text-sm">
           <a href="#features" class="nav-link">功能特性</a>
+          <a href="#scenes" class="nav-link">使用场景</a>
           <a href="#api" class="nav-link">API 文档</a>
           <a href="#deploy" class="nav-link">部署教程</a>
           <a href="#changelog" class="nav-link">更新日志</a>
@@ -419,7 +467,7 @@
           <span class="live-dot"></span>
           <span class="text-sm font-medium text-accent">单文件部署 · 零依赖 · 永久免费</span>
         </div>
-        <h2 class="text-5xl lg:text-6xl font-extrabold leading-tight mb-6 tracking-tight">
+        <h2 class="text-5xl lg:text-6xl font-extrabold leading-tight mb-6 tracking-tight hero-title">
           极简网络诊断<br/>
           <span class="bg-gradient-to-r from-accent via-purple to-cyan bg-clip-text text-transparent">
             一个 Worker 全部搞定
@@ -445,7 +493,7 @@
           <span class="tag tag-green">零依赖单文件</span>
           <span class="tag tag-purple">Apple 设计风格</span>
           <span class="tag tag-orange">15+ 诊断能力</span>
-          <span class="tag tag-blue">深色模式</span>
+          <span class="tag tag-cyan">深色模式</span>
           <span class="tag tag-green">KV 持久化</span>
         </div>
       </div>
@@ -454,10 +502,13 @@
       <div class="reveal mockup-3d relative" id="mockupCard">
         <div class="code-window">
           <div class="code-header">
-            <div class="code-dot dot-red"></div>
-            <div class="code-dot dot-yellow"></div>
-            <div class="code-dot dot-green"></div>
-            <div class="ml-4 text-xs text-gray-400">netsight.example.workers.dev</div>
+            <div class="flex items-center gap-2">
+              <div class="code-dot dot-red"></div>
+              <div class="code-dot dot-yellow"></div>
+              <div class="code-dot dot-green"></div>
+            </div>
+            <div class="text-xs text-gray-400 font-mono">netsight.example.workers.dev</div>
+            <div class="w-12"></div>
           </div>
           <div class="p-6" style="background: var(--bg-primary)">
             <!-- IP 信息卡片 -->
@@ -495,12 +546,12 @@
                 <div class="text-xs mt-1" style="color: var(--text-secondary)">上传 Mbps</div>
               </div>
             </div>
-            <!-- 功能标签 -->
+            <!-- 功能标签栏 -->
             <div class="flex gap-2 flex-wrap">
               <span class="text-xs px-3 py-1.5 rounded-lg font-medium bg-accent/10 text-accent">IP 查询</span>
               <span class="text-xs px-3 py-1.5 rounded-lg font-medium" style="background: rgba(0,0,0,0.04); color: var(--text-secondary)">测速</span>
-              <span class="text-xs px-3 py-1.5 rounded-lg font-medium" style="background: rgba(0,0,0,0.04); color: var(--text-secondary)">MTR</span>
-              <span class="text-xs px-3 py-1.5 rounded-lg font-medium" style="background: rgba(0,0,0,0.04); color: var(--text-secondary)">DNS</span>
+              <span class="text-xs px-3 py-1.5 rounded-lg font-medium" style="background: rgba(0,0,0,0.04); color: var(--text-secondary)">CPU</span>
+              <span class="text-xs px-3 py-1.5 rounded-lg font-medium" style="background: rgba(0,0,0,0.04); color: var(--text-secondary)">WebSocket</span>
               <span class="text-xs px-3 py-1.5 rounded-lg font-medium" style="background: rgba(0,0,0,0.04); color: var(--text-secondary)">HTTP/3</span>
             </div>
           </div>
@@ -522,7 +573,7 @@
   <section class="max-w-7xl mx-auto px-6 pb-16">
     <div class="glass-card p-8 grid grid-cols-2 md:grid-cols-4 gap-6 text-center reveal">
       <div>
-        <div class="text-4xl font-bold text-accent mb-1 metric-number count-up" data-target="15">0</div>
+        <div class="text-4xl font-bold text-accent mb-1 metric-number count-up" data-target="15" data-suffix="+">0</div>
         <div class="text-sm" style="color: var(--text-secondary)">诊断功能</div>
       </div>
       <div>
@@ -530,7 +581,7 @@
         <div class="text-sm" style="color: var(--text-secondary)">单 JS 文件</div>
       </div>
       <div>
-        <div class="text-4xl font-bold text-success mb-1 metric-number count-up" data-target="300">0</div>
+        <div class="text-4xl font-bold text-success mb-1 metric-number count-up" data-target="300" data-suffix="+">0</div>
         <div class="text-sm" style="color: var(--text-secondary)">CF 全球节点</div>
       </div>
       <div>
@@ -557,7 +608,7 @@
         </div>
         <h4 class="text-lg font-bold mb-2">IP 信息深度查询</h4>
         <p class="text-sm mb-4" style="color: var(--text-secondary)">
-          自动获取访客 IP、归属地、运营商、ASN、经纬度，结合 ip-api 与 CF 双重地理数据，精度更高。
+          自动获取访客 IP、归属地、运营商、ASN 信息，结合 Cloudflare 自带地理数据与第三方接口，双重数据源保证精度。
         </p>
         <div class="flex gap-2 flex-wrap">
           <span class="text-xs px-2 py-1 rounded" style="background: rgba(0,122,255,0.08); color: #007AFF">IPv4 / IPv6</span>
@@ -571,14 +622,14 @@
         <div class="feature-icon bg-gradient-to-br from-success to-emerald-500 mb-5">
           <i class="fa-solid fa-gauge-high"></i>
         </div>
-        <h4 class="text-lg font-bold mb-2">实时延迟与带宽测速</h4>
+        <h4 class="text-lg font-bold mb-2">带宽测速与流式传输</h4>
         <p class="text-sm mb-4" style="color: var(--text-secondary)">
-          HTTP Ping 实时延迟监测、多并发下载测速、流式大文件传输测试，实时绘制延迟曲线图。
+          支持单文件下载测速、多并发吞吐测试、流式大文件传输，最大支持 10MB 流式测试，真实反映带宽与连接质量。
         </p>
         <div class="flex gap-2 flex-wrap">
-          <span class="text-xs px-2 py-1 rounded" style="background: rgba(52,199,89,0.1); color: #34c759">RTT 实时</span>
           <span class="text-xs px-2 py-1 rounded" style="background: rgba(52,199,89,0.1); color: #34c759">下载测速</span>
           <span class="text-xs px-2 py-1 rounded" style="background: rgba(52,199,89,0.1); color: #34c759">并发测试</span>
+          <span class="text-xs px-2 py-1 rounded" style="background: rgba(52,199,89,0.1); color: #34c759">流式传输</span>
         </div>
       </div>
 
@@ -589,7 +640,7 @@
         </div>
         <h4 class="text-lg font-bold mb-2">IP 欺诈风险评分</h4>
         <p class="text-sm mb-4" style="color: var(--text-secondary)">
-          对接 Scamalytics API，检测 IP 是否为代理、VPN、Tor 节点或机房 IP，给出风险等级评分。
+          对接 Scamalytics API，检测 IP 是否为代理、VPN、Tor 节点或机房 IP，自动分级风险等级，超时自动降级不影响主功能。
         </p>
         <div class="flex gap-2 flex-wrap">
           <span class="text-xs px-2 py-1 rounded" style="background: rgba(88,86,214,0.1); color: #5856d6">VPN 检测</span>
@@ -605,7 +656,7 @@
         </div>
         <h4 class="text-lg font-bold mb-2">协议与连接检测</h4>
         <p class="text-sm mb-4" style="color: var(--text-secondary)">
-          HTTP/2、HTTP/3、TLS 版本、WebSocket 连通性、Early Hints 支持检测，全面掌握连接质量。
+          自动识别 HTTP/2、HTTP/3、TLS 版本、ALPN 协议，支持 WebSocket 回声测试，全面掌握当前连接的协议细节。
         </p>
         <div class="flex gap-2 flex-wrap">
           <span class="text-xs px-2 py-1 rounded" style="background: rgba(255,159,10,0.1); color: #ff9f0a">HTTP/3</span>
@@ -619,30 +670,30 @@
         <div class="feature-icon bg-gradient-to-br from-danger to-rose-500 mb-5">
           <i class="fa-solid fa-microchip"></i>
         </div>
-        <h4 class="text-lg font-bold mb-2">CPU 与性能基准</h4>
+        <h4 class="text-lg font-bold mb-2">CPU 性能基准测试</h4>
         <p class="text-sm mb-4" style="color: var(--text-secondary)">
-          Worker 节点 CPU 浮点运算性能测试，对比不同 CF 节点的计算能力，评估边缘算力。
+          Worker 节点 CPU 浮点运算性能基准测试，可对比不同 Cloudflare 边缘节点的计算能力，评估边缘算力水平。
         </p>
         <div class="flex gap-2 flex-wrap">
           <span class="text-xs px-2 py-1 rounded" style="background: rgba(255,59,48,0.08); color: #ff3b30">浮点运算</span>
           <span class="text-xs px-2 py-1 rounded" style="background: rgba(255,59,48,0.08); color: #ff3b30">节点对比</span>
-          <span class="text-xs px-2 py-1 rounded" style="background: rgba(255,59,48,0.08); color: #ff3b30">性能排行</span>
+          <span class="text-xs px-2 py-1 rounded" style="background: rgba(255,59,48,0.08); color: #ff3b30">单独限流</span>
         </div>
       </div>
 
       <!-- 功能卡片 6 -->
       <div class="glass-card p-6 reveal gradient-border">
         <div class="feature-icon bg-gradient-to-br from-cyan to-sky-500 mb-5">
-          <i class="fa-solid fa-database"></i>
+          <i class="fa-solid fa-shield-halved"></i>
         </div>
-        <h4 class="text-lg font-bold mb-2">KV 持久化与统计</h4>
+        <h4 class="text-lg font-bold mb-2">安全防护与限流</h4>
         <p class="text-sm mb-4" style="color: var(--text-secondary)">
-          可选绑定 KV 命名空间，自动记录测速历史、接口调用统计，支持查询历史趋势数据。
+          内置 IP 级每分钟限流，CPU 密集接口单独限流，全套安全响应头（CSP/HSTS/XSS防护），防止滥用与攻击。
         </p>
         <div class="flex gap-2 flex-wrap">
-          <span class="text-xs px-2 py-1 rounded" style="background: rgba(90,200,250,0.12); color: #5ac8fa">测速历史</span>
-          <span class="text-xs px-2 py-1 rounded" style="background: rgba(90,200,250,0.12); color: #5ac8fa">用量统计</span>
-          <span class="text-xs px-2 py-1 rounded" style="background: rgba(90,200,250,0.12); color: #5ac8fa">自动过期</span>
+          <span class="text-xs px-2 py-1 rounded" style="background: rgba(90,200,250,0.12); color: #5ac8fa">IP 限流</span>
+          <span class="text-xs px-2 py-1 rounded" style="background: rgba(90,200,250,0.12); color: #5ac8fa">安全头</span>
+          <span class="text-xs px-2 py-1 rounded" style="background: rgba(90,200,250,0.12); color: #5ac8fa">CORS 跨域</span>
         </div>
       </div>
     </div>
@@ -660,9 +711,9 @@
         <div class="text-xs mt-1" style="color: var(--text-tertiary)">简中 / 繁中 / 英文</div>
       </div>
       <div class="glass-card p-5 text-center reveal">
-        <i class="fa-solid fa-lock text-success text-xl mb-3"></i>
-        <div class="text-sm font-medium">安全防护</div>
-        <div class="text-xs mt-1" style="color: var(--text-tertiary)">CSP + 限流 + 安全头</div>
+        <i class="fa-solid fa-database text-success text-xl mb-3"></i>
+        <div class="text-sm font-medium">KV 持久化</div>
+        <div class="text-xs mt-1" style="color: var(--text-tertiary)">测速历史与用量统计</div>
       </div>
       <div class="glass-card p-5 text-center reveal">
         <i class="fa-solid fa-mobile-screen text-warning text-xl mb-3"></i>
@@ -672,174 +723,218 @@
     </div>
   </section>
 
-  <!-- API 接口文档 -->
-  <section id="api" class="py-16" style="background: var(--bg-glass)">
+  <!-- 使用场景 -->
+  <section id="scenes" class="py-16" style="background: var(--bg-glass)">
     <div class="max-w-7xl mx-auto px-6">
       <div class="text-center mb-12 reveal">
-        <h3 class="text-3xl font-bold mb-4">完整 API 接口清单</h3>
+        <h3 class="text-3xl font-bold mb-4">适用场景</h3>
         <p class="text-lg max-w-2xl mx-auto" style="color: var(--text-secondary)">
-          所有接口均支持 CORS 跨域调用，可直接集成到自有系统或监控脚本中
+          个人开发者、运维工程师、网络爱好者的实用诊断利器
         </p>
       </div>
 
-      <div class="glass-card overflow-hidden reveal">
-        <div class="overflow-x-auto">
-          <table class="w-full text-sm">
-            <thead>
-              <tr style="background: rgba(0,0,0,0.02); border-bottom: 1px solid var(--border)">
-                <th class="text-left px-6 py-4 font-semibold">接口路径</th>
-                <th class="text-left px-6 py-4 font-semibold">方法</th>
-                <th class="text-left px-6 py-4 font-semibold">功能说明</th>
-                <th class="text-left px-6 py-4 font-semibold">参数</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr class="table-row">
-                <td class="px-6 py-3.5 font-mono text-accent">/</td>
-                <td class="px-6 py-3.5"><span class="method-badge method-get">GET</span></td>
-                <td class="px-6 py-3.5">主诊断面板 HTML 页面</td>
-                <td class="px-6 py-3.5" style="color: var(--text-tertiary)">无</td>
-              </tr>
-              <tr class="table-row">
-                <td class="px-6 py-3.5 font-mono text-accent">/health</td>
-                <td class="px-6 py-3.5"><span class="method-badge method-get">GET</span></td>
-                <td class="px-6 py-3.5">健康检查，返回版本与运行时间</td>
-                <td class="px-6 py-3.5" style="color: var(--text-tertiary)">无</td>
-              </tr>
-              <tr class="table-row">
-                <td class="px-6 py-3.5 font-mono text-accent">/speedtest</td>
-                <td class="px-6 py-3.5"><span class="method-badge method-get">GET</span></td>
-                <td class="px-6 py-3.5">下载测速，返回随机二进制数据</td>
-                <td class="px-6 py-3.5"><code class="text-xs">size</code> 字节数，最大 5MB</td>
-              </tr>
-              <tr class="table-row">
-                <td class="px-6 py-3.5 font-mono text-accent">/cpu-test</td>
-                <td class="px-6 py-3.5"><span class="method-badge method-get">GET</span></td>
-                <td class="px-6 py-3.5">CPU 浮点运算性能基准测试</td>
-                <td class="px-6 py-3.5"><code class="text-xs">n</code> 迭代次数</td>
-              </tr>
-              <tr class="table-row">
-                <td class="px-6 py-3.5 font-mono text-accent">/dns-proxy</td>
-                <td class="px-6 py-3.5"><span class="method-badge method-get">GET</span></td>
-                <td class="px-6 py-3.5">从 Worker 端代理探测目标 URL 连通性</td>
-                <td class="px-6 py-3.5"><code class="text-xs">url</code> 目标地址</td>
-              </tr>
-              <tr class="table-row">
-                <td class="px-6 py-3.5 font-mono text-accent">/ws-test</td>
-                <td class="px-6 py-3.5"><span class="method-badge method-get">GET</span></td>
-                <td class="px-6 py-3.5">WebSocket 回声测试端点</td>
-                <td class="px-6 py-3.5" style="color: var(--text-tertiary)">协议升级</td>
-              </tr>
-              <tr class="table-row">
-                <td class="px-6 py-3.5 font-mono text-accent">/http2-test</td>
-                <td class="px-6 py-3.5"><span class="method-badge method-get">GET</span></td>
-                <td class="px-6 py-3.5">检测 HTTP/2、HTTP/3、TLS 版本信息</td>
-                <td class="px-6 py-3.5" style="color: var(--text-tertiary)">无</td>
-              </tr>
-              <tr class="table-row">
-                <td class="px-6 py-3.5 font-mono text-accent">/concurrent-test</td>
-                <td class="px-6 py-3.5"><span class="method-badge method-get">GET</span></td>
-                <td class="px-6 py-3.5">多并发下载吞吐测试</td>
-                <td class="px-6 py-3.5"><code class="text-xs">count</code> / <code class="text-xs">size</code></td>
-              </tr>
-              <tr class="table-row">
-                <td class="px-6 py-3.5 font-mono text-accent">/stream-test</td>
-                <td class="px-6 py-3.5"><span class="method-badge method-get">GET</span></td>
-                <td class="px-6 py-3.5">流式传输大文件测试</td>
-                <td class="px-6 py-3.5"><code class="text-xs">size</code> 最大 10MB</td>
-              </tr>
-              <tr class="table-row">
-                <td class="px-6 py-3.5 font-mono text-accent">/api/ip-fraud</td>
-                <td class="px-6 py-3.5"><span class="method-badge method-get">GET</span></td>
-                <td class="px-6 py-3.5">当前 IP 欺诈风险评分</td>
-                <td class="px-6 py-3.5" style="color: var(--text-tertiary)">无</td>
-              </tr>
-              <tr class="table-row">
-                <td class="px-6 py-3.5 font-mono text-accent">/api/log-speed</td>
-                <td class="px-6 py-3.5"><span class="method-badge method-post">POST</span></td>
-                <td class="px-6 py-3.5">提交测速结果到 KV 存储</td>
-                <td class="px-6 py-3.5">JSON Body</td>
-              </tr>
-              <tr class="table-row">
-                <td class="px-6 py-3.5 font-mono text-accent">/api/speed-history</td>
-                <td class="px-6 py-3.5"><span class="method-badge method-get">GET</span></td>
-                <td class="px-6 py-3.5">查询历史测速记录</td>
-                <td class="px-6 py-3.5"><code class="text-xs">limit</code></td>
-              </tr>
-              <tr class="table-row">
-                <td class="px-6 py-3.5 font-mono text-accent">/api/usage-stats</td>
-                <td class="px-6 py-3.5"><span class="method-badge method-get">GET</span></td>
-                <td class="px-6 py-3.5">接口调用用量统计</td>
-                <td class="px-6 py-3.5" style="color: var(--text-tertiary)">无</td>
-              </tr>
-            </tbody>
-          </table>
+      <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-5">
+        <div class="glass-card p-6 reveal">
+          <div class="scene-icon bg-accent/10 text-accent mb-4">
+            <i class="fa-solid fa-user-gear"></i>
+          </div>
+          <h4 class="font-bold mb-2">个人开发者</h4>
+          <p class="text-sm" style="color: var(--text-secondary)">
+            快速测试接口连通性、验证 CDN 节点、检测跨域配置，调试前端网络问题。
+          </p>
+        </div>
+        <div class="glass-card p-6 reveal">
+          <div class="scene-icon bg-purple/10 text-purple mb-4">
+            <i class="fa-solid fa-server"></i>
+          </div>
+          <h4 class="font-bold mb-2">运维工程师</h4>
+          <p class="text-sm" style="color: var(--text-secondary)">
+            批量节点质量对比、边缘算力评估、协议兼容性检测，快速定位网络故障。
+          </p>
+        </div>
+        <div class="glass-card p-6 reveal">
+          <div class="scene-icon bg-success/10 text-success mb-4">
+            <i class="fa-solid fa-network-wired"></i>
+          </div>
+          <h4 class="font-bold mb-2">网络爱好者</h4>
+          <p class="text-sm" style="color: var(--text-secondary)">
+            测试运营商线路质量、对比不同地区节点、探索 HTTP/3 等新协议特性。
+          </p>
+        </div>
+        <div class="glass-card p-6 reveal">
+          <div class="scene-icon bg-warning/10 text-warning mb-4">
+            <i class="fa-solid fa-chart-line"></i>
+          </div>
+          <h4 class="font-bold mb-2">监控集成</h4>
+          <p class="text-sm" style="color: var(--text-secondary)">
+            标准化 API 接口，可接入自有监控系统，定期探测边缘节点可用性与延迟。
+          </p>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- 部署教程 -->
-  <section id="deploy" class="max-w-7xl mx-auto px-6 py-16">
+  <!-- API 接口文档 -->
+  <section id="api" class="max-w-7xl mx-auto px-6 py-16">
     <div class="text-center mb-12 reveal">
-      <h3 class="text-3xl font-bold mb-4">三分钟快速部署</h3>
+      <h3 class="text-3xl font-bold mb-4">完整 API 接口清单</h3>
       <p class="text-lg max-w-2xl mx-auto" style="color: var(--text-secondary)">
-        无需本地环境，无需安装依赖，复制粘贴即可上线
+        所有接口均支持 CORS 跨域调用，可直接集成到自有系统或监控脚本中
       </p>
     </div>
 
-    <div class="grid lg:grid-cols-2 gap-8">
-      <!-- 左侧步骤时间线 -->
-      <div class="space-y-0 reveal">
-        <div class="timeline-item">
-          <div class="timeline-dot"></div>
-          <h4 class="font-bold text-lg mb-1">创建 Cloudflare Worker</h4>
-          <p class="text-sm" style="color: var(--text-secondary)">
-            登录 Cloudflare 控制台 → Workers & Pages → Create application → Create Worker，输入名称后点击 Deploy。
-          </p>
-        </div>
-        <div class="timeline-item">
-          <div class="timeline-dot"></div>
-          <h4 class="font-bold text-lg mb-1">替换完整源码</h4>
-          <p class="text-sm mb-3" style="color: var(--text-secondary)">
-            点击 Quick edit 进入编辑器，删除默认全部代码，粘贴 <code>_workers.js</code> 完整源码。
-          </p>
-          <button onclick="copySource()" class="btn-ripple text-sm px-4 py-2 rounded-full bg-accent text-white font-medium hover:bg-accent/90 transition">
-            <i class="fa-regular fa-copy mr-1"></i>一键复制 Raw 源码链接
-          </button>
-        </div>
-        <div class="timeline-item">
-          <div class="timeline-dot"></div>
-          <h4 class="font-bold text-lg mb-1">保存并访问</h4>
-          <p class="text-sm" style="color: var(--text-secondary)">
-            点击 Save and deploy，等待部署完成。访问分配的 <code>*.workers.dev</code> 域名即可打开诊断面板。
-          </p>
-        </div>
-        <div class="timeline-item">
-          <div class="timeline-dot"></div>
-          <h4 class="font-bold text-lg mb-1">（可选）绑定 KV 命名空间</h4>
-          <p class="text-sm" style="color: var(--text-secondary)">
-            创建 KV 命名空间，在 Worker 设置中绑定变量名为 <code>SPEED_HISTORY</code>，即可启用测速历史与用量统计功能。
-          </p>
-        </div>
+    <div class="glass-card overflow-hidden reveal">
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr style="background: rgba(0,0,0,0.02); border-bottom: 1px solid var(--border)">
+              <th class="text-left px-6 py-4 font-semibold">接口路径</th>
+              <th class="text-left px-6 py-4 font-semibold">方法</th>
+              <th class="text-left px-6 py-4 font-semibold">功能说明</th>
+              <th class="text-left px-6 py-4 font-semibold">参数说明</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="table-row">
+              <td class="px-6 py-3.5 font-mono text-accent">/</td>
+              <td class="px-6 py-3.5"><span class="method-badge method-get">GET</span></td>
+              <td class="px-6 py-3.5">主诊断面板 HTML 页面</td>
+              <td class="px-6 py-3.5" style="color: var(--text-tertiary)">无</td>
+            </tr>
+            <tr class="table-row">
+              <td class="px-6 py-3.5 font-mono text-accent">/health</td>
+              <td class="px-6 py-3.5"><span class="method-badge method-get">GET</span></td>
+              <td class="px-6 py-3.5">健康检查，返回版本与运行时间</td>
+              <td class="px-6 py-3.5" style="color: var(--text-tertiary)">无</td>
+            </tr>
+            <tr class="table-row">
+              <td class="px-6 py-3.5 font-mono text-accent">/speedtest</td>
+              <td class="px-6 py-3.5"><span class="method-badge method-get">GET</span></td>
+              <td class="px-6 py-3.5">下载测速，返回随机二进制数据</td>
+              <td class="px-6 py-3.5"><code class="text-xs">size</code> 字节数，最大 5MB</td>
+            </tr>
+            <tr class="table-row">
+              <td class="px-6 py-3.5 font-mono text-accent">/stream-test</td>
+              <td class="px-6 py-3.5"><span class="method-badge method-get">GET</span></td>
+              <td class="px-6 py-3.5">流式传输大文件测试</td>
+              <td class="px-6 py-3.5"><code class="text-xs">size</code> 最大 10MB</td>
+            </tr>
+            <tr class="table-row">
+              <td class="px-6 py-3.5 font-mono text-accent">/concurrent-test</td>
+              <td class="px-6 py-3.5"><span class="method-badge method-get">GET</span></td>
+              <td class="px-6 py-3.5">多并发下载吞吐测试</td>
+              <td class="px-6 py-3.5"><code class="text-xs">count</code> / <code class="text-xs">size</code></td>
+            </tr>
+            <tr class="table-row">
+              <td class="px-6 py-3.5 font-mono text-accent">/cpu-test</td>
+              <td class="px-6 py-3.5"><span class="method-badge method-get">GET</span></td>
+              <td class="px-6 py-3.5">CPU 浮点运算性能基准测试</td>
+              <td class="px-6 py-3.5"><code class="text-xs">n</code> 迭代次数，单独限流</td>
+            </tr>
+            <tr class="table-row">
+              <td class="px-6 py-3.5 font-mono text-accent">/dns-proxy</td>
+              <td class="px-6 py-3.5"><span class="method-badge method-get">GET</span></td>
+              <td class="px-6 py-3.5">Worker 端代理探测目标 URL 连通性</td>
+              <td class="px-6 py-3.5"><code class="text-xs">url</code> 目标地址，白名单域名</td>
+            </tr>
+            <tr class="table-row">
+              <td class="px-6 py-3.5 font-mono text-accent">/ws-test</td>
+              <td class="px-6 py-3.5"><span class="method-badge method-get">GET</span></td>
+              <td class="px-6 py-3.5">WebSocket 回声测试端点</td>
+              <td class="px-6 py-3.5" style="color: var(--text-tertiary)">协议升级，心跳机制</td>
+            </tr>
+            <tr class="table-row">
+              <td class="px-6 py-3.5 font-mono text-accent">/http2-test</td>
+              <td class="px-6 py-3.5"><span class="method-badge method-get">GET</span></td>
+              <td class="px-6 py-3.5">检测 HTTP/2、HTTP/3、TLS 版本</td>
+              <td class="px-6 py-3.5" style="color: var(--text-tertiary)">返回协议、TLS、ALPN信息</td>
+            </tr>
+            <tr class="table-row">
+              <td class="px-6 py-3.5 font-mono text-accent">/api/ip-fraud</td>
+              <td class="px-6 py-3.5"><span class="method-badge method-get">GET</span></td>
+              <td class="px-6 py-3.5">当前 IP 欺诈风险评分</td>
+              <td class="px-6 py-3.5" style="color: var(--text-tertiary)">超时自动降级</td>
+            </tr>
+            <tr class="table-row">
+              <td class="px-6 py-3.5 font-mono text-accent">/api/log-speed</td>
+              <td class="px-6 py-3.5"><span class="method-badge method-post">POST</span></td>
+              <td class="px-6 py-3.5">提交测速结果到 KV 存储</td>
+              <td class="px-6 py-3.5">JSON Body，需绑定 KV</td>
+            </tr>
+            <tr class="table-row">
+              <td class="px-6 py-3.5 font-mono text-accent">/api/speed-history</td>
+              <td class="px-6 py-3.5"><span class="method-badge method-get">GET</span></td>
+              <td class="px-6 py-3.5">查询历史测速记录</td>
+              <td class="px-6 py-3.5"><code class="text-xs">limit</code> 返回条数</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- 部署教程 -->
+  <section id="deploy" class="py-16" style="background: var(--bg-glass)">
+    <div class="max-w-7xl mx-auto px-6">
+      <div class="text-center mb-12 reveal">
+        <h3 class="text-3xl font-bold mb-4">三分钟快速部署</h3>
+        <p class="text-lg max-w-2xl mx-auto" style="color: var(--text-secondary)">
+          无需本地环境，无需安装依赖，复制粘贴即可上线
+        </p>
       </div>
 
-      <!-- 右侧代码高亮窗口 -->
-      <div class="reveal">
-        <div class="code-window">
-          <div class="code-header flex justify-between items-center">
-            <div class="flex items-center gap-2">
-              <div class="code-dot dot-red"></div>
-              <div class="code-dot dot-yellow"></div>
-              <div class="code-dot dot-green"></div>
-              <span class="ml-3 text-xs text-gray-400">_workers.js</span>
-            </div>
-            <button onclick="copySource()" class="text-xs text-gray-400 hover:text-white transition">
-              <i class="fa-solid fa-arrow-up-right-from-square mr-1"></i>Raw
+      <div class="grid lg:grid-cols-2 gap-8">
+        <!-- 左侧步骤时间线 -->
+        <div class="space-y-0 reveal">
+          <div class="timeline-item">
+            <div class="timeline-dot"></div>
+            <h4 class="font-bold text-lg mb-1">创建 Cloudflare Worker</h4>
+            <p class="text-sm" style="color: var(--text-secondary)">
+              登录 Cloudflare 控制台 → Workers & Pages → Create application → Create Worker，输入名称后点击 Deploy。
+            </p>
+          </div>
+          <div class="timeline-item">
+            <div class="timeline-dot"></div>
+            <h4 class="font-bold text-lg mb-1">替换完整源码</h4>
+            <p class="text-sm mb-3" style="color: var(--text-secondary)">
+              点击 Quick edit 进入编辑器，删除默认全部代码，粘贴 <code>_workers.js</code> 完整源码。
+            </p>
+            <button onclick="copySource()" class="btn-ripple text-sm px-4 py-2 rounded-full bg-accent text-white font-medium hover:bg-accent/90 transition">
+              <i class="fa-regular fa-copy mr-1"></i>一键复制 Raw 源码链接
             </button>
           </div>
+          <div class="timeline-item">
+            <div class="timeline-dot"></div>
+            <h4 class="font-bold text-lg mb-1">保存并访问</h4>
+            <p class="text-sm" style="color: var(--text-secondary)">
+              点击 Save and deploy，等待部署完成。访问分配的 <code>*.workers.dev</code> 域名即可打开诊断面板。
+            </p>
+          </div>
+          <div class="timeline-item">
+            <div class="timeline-dot"></div>
+            <h4 class="font-bold text-lg mb-1">（可选）绑定 KV 命名空间</h4>
+            <p class="text-sm" style="color: var(--text-secondary)">
+              创建 KV 命名空间，在 Worker 设置中绑定变量名为 <code>SPEED_HISTORY</code>，即可启用测速历史与用量统计功能。
+            </p>
+          </div>
+        </div>
+
+        <!-- 右侧代码高亮窗口（真实源码片段） -->
+        <div class="reveal">
+          <div class="code-window">
+            <div class="code-header">
+              <div class="flex items-center gap-2">
+                <div class="code-dot dot-red"></div>
+                <div class="code-dot dot-yellow"></div>
+                <div class="code-dot dot-green"></div>
+                <span class="ml-3 text-xs text-gray-400 font-mono">_workers.js</span>
+              </div>
+              <button onclick="copySource()" class="text-xs text-gray-400 hover:text-white transition">
+                <i class="fa-solid fa-arrow-up-right-from-square mr-1"></i>Raw
+              </button>
+            </div>
 <pre><code class="language-javascript">// ============================================================
-// NetSight Pro - 极光网络诊断工具
+// NetSight Pro - Apple 极简网络诊断工具
 // Cloudflare Worker 完整优化版 | v4.0
 // ============================================================
 
@@ -850,22 +945,23 @@ const CORS_HEADERS = {
   'cache-control': 'no-store'
 };
 
+const SECURITY_HEADERS = {
+  'x-content-type-options': 'nosniff',
+  'x-frame-options': 'DENY',
+  'x-xss-protection': '1; mode=block',
+  'strict-transport-security': 'max-age=31536000'
+};
+
 // 内置限流机制
 const rateLimit = new Map();
-function isRateLimited(ip, max = 60, window = 60000) {
+function isRateLimited(ip, maxRequests = 60, windowMs = 60000) {
   const now = Date.now();
-  if (!rateLimit.has(ip)) {
-    rateLimit.set(ip, { count: 1, time: now });
-    return false;
-  }
-  const record = rateLimit.get(ip);
-  if (now - record.time > window) {
-    record.count = 1;
-    record.time = now;
-    return false;
-  }
-  record.count++;
-  return record.count > max;
+  const requests = rateLimit.get(ip) || [];
+  const recent = requests.filter(t => now - t < windowMs);
+  if (recent.length >= maxRequests) return true;
+  recent.push(now);
+  rateLimit.set(ip, recent);
+  return false;
 }
 
 // 主入口
@@ -875,20 +971,19 @@ addEventListener('fetch', event => {
 
 async function handleRequest(event) {
   const url = new URL(event.request.url);
-  const clientIp = event.request.headers.get('cf-connecting-ip');
+  const clientIp = request.headers.get('cf-connecting-ip');
   
   // 限流拦截
   if (isRateLimited(clientIp)) {
-    return new Response('Too Many Requests', { status: 429 });
+    return new Response(JSON.stringify({ error: 'Too Many Requests' }), { status: 429 });
   }
   
   // 路由分发
   switch(url.pathname) {
-    case '/':           return renderMainPage(event);
+    case '/':           return renderMainPage();
     case '/health':     return handleHealth();
     case '/speedtest':  return handleSpeedTest(url);
     case '/cpu-test':   return handleCpuTest(event);
-    case '/dns-proxy':  return handleDnsProxy(url);
     case '/ws-test':    return handleWebSocket(event);
     case '/http2-test': return handleHttp2Test(event);
     // ... 更多接口实现
@@ -899,171 +994,177 @@ async function handleRequest(event) {
 async function getIpFraudScore(ip) {
   try {
     const resp = await fetch(`https://scamalytics.com/api/ip/${ip}`);
-    return await resp.json();
+    const data = await resp.json();
+    return {
+      score: data.score,
+      riskLevel: data.score >= 80 ? 'high' : 'low'
+    };
   } catch (e) {
-    return { score: 0, risk: 'unknown' };
+    return null; // 超时降级，不影响主功能
   }
-}
-
-// 完整源码获取: 
-// https://raw.githubusercontent.com/BlueDriftHK/CF-workers-netdiag/main/_workers.js</code></pre>
+}</code></pre>
+          </div>
         </div>
       </div>
     </div>
   </section>
 
   <!-- 技术架构 -->
-  <section id="architecture" class="py-16" style="background: var(--bg-glass)">
-    <div class="max-w-7xl mx-auto px-6">
-      <div class="text-center mb-12 reveal">
-        <h3 class="text-3xl font-bold mb-4">技术架构与设计</h3>
-        <p class="text-lg max-w-2xl mx-auto" style="color: var(--text-secondary)">
-          纯边缘计算架构，无后端服务器，无数据库，所有逻辑运行在 Cloudflare 全球边缘节点
-        </p>
+  <section class="max-w-7xl mx-auto px-6 py-16">
+    <div class="text-center mb-12 reveal">
+      <h3 class="text-3xl font-bold mb-4">技术架构与设计</h3>
+      <p class="text-lg max-w-2xl mx-auto" style="color: var(--text-secondary)">
+        纯边缘计算架构，无后端服务器，无数据库，所有逻辑运行在 Cloudflare 全球边缘节点
+      </p>
+    </div>
+
+    <div class="grid md:grid-cols-3 gap-6">
+      <div class="glass-card p-6 reveal">
+        <div class="text-accent text-2xl mb-4"><i class="fa-solid fa-cloud"></i></div>
+        <h4 class="font-bold text-lg mb-3">边缘计算层</h4>
+        <ul class="space-y-2 text-sm" style="color: var(--text-secondary)">
+          <li class="flex items-start gap-2">
+            <i class="fa-solid fa-check text-success mt-0.5"></i>
+            <span>Cloudflare Workers V8 运行时</span>
+          </li>
+          <li class="flex items-start gap-2">
+            <i class="fa-solid fa-check text-success mt-0.5"></i>
+            <span>Isolate 轻量隔离，冷启动 < 5ms</span>
+          </li>
+          <li class="flex items-start gap-2">
+            <i class="fa-solid fa-check text-success mt-0.5"></i>
+            <span>全球 300+ 城市边缘节点覆盖</span>
+          </li>
+          <li class="flex items-start gap-2">
+            <i class="fa-solid fa-check text-success mt-0.5"></i>
+            <span>原生支持 HTTP/3 与 WebSocket</span>
+          </li>
+        </ul>
       </div>
 
-      <div class="grid md:grid-cols-3 gap-6">
-        <div class="glass-card p-6 reveal">
-          <div class="text-accent text-2xl mb-4"><i class="fa-solid fa-cloud"></i></div>
-          <h4 class="font-bold text-lg mb-3">边缘计算层</h4>
-          <ul class="space-y-2 text-sm" style="color: var(--text-secondary)">
-            <li class="flex items-start gap-2">
-              <i class="fa-solid fa-check text-success mt-0.5"></i>
-              <span>Cloudflare Workers 运行时</span>
-            </li>
-            <li class="flex items-start gap-2">
-              <i class="fa-solid fa-check text-success mt-0.5"></i>
-              <span>V8 Isolate 轻量隔离</span>
-            </li>
-            <li class="flex items-start gap-2">
-              <i class="fa-solid fa-check text-success mt-0.5"></i>
-              <span>全球 300+ 城市边缘节点</span>
-            </li>
-            <li class="flex items-start gap-2">
-              <i class="fa-solid fa-check text-success mt-0.5"></i>
-              <span>冷启动 < 5ms 响应</span>
-            </li>
-          </ul>
-        </div>
-
-        <div class="glass-card p-6 reveal">
-          <div class="text-purple text-2xl mb-4"><i class="fa-solid fa-cubes"></i></div>
-          <h4 class="font-bold text-lg mb-3">存储层（可选）</h4>
-          <ul class="space-y-2 text-sm" style="color: var(--text-secondary)">
-            <li class="flex items-start gap-2">
-              <i class="fa-solid fa-check text-success mt-0.5"></i>
-              <span>Workers KV 键值存储</span>
-            </li>
-            <li class="flex items-start gap-2">
-              <i class="fa-solid fa-check text-success mt-0.5"></i>
-              <span>测速历史自动过期</span>
-            </li>
-            <li class="flex items-start gap-2">
-              <i class="fa-solid fa-check text-success mt-0.5"></i>
-              <span>接口调用量统计</span>
-            </li>
-            <li class="flex items-start gap-2">
-              <i class="fa-solid fa-check text-success mt-0.5"></i>
-              <span>CDN 缓存静态资源</span>
-            </li>
-          </ul>
-        </div>
-
-        <div class="glass-card p-6 reveal">
-          <div class="text-success text-2xl mb-4"><i class="fa-solid fa-shield-halved"></i></div>
-          <h4 class="font-bold text-lg mb-3">安全与防护</h4>
-          <ul class="space-y-2 text-sm" style="color: var(--text-secondary)">
-            <li class="flex items-start gap-2">
-              <i class="fa-solid fa-check text-success mt-0.5"></i>
-              <span>IP 级每分钟限流</span>
-            </li>
-            <li class="flex items-start gap-2">
-              <i class="fa-solid fa-check text-success mt-0.5"></i>
-              <span>CSP 内容安全策略</span>
-            </li>
-            <li class="flex items-start gap-2">
-              <i class="fa-solid fa-check text-success mt-0.5"></i>
-              <span>全套安全响应头</span>
-            </li>
-            <li class="flex items-start gap-2">
-              <i class="fa-solid fa-check text-success mt-0.5"></i>
-              <span>CPU 密集接口单独限流</span>
-            </li>
-          </ul>
-        </div>
+      <div class="glass-card p-6 reveal">
+        <div class="text-purple text-2xl mb-4"><i class="fa-solid fa-cubes"></i></div>
+        <h4 class="font-bold text-lg mb-3">存储层（可选）</h4>
+        <ul class="space-y-2 text-sm" style="color: var(--text-secondary)">
+          <li class="flex items-start gap-2">
+            <i class="fa-solid fa-check text-success mt-0.5"></i>
+            <span>Workers KV 全局键值存储</span>
+          </li>
+          <li class="flex items-start gap-2">
+            <i class="fa-solid fa-check text-success mt-0.5"></i>
+            <span>测速历史自动过期清理</span>
+          </li>
+          <li class="flex items-start gap-2">
+            <i class="fa-solid fa-check text-success mt-0.5"></i>
+            <span>接口调用量日维度统计</span>
+          </li>
+          <li class="flex items-start gap-2">
+            <i class="fa-solid fa-check text-success mt-0.5"></i>
+            <span>CDN 缓存静态资源加速</span>
+          </li>
+        </ul>
       </div>
 
-      <!-- 技术栈标签墙 -->
-      <div class="mt-10 glass-card p-8 reveal">
-        <h4 class="font-bold text-center mb-6">技术栈</h4>
-        <div class="flex flex-wrap justify-center gap-3">
-          <span class="tag tag-blue">Vanilla JavaScript</span>
-          <span class="tag tag-green">Cloudflare Workers</span>
-          <span class="tag tag-purple">Workers KV</span>
-          <span class="tag tag-orange">Fetch API</span>
-          <span class="tag tag-blue">ReadableStream</span>
-          <span class="tag tag-green">WebSocket</span>
-          <span class="tag tag-purple">Web Crypto</span>
-          <span class="tag tag-orange">AbortController</span>
-          <span class="tag tag-blue">CORS</span>
-          <span class="tag tag-green">CSP</span>
-          <span class="tag tag-purple">HSTS</span>
-          <span class="tag tag-orange">ip-api.com</span>
-          <span class="tag tag-blue">Scamalytics</span>
-          <span class="tag tag-green">Canvas Chart</span>
-          <span class="tag tag-purple">CSS Variables</span>
-        </div>
+      <div class="glass-card p-6 reveal">
+        <div class="text-success text-2xl mb-4"><i class="fa-solid fa-shield-halved"></i></div>
+        <h4 class="font-bold text-lg mb-3">安全与防护</h4>
+        <ul class="space-y-2 text-sm" style="color: var(--text-secondary)">
+          <li class="flex items-start gap-2">
+            <i class="fa-solid fa-check text-success mt-0.5"></i>
+            <span>IP 级每分钟 60 次限流</span>
+          </li>
+          <li class="flex items-start gap-2">
+            <i class="fa-solid fa-check text-success mt-0.5"></i>
+            <span>CPU 密集接口单独限流保护</span>
+          </li>
+          <li class="flex items-start gap-2">
+            <i class="fa-solid fa-check text-success mt-0.5"></i>
+            <span>全套安全响应头 + HSTS</span>
+          </li>
+          <li class="flex items-start gap-2">
+            <i class="fa-solid fa-check text-success mt-0.5"></i>
+            <span>第三方接口超时降级机制</span>
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- 技术栈标签墙 -->
+    <div class="mt-10 glass-card p-8 reveal">
+      <h4 class="font-bold text-center mb-6">完整技术栈</h4>
+      <div class="flex flex-wrap justify-center gap-3">
+        <span class="tag tag-blue">Vanilla JavaScript</span>
+        <span class="tag tag-green">Cloudflare Workers</span>
+        <span class="tag tag-purple">Workers KV</span>
+        <span class="tag tag-orange">Fetch API</span>
+        <span class="tag tag-cyan">ReadableStream</span>
+        <span class="tag tag-green">WebSocket</span>
+        <span class="tag tag-purple">Web Crypto</span>
+        <span class="tag tag-orange">AbortController</span>
+        <span class="tag tag-blue">CORS 跨域</span>
+        <span class="tag tag-green">CSP 安全策略</span>
+        <span class="tag tag-purple">HSTS 强制加密</span>
+        <span class="tag tag-orange">Scamalytics API</span>
+        <span class="tag tag-blue">ip-api 地理数据</span>
+        <span class="tag tag-green">Canvas 实时图表</span>
+        <span class="tag tag-purple">CSS Variables</span>
+        <span class="tag tag-cyan">深色模式</span>
       </div>
     </div>
   </section>
 
   <!-- 更新日志 -->
-  <section id="changelog" class="max-w-4xl mx-auto px-6 py-16">
-    <div class="text-center mb-12 reveal">
-      <h3 class="text-3xl font-bold mb-4">更新日志</h3>
-      <p class="text-lg" style="color: var(--text-secondary)">版本迭代与功能演进记录</p>
-    </div>
+  <section id="changelog" class="py-16" style="background: var(--bg-glass)">
+    <div class="max-w-4xl mx-auto px-6">
+      <div class="text-center mb-12 reveal">
+        <h3 class="text-3xl font-bold mb-4">更新日志</h3>
+        <p class="text-lg" style="color: var(--text-secondary)">版本迭代与功能演进记录</p>
+      </div>
 
-    <div class="space-y-6 reveal">
-      <div class="glass-card p-6">
-        <div class="flex items-center justify-between mb-3">
-          <h4 class="font-bold text-lg">v4.0 · 极光版</h4>
-          <span class="tag tag-green">最新</span>
+      <div class="space-y-6 reveal">
+        <div class="glass-card p-6">
+          <div class="flex items-center justify-between mb-3">
+            <h4 class="font-bold text-lg">v4.0 · 极光版</h4>
+            <span class="tag tag-green">最新版本</span>
+          </div>
+          <p class="text-sm mb-3" style="color: var(--text-tertiary)">2025 年 7 月</p>
+          <ul class="space-y-2 text-sm" style="color: var(--text-secondary)">
+            <li>• 全新 Apple 风格 UI 全面重构，严格遵循 HIG 设计规范</li>
+            <li>• 新增 IP 欺诈风险评分接口，对接 Scamalytics 数据库</li>
+            <li>• 新增 CPU 性能基准测试，计算密集接口单独限流</li>
+            <li>• 新增流式大文件传输测试，最大支持 10MB</li>
+            <li>• 优化内置限流机制，区分普通接口与计算密集接口</li>
+            <li>• 新增全套安全响应头，加固安全防护</li>
+            <li>• 深色模式手动切换 + 系统自动跟随双模式</li>
+          </ul>
         </div>
-        <p class="text-sm mb-3" style="color: var(--text-tertiary)">2025-07</p>
-        <ul class="space-y-2 text-sm" style="color: var(--text-secondary)">
-          <li>• 全新 Apple 风格 UI 重构，全面支持深色模式</li>
-          <li>• 新增 IP 欺诈风险评分接口，对接 Scamalytics</li>
-          <li>• 新增 CPU 性能基准测试与节点对比</li>
-          <li>• 新增 KV 测速历史记录与用量统计</li>
-          <li>• 优化内置限流机制，区分普通/计算密集接口</li>
-        </ul>
-      </div>
-      <div class="glass-card p-6">
-        <div class="flex items-center justify-between mb-3">
-          <h4 class="font-bold text-lg">v3.0 · 星轨版</h4>
-          <span class="tag tag-blue">稳定</span>
+        <div class="glass-card p-6">
+          <div class="flex items-center justify-between mb-3">
+            <h4 class="font-bold text-lg">v3.0 · 星轨版</h4>
+            <span class="tag tag-blue">稳定版本</span>
+          </div>
+          <p class="text-sm mb-3" style="color: var(--text-tertiary)">2025 年 4 月</p>
+          <ul class="space-y-2 text-sm" style="color: var(--text-secondary)">
+            <li>• 新增 HTTP/2、HTTP/3、TLS 版本检测接口</li>
+            <li>• 新增 WebSocket 回声测试端点，内置心跳机制</li>
+            <li>• 支持多并发下载吞吐测试</li>
+            <li>• 修复大文件传输内存占用过高问题</li>
+            <li>• 新增 CORS 跨域支持与 OPTIONS 预检处理</li>
+          </ul>
         </div>
-        <p class="text-sm mb-3" style="color: var(--text-tertiary)">2025-04</p>
-        <ul class="space-y-2 text-sm" style="color: var(--text-secondary)">
-          <li>• 新增 HTTP/3 与 WebSocket 连通性检测</li>
-          <li>• 支持流式大文件下载测速</li>
-          <li>• 多并发吞吐测试接口上线</li>
-          <li>• 修复大文件传输内存溢出问题</li>
-        </ul>
-      </div>
-      <div class="glass-card p-6">
-        <div class="flex items-center justify-between mb-3">
-          <h4 class="font-bold text-lg">v2.0 · 初版</h4>
-          <span class="tag tag-orange">历史</span>
+        <div class="glass-card p-6">
+          <div class="flex items-center justify-between mb-3">
+            <h4 class="font-bold text-lg">v2.0 · 初版</h4>
+            <span class="tag tag-orange">历史版本</span>
+          </div>
+          <p class="text-sm mb-3" style="color: var(--text-tertiary)">2025 年 1 月</p>
+          <ul class="space-y-2 text-sm" style="color: var(--text-secondary)">
+            <li>• 基础 IP 查询与地理信息展示功能</li>
+            <li>• HTTP Ping 实时延迟测试</li>
+            <li>• 基础单文件下载测速功能</li>
+            <li>• 单文件 Worker 架构定型，零外部依赖</li>
+          </ul>
         </div>
-        <p class="text-sm mb-3" style="color: var(--text-tertiary)">2025-01</p>
-        <ul class="space-y-2 text-sm" style="color: var(--text-secondary)">
-          <li>• 基础 IP 查询与地理信息展示</li>
-          <li>• HTTP Ping 延迟测试</li>
-          <li>• 基础下载测速功能</li>
-          <li>• 单文件 Worker 架构定型</li>
-        </ul>
       </div>
     </div>
   </section>
@@ -1103,75 +1204,4 @@ async function getIpFraudScore(ip) {
           <span>IP 欺诈评分的数据来源是什么？</span>
           <i class="fa-solid fa-chevron-down transition group-open:rotate-180 text-sm" style="color: var(--text-tertiary)"></i>
         </summary>
-        <p class="mt-4 text-sm leading-relaxed" style="color: var(--text-secondary)">
-          对接 Scamalytics 公开 IP 信誉 API，该数据库综合识别代理、VPN、Tor 出口节点、数据中心机房 IP 等风险类型。
-          接口为公开免费端点，无 API Key 要求，有请求频率限制。Worker 端调用时会设置超时保护，失败时静默降级不影响主功能。
-        </p>
-      </details>
-
-      <details class="glass-card p-5 group">
-        <summary class="cursor-pointer font-medium flex justify-between items-center">
-          <span>可以绑定自己的域名吗？</span>
-          <i class="fa-solid fa-chevron-down transition group-open:rotate-180 text-sm" style="color: var(--text-tertiary)"></i>
-        </summary>
-        <p class="mt-4 text-sm leading-relaxed" style="color: var(--text-secondary)">
-          可以。在 Worker 控制台的 Custom Domains 中添加你的域名，只要该域名已在 Cloudflare 解析，系统会自动配置 DNS 和 SSL 证书。
-          也可以通过 Workers Routes 的方式绑定到已有域名的特定路径下。
-        </p>
-      </details>
-
-      <details class="glass-card p-5 group">
-        <summary class="cursor-pointer font-medium flex justify-between items-center">
-          <span>如何自定义界面的语言和主题？</span>
-          <i class="fa-solid fa-chevron-down transition group-open:rotate-180 text-sm" style="color: var(--text-tertiary)"></i>
-        </summary>
-        <p class="mt-4 text-sm leading-relaxed" style="color: var(--text-secondary)">
-          界面内置自动语言检测，会根据浏览器 Accept-Language 自动切换简中 / 繁中 / 英文。
-          右上角有主题切换按钮，支持浅色 / 深色 / 跟随系统三种模式，选择会保存在本地存储中。
-          设计遵循 Apple Human Interface Guidelines，适配 iOS / macOS 原生观感。
-        </p>
-      </details>
-    </div>
-  </section>
-
-  <!-- 底部 CTA -->
-  <section class="max-w-7xl mx-auto px-6 pb-20">
-    <div class="glass-card p-12 text-center relative overflow-hidden reveal">
-      <div class="absolute inset-0 bg-gradient-to-r from-accent/5 via-purple/5 to-cyan/5"></div>
-      <div class="relative">
-        <h3 class="text-3xl font-bold mb-4">立即打造你的专属网络诊断工具</h3>
-        <p class="text-lg mb-8 max-w-xl mx-auto" style="color: var(--text-secondary)">
-          单文件、零依赖、三分钟部署，拥有属于自己的全球边缘节点网络诊断面板
-        </p>
-        <div class="flex flex-wrap justify-center gap-4">
-          <a href="https://raw.githubusercontent.com/BlueDriftHK/CF-workers-netdiag/main/_workers.js" target="_blank"
-             class="btn-ripple px-8 py-3.5 bg-accent hover:bg-accent/90 text-white rounded-full font-medium shadow-lg shadow-accent/25 transition hover:-translate-y-0.5">
-            <i class="fa-solid fa-download mr-2"></i>获取源码
-          </a>
-          <a href="https://github.com/BlueDriftHK/CF-workers-netdiag" target="_blank"
-             class="btn-ripple px-8 py-3.5 rounded-full font-medium transition hover:-translate-y-0.5"
-             style="background: var(--bg-card); border: 1px solid var(--border)">
-            <i class="fa-brands fa-github mr-2"></i>GitHub 仓库
-          </a>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- 页脚 -->
-  <footer class="border-t py-10" style="border-color: var(--border)">
-    <div class="max-w-7xl mx-auto px-6">
-      <div class="flex flex-col md:flex-row justify-between items-center gap-6">
-        <div class="flex items-center gap-3">
-          <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-accent to-purple flex items-center justify-center text-white">
-            <i class="fa-solid fa-wifi text-sm"></i>
-          </div>
-          <div>
-            <div class="font-bold">NetSight Pro</div>
-            <div class="text-xs" style="color: var(--text-tertiary)">极光网络诊断 v4.0</div>
-          </div>
-        </div>
-        <div class="flex gap-6 text-sm" style="color: var(--text-secondary)">
-          <a href="#features" class="hover:text-accent transition">功能</a>
-          <a href="#api" class="hover:text-accent transition">API</a>
-          <a href="#deploy" class="hover:text-accent
+        <p class="mt-4 text
