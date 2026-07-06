@@ -1,339 +1,277 @@
 # 贡献指南
 
-感谢你对 网络洞察专业版 的关注！本指南将帮助你了解如何参与项目贡献。
+感谢您对 **NetSight Pro** 的兴趣！我们欢迎来自社区的各种贡献，无论是报告 Bug、提交代码、改进文档，还是提出新功能建议。  
+本指南将帮助您了解如何参与项目，并确保您的贡献能够顺利被合并。
 
 ---
 
 ## 📋 目录
 
 - [行为准则](#-行为准则)
-- [我能做什么](#-我能做什么)
-- [开发环境搭建](#-开发环境搭建)
-- [贡献流程](#-贡献流程)
-- [代码规范](#-代码规范)
-- [提交信息格式](#-提交信息格式)
-- [Pull Request 检查清单](#-pull-request-检查清单)
-- [测试指南](#-测试指南)
-- [文档贡献](#-文档贡献)
+- [如何报告问题](#-如何报告问题)
+- [如何请求新功能](#-如何请求新功能)
+- [贡献代码](#-贡献代码)
+  - [准备工作](#准备工作)
+  - [分支命名](#分支命名)
+  - [代码风格](#代码风格)
+  - [提交信息规范](#提交信息规范)
+  - [测试](#测试)
+  - [提交 Pull Request](#提交-pull-request)
+- [其他贡献方式](#-其他贡献方式)
+- [贡献者许可协议](#-贡献者许可协议)
+- [获取帮助](#-获取帮助)
 
 ---
 
-## 🤝 行为准则
+## 📜 行为准则
 
-本项目遵循 [贡献者公约](CODE_OF_CONDUCT.md)。参与即表示你同意遵守其条款。请保持友善、尊重和建设性的交流氛围。
-
----
-
-## 🎯 我能做什么
-
-### 报告 Bug
-
-如果你发现了 Bug，请在 [Issues](https://github.com/BlueDriftHK/CF-workers-netdiag/issues) 中提交，并包含以下信息：
-
-- **标题**: 简明扼要地描述问题
-- **环境**: 操作系统、浏览器版本、Node.js 版本
-- **复现步骤**: 详细的操作步骤，最好附上 curl 命令或截图
-- **预期行为**: 你期望发生什么
-- **实际行为**: 实际发生了什么（包含错误信息、日志、截图）
-- **Workers 日志**: 如已部署，附上 `wrangler tail` 的相关输出
-
-### 建议新功能
-
-提交功能建议时，请说明：
-
-- 这个功能解决什么问题
-- 你期望的使用场景
-- 如果有，附上参考实现或设计方案
-
-### 贡献代码
-
-从修复文档错别字到实现全新功能，所有代码贡献都欢迎。建议先从 `good first issue` 标签的 Issue 开始。
+本项目遵循 [Contributor Covenant 行为准则](./CODE_OF_CONDUCT.md)。  
+参与本项目的所有贡献者都必须遵守该准则。如有违反，项目维护者有权采取相应措施。
 
 ---
 
-## 🛠️ 开发环境搭建
+## 🐛 如何报告问题
 
-### 前置条件
+### 检查现有 Issue
 
-- Node.js 18+
-- npm 或 pnpm
-- Cloudflare 账号（用于测试）
-- Wrangler CLI
+在提交新 Issue 之前，请先搜索现有的 [Issues](https://github.com/BlueDriftHK/CF-workers-netdiag/issues)，看看您遇到的问题是否已经被报告或正在解决中。
 
-### 本地搭建步骤
+### 创建新 Issue
 
-```bash
-# 1. Fork 项目后克隆到本地
-git clone https://github.com/YOUR_USERNAME/CF-workers-netdiag.git
-cd CF-workers-netdiag
+如果问题尚未被报告，请点击 [New Issue](https://github.com/BlueDriftHK/CF-workers-netdiag/issues/new) 并选择合适的模板（如果存在）或按照以下格式填写：
 
-# 2. 安装 Wrangler CLI
-npm install -g wrangler
+```markdown
+### 问题描述
+（清晰描述您遇到的问题）
 
-# 3. 登录 Cloudflare
-wrangler login
+### 复现步骤
+1. 访问 [URL]
+2. 执行 [操作]
+3. 看到 [错误现象]
 
-# 4. 创建 KV 命名空间（用于测试测速历史功能）
-wrangler kv:namespace create SPEED_HISTORY
+### 预期行为
+（您期望发生什么）
 
-# 5. 本地启动开发服务
-wrangler dev --main _workers.js --port 8787
+### 实际行为
+（实际发生了什么）
 
-# 6. 浏览器访问
-# http://localhost:8787
+### 环境信息
+- NetSight Pro 版本: [v4.0]
+- 浏览器及版本: [Chrome 120]
+- Cloudflare Worker 区域: [可选]
+- 其他相关信息: [如网络环境、操作系统等]
+
+### 日志/截图
+（如果有 Worker 日志或浏览器控制台输出，请附上）
 ```
 
-### 项目结构速览
+### 安全问题
 
-```
-CF-workers-netdiag/
-├── _workers.js          # ★ 核心文件：Cloudflare Worker 主程序
-├── index.html           # 产品介绍落地页（纯静态）
-├── README.md            # 项目文档
-├── SECURITY.md          # 安全政策
-├── CONTRIBUTING.md      # 本文件
-└── LICENSE              # GPL-3.0 许可证
-```
-
-**注意事项**：
-
-- `_workers.js` 是唯一需要部署的核心文件，包含所有 API 路由、HTML 模板和内联 JS/CSS
-- `index.html` 是纯静态产品介绍页，与 Worker 运行时无关
+**请勿**在公开的 GitHub Issues 中报告安全漏洞。请参考 [SECURITY.md](./SECURITY.md) 中的指引，通过邮件私下报告。
 
 ---
 
-## 🔄 贡献流程
+## 💡 如何请求新功能
 
-```bash
-# 1. 确保你的 Fork 与主仓库同步
-git checkout main
-git pull upstream main
+我们也欢迎功能建议！请遵循以下步骤：
 
-# 2. 创建特性分支（命名规范见下方）
-git checkout -b feature/你的功能名称
-# 或
-git checkout -b fix/你的修复名称
+1. 查看现有的 [Issues](https://github.com/BlueDriftHK/CF-workers-netdiag/issues)，看看是否已有类似建议。
+2. 如果不存在，请创建新 Issue，并选择 “Feature Request” 模板（如果有）或填写：
+   - **功能描述**：清晰描述您希望添加的功能。
+   - **使用场景**：说明该功能在什么场景下有用。
+   - **实现思路**（可选）：如果您有初步的想法，欢迎分享。
 
-# 3. 进行开发并提交
-git add .
-git commit -m '✨ feat: 添加新功能描述'
-
-# 4. 推送到你的 Fork
-git push origin feature/你的功能名称
-
-# 5. 在 GitHub 上创建 Pull Request
-```
-
-### 分支命名规范
-
-| 前缀 | 用途 | 示例 |
-| :--- | :--- | :--- |
-| `feature/` | 新功能 | `feature/add-ipv6-traceroute` |
-| `fix/` | Bug 修复 | `fix/dns-timeout-cors` |
-| `docs/` | 文档更新 | `docs/update-api-reference` |
-| `refactor/` | 代码重构 | `refactor/extract-rate-limiter` |
-| `perf/` | 性能优化 | `perf/reduce-stream-buffer` |
-| `security/` | 安全修复 | `security/fix-xss-vector` |
+我们会根据项目方向和社区需求，评估并决定是否采纳。
 
 ---
 
-## 📝 代码规范
+## 👨‍💻 贡献代码
 
-### JavaScript 规范（_workers.js）
+### 准备工作
 
-由于 `_workers.js` 是单一的 Cloudflare Worker 文件，请遵循以下规范：
+1. **Fork 本仓库**：点击右上角的 “Fork” 按钮，将项目复制到您的 GitHub 账户下。
+2. **克隆您的 Fork**：
+   ```bash
+   git clone https://github.com/您的用户名/CF-workers-netdiag.git
+   cd CF-workers-netdiag
+   ```
+3. **添加上游仓库**：
+   ```bash
+   git remote add upstream https://github.com/BlueDriftHK/CF-workers-netdiag.git
+   ```
+4. **安装依赖**（如果需要）：
+   本项目不需要额外的构建工具，但您可以使用 `wrangler` 进行本地测试：
+   ```bash
+   npm install -g wrangler
+   ```
 
+### 分支命名
+
+请基于 `main` 分支创建您的功能分支，并遵循以下命名规范：
+
+- `feature/功能名称` —— 新功能
+- `fix/问题描述` —— 修复 Bug
+- `docs/文档改进` —— 文档更新
+- `refactor/重构内容` —— 代码重构
+- `chore/杂项` —— 构建、配置等
+
+示例：`feature/multi-node-compare`
+
+### 代码风格
+
+为了保持代码的一致性和可维护性，请遵循以下规范：
+
+#### JavaScript（Worker 主文件 `_workers.js`）
+
+- 使用 **ES modules** 语法（`import`/`export`）。
+- 使用 **单引号** 表示字符串（除非包含单引号）。
+- 使用 **2 个空格** 缩进。
+- 使用 `const` 和 `let`，避免 `var`。
+- 每个语句末尾使用 **分号**。
+- 使用 **对象/数组解构** 提高可读性。
+- 函数命名使用 **camelCase**。
+- 常量使用 **UPPER_SNAKE_CASE**（如 `CORS_HEADERS`）。
+- 适当添加注释，尤其是复杂逻辑。
+- 保持代码简洁，避免过长的函数（建议不超过 50 行）。
+
+示例：
 ```javascript
-// ✅ 正确示例
-// 1. 使用 2 空格缩进
-function handleRequest(request) {
-  const url = new URL(request.url);
-  
-  // 2. 变量使用 camelCase
-  const clientIp = request.headers.get('CF-Connecting-IP');
-  
-  // 3. 常量使用 UPPER_SNAKE_CASE
-  const MAX_SPEEDTEST_SIZE = 5 * 1024 * 1024;
-  const RATE_LIMIT_MAX = 60;
-  
-  // 4. 函数使用 camelCase，动词开头
-  function isRateLimited(ip, max = RATE_LIMIT_MAX) {
-    // ...
-  }
-  
-  // 5. 必要的 JSDoc 注释
-  /** @param {number} n - 迭代次数 */
-  function runCpuTest(n) {
-    // ...
-  }
-}
+// 好的风格
+const CORS_HEADERS = {
+  'access-control-allow-origin': '*',
+  'cache-control': 'no-store'
+};
 
-// ❌ 错误示例
-function handle_request( request ){  // 下划线命名、空格不一致
-  var client_ip = "";  // var、下划线命名
-  const maxsize=1024;  // 缺少空格、命名不规范
+function isRateLimited(ip, maxRequests = 60) {
+  // 逻辑...
 }
 ```
 
-### HTML/CSS 规范
+#### CSS（内嵌在 `_workers.js` 的 HTML 中）
 
-- HTML 使用 2 空格缩进，保持标签闭合
-- CSS 自定义属性统一在 `:root` 声明，深浅色覆盖在 `@media (prefers-color-scheme: dark)` 中
-- 颜色值优先使用 CSS 变量而非硬编码
-- 新增 CSS 变量命名遵循 `--{类别}-{属性}` 格式，如 `--bg-primary`、`--text-secondary`
+- 使用 **CSS 变量**（`var(--accent)`）管理主题。
+- 选择器使用 **连字符**（kebab-case）命名类。
+- 遵循 **BEM 方法论**（可选）。
+- 保持规则按模块分组，添加注释分隔。
+- 避免使用 `!important`，除非绝对必要。
+- 深色/浅色模式通过 `[data-theme="dark"]` 和 `[data-theme="light"]` 控制。
 
-### Cloudflare Workers 注意事项
+#### HTML
 
-1. **无全局副作用**: 避免在全局作用域中进行异步操作
-2. **安全第一**: 所有用户输入必须做参数校验（`parseInt` 钳制、域名白名单等）
-3. **限流保护**: 新 API 端点必须接入 `isRateLimited()` 限流中间件
-4. **KV 操作**: 使用 KV 前必须做 `typeof SPEED_HISTORY !== 'undefined'` 类型守卫
-5. **XSS 防护**: 动态内容必须经过 `escapeForJS()` 转义
+- 使用 **语义化标签**（`<header>`, `<section>`, `<article>` 等）。
+- `id` 和 `class` 使用 **kebab-case**。
+- 确保内容在无 CSS 时可读（渐进增强）。
+- 添加合适的 `alt` 属性（如有图片）。
 
----
+#### 提交信息规范
 
-## 💬 提交信息格式
+我们遵循 [Conventional Commits](https://www.conventionalcommits.org/) 规范，以便自动生成更新日志。
 
-遵循约定式提交（Conventional Commits）规范：
-
+提交信息格式：
 ```
-<类型>: <简短描述>
+<类型>(<范围>): <简短描述>
 
-<详细说明（可选）>
+<详细描述（可选）>
 
-<关闭的 Issue 编号（可选）>
-```
-
-### 提交类型
-
-| 类型 | 图标 | 说明 | 示例 |
-| :--- | :--- | :--- | :--- |
-| `feat` | ✨ | 新功能 | `feat: 添加 IPv6 路由追踪功能` |
-| `fix` | 🐛 | Bug 修复 | `fix: DNS 超时改用代理路由绕过 CORS` |
-| `docs` | 📝 | 文档更新 | `docs: 完善 API 端点参数说明` |
-| `style` | 🎨 | 代码格式（不影响逻辑） | `style: 统一卡片悬停动效曲线` |
-| `refactor` | ♻️ | 代码重构 | `refactor: 提取限流中间件为独立函数` |
-| `perf` | ⚡ | 性能优化 | `perf: 并发测试改用 ArrayBuffer 复用` |
-| `test` | ✅ | 测试相关 | `test: 添加健康检查端点测试` |
-| `chore` | 🔧 | 构建/工具配置 | `chore: 更新 wrangler 兼容日期` |
-| `security` | 🔒 | 安全修复 | `security: 增强 SSRF 域名白名单校验` |
-
-### 提交示例
-
-```bash
-# 简单提交
-git commit -m '✨ feat: 添加 Traceroute 网络路径追踪'
-
-# 带详细说明
-git commit -m '🐛 fix: DNS 测试全部超时
-
-浏览器直接 fetch 外部 URL 被 CORS 拦截，改为通过 Worker 
-代理路由转发请求，客户端使用 Image 对象测量真实延迟。
-
-Closes #12'
+<脚注（可选）>
 ```
 
----
+**类型**：
+- `feat`：新功能
+- `fix`：Bug 修复
+- `docs`：文档更新
+- `style`：代码格式（不影响逻辑）
+- `refactor`：代码重构（不修改功能）
+- `perf`：性能优化
+- `test`：测试相关
+- `chore`：构建/工具/依赖更新
 
-## ✅ Pull Request 检查清单
+**范围**（可选）：如 `api`、`ui`、`kv` 等。
 
-提交 PR 前，请确认以下事项：
+示例：
+```
+feat(api): 添加多节点对比端点
 
-- [ ] 代码符合项目规范（2 空格缩进、camelCase 命名）
-- [ ] 新 API 端点已接入 `isRateLimited()` 限流中间件
-- [ ] 所有用户输入已做参数校验和类型转换
-- [ ] 新增 HTML 内容已做 `escapeForJS()` 转义
-- [ ] 新增 CSS 颜色值使用 CSS 变量，深浅色模式均已覆盖
-- [ ] 本地 `wrangler dev` 测试通过
-- [ ] 相关文档已更新（README、SECURITY 等）
-- [ ] 提交信息格式正确
-- [ ] PR 描述中说明了变更原因和影响范围
-- [ ] 未引入破坏性变更（或已明确标注）
-
----
-
-## 🧪 测试指南
-
-### 本地功能测试
-
-```bash
-# 启动本地 Worker
-wrangler dev --main _workers.js --port 8787
-
-# 健康检查
-curl http://localhost:8787/health
-
-# 带宽测速
-curl http://localhost:8787/speedtest?size=102400
-
-# CPU 测试
-curl http://localhost:8787/cpu-test?n=100000
-
-# 并发测试
-curl http://localhost:8787/concurrent-test?count=4&size=2048
-
-# HTTP/2 协议检测
-curl http://localhost:8787/http2-test
-
-# WebSocket 测试
-websocat ws://localhost:8787/ws-test
+新增 /api/multi-node-compare 接口，支持并行测试多个 Worker 节点的延迟。
 ```
 
-### 限流测试
+### 测试
 
-```bash
-# 连续发送请求验证限流是否生效
-for i in $(seq 1 70); do
-  echo "请求 $i: $(curl -s -o /dev/null -w '%{http_code}' http://localhost:8787/speedtest?size=1024)"
-done
-# 预期：前 60 次返回 200，之后返回 429
-```
+- 如果您的更改涉及新功能或修复，请确保现有功能仍能正常工作。
+- 您可以使用 `wrangler dev` 在本地进行测试：
+  ```bash
+  wrangler dev --local --main _workers.js
+  ```
+  然后在浏览器中访问 `http://localhost:8787`。
+- 对于 API 更改，建议使用 `curl` 或 Postman 进行测试。
+- 我们不强制要求编写单元测试，但对于关键逻辑（如限流、安全头），欢迎添加。
 
-### 页面测试
+### 提交 Pull Request
 
-在浏览器中访问 `http://localhost:8787`，检查：
+1. **同步上游代码**：
+   ```bash
+   git checkout main
+   git pull upstream main
+   git push origin main  # 更新您的 Fork 的 main
+   ```
 
-1. 各测试按钮功能是否正常
-2. 深浅色模式是否正确切换（跟随系统设置）
-3. 测速完成后历史记录是否正常展示
-4. 移动端响应式布局是否正常
+2. **基于 main 创建分支**：
+   ```bash
+   git checkout -b feature/your-feature
+   ```
 
----
+3. **进行更改并提交**（遵循提交规范）：
+   ```bash
+   git add .
+   git commit -m "feat: 添加某个功能"
+   ```
 
-## 📚 文档贡献
+4. **推送到您的 Fork**：
+   ```bash
+   git push origin feature/your-feature
+   ```
 
-文档同样需要你的贡献。以下是可以参与的文档工作：
+5. **打开 Pull Request**：
+   - 访问您的 Fork 页面，点击 “Compare & pull request”。
+   - 填写 PR 标题和描述，清晰说明更改内容、目的和测试情况。
+   - 关联相关的 Issue（如有）：“Closes #123”。
 
-- 修正 README 中的表述错误或过时信息
-- 补充 API 使用示例
-- 翻译文档到其他语言
-- 完善故障排查章节
-- 添加部署最佳实践
-
-文档格式要求：
-
-- 使用 Markdown 格式
-- 中文为主，技术术语保留英文
-- 代码块标注正确的语言标识
-- 内部链接使用相对路径
-
----
-
-## 🔗 相关资源
-
-- [Cloudflare Workers 文档](https://developers.cloudflare.com/workers/)
-- [Wrangler CLI 指南](https://developers.cloudflare.com/workers/wrangler/)
-- [Cloudflare KV 文档](https://developers.cloudflare.com/kv/)
-- [约定式提交规范](https://www.conventionalcommits.org/zh-hans/)
-
----
-
-## 📞 需要帮助？
-
-- 在 [Issues](https://github.com/BlueDriftHK/CF-workers-netdiag/issues) 中提问
-- 描述你遇到的问题和已尝试的解决方法
-- 我们会尽快回复
+6. **等待审查**：
+   - 维护者会审核您的 PR，可能会提出修改意见。
+   - 请及时响应反馈并进行调整。
+   - 一旦通过，PR 将被合并到 `main` 分支。
 
 ---
 
-*感谢每一位贡献者的付出！*
+## 🌟 其他贡献方式
+
+除了代码，您还可以通过以下方式贡献：
+
+- **完善文档**：修正错别字、补充示例、翻译（如果支持）。
+- **测试**：在多种环境下测试，反馈兼容性问题。
+- **回答 Issues**：帮助其他用户解决遇到的问题。
+- **推广**：向更多人介绍 NetSight Pro，或撰写博客/教程。
+- **设计**：改进 UI/UX，优化图标或配色。
+
+您的每一点贡献都值得赞赏！
+
+---
+
+## 📄 贡献者许可协议（CLA）
+
+提交贡献即表示您同意将您的代码贡献视为符合项目许可证（**AGPL-3.0**）的条款。  
+您无需签署额外的 CLA，但请确保您的贡献完全由您创作，或者您有权授权其使用。
+
+---
+
+## 💬 获取帮助
+
+如果您在贡献过程中有任何疑问，欢迎通过以下方式联系我们：
+
+- 在 [GitHub Discussions](https://github.com/BlueDriftHK/CF-workers-netdiag/discussions) 中提问
+- 在 [GitHub Issues](https://github.com/BlueDriftHK/CF-workers-netdiag/issues) 中留言（如果与现有问题相关）
+- 发送邮件至项目维护者（见 [SECURITY.md](./SECURITY.md) 中的联系方式）
+
+---
+
+感谢您的贡献，让我们一起让 NetSight Pro 变得更好！🎉
