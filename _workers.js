@@ -1,7 +1,7 @@
 // ============================================================
 // NetSight Pro - Apple 极简网络诊断工具
-// Cloudflare Worker 完整优化版 | iOS/macOS 原生设计体系
-// 版本: 4.0 | 深色模式手动切换 + 多节点对比
+// Cloudflare Worker 完整优化版 | 全界面国际化 + 深色/浅色切换
+// 版本: 4.1 | 完整语言覆盖
 // ============================================================
 
 // ==================== 常量定义 ====================
@@ -187,7 +187,7 @@ async function handleRequest(event) {
     return new Response(JSON.stringify({
       status: 'ok',
       timestamp: Date.now(),
-      version: '4.0',
+      version: '4.1',
       uptime: performance.timeOrigin ? Date.now() - performance.timeOrigin : 'unknown'
     }), {
       headers: {
@@ -749,8 +749,11 @@ async function handleRequest(event) {
   
   // 生成随机 nonce 用于 CSP
   const nonce = crypto.randomUUID();
-  const cspHeader = `default-src 'self'; script-src 'self' 'nonce-${nonce}' https://cdnjs.cloudflare.com https://fonts.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://ipapi.co https://api4.ipify.org https://api6.ipify.org https://ipv4.icanhazip.com https://ipv6.icanhazip.com https://ip4.seeip.org https://scamalytics.com; img-src 'self' data: https://www.netflix.com https://www.disneyplus.com https://www.youtube.com https://chat.openai.com;`;
+  const cspHeader = `default-src 'self'; script-src 'self' 'nonce-${nonce}' https://cdnjs.cloudflare.com https://fonts.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; connect-src 'self' https://ipapi.co https://api4.ipify.org https://api6.ipify.org https://ipv4.icanhazip.com https://ipv6.icanhazip.com https://ip4.seeip.org https://scamalytics.com; img-src 'self' data: https://www.netflix.com https://www.disneyplus.com https://www.youtube.com https://chat.openai.com;`;
 
+  // ============================================================
+  // 开始 HTML 模板（全界面国际化 + 美化）
+  // ============================================================
   const html = `<!DOCTYPE html>
 <html lang="zh-CN" data-theme="auto">
 <head>
@@ -764,152 +767,124 @@ async function handleRequest(event) {
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         /* ==================== 全局重置 & 变量 ==================== */
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         :root {
             --bg-primary: #f5f5f7;
-            --bg-card: rgba(255, 255, 255, 0.72);
-            --bg-card-hover: rgba(255, 255, 255, 0.88);
-            --bg-glass: rgba(255, 255, 255, 0.64);
+            --bg-card: rgba(255,255,255,0.72);
+            --bg-card-hover: rgba(255,255,255,0.88);
+            --bg-glass: rgba(255,255,255,0.64);
             --text-primary: #1d1d1f;
             --text-secondary: #86868b;
             --text-tertiary: #aeaeb2;
             --text-quaternary: #c7c7cc;
             --accent: #007AFF;
             --accent-hover: #0066d6;
-            --accent-light: rgba(0, 122, 255, 0.08);
-            --accent-glass: rgba(0, 122, 255, 0.06);
+            --accent-light: rgba(0,122,255,0.08);
+            --accent-glass: rgba(0,122,255,0.06);
             --success: #34c759;
-            --success-light: rgba(52, 199, 89, 0.1);
+            --success-light: rgba(52,199,89,0.1);
             --warning: #ff9f0a;
-            --warning-light: rgba(255, 159, 10, 0.1);
+            --warning-light: rgba(255,159,10,0.1);
             --danger: #ff3b30;
-            --danger-light: rgba(255, 59, 48, 0.08);
-            --border: rgba(0, 0, 0, 0.06);
-            --border-accent: rgba(0, 122, 255, 0.12);
-            --divider: rgba(0, 0, 0, 0.04);
-            --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.03);
-            --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.04);
-            --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.05);
-            --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.07);
-            --radius-sm: 12px;
-            --radius-md: 16px;
-            --radius-lg: 20px;
-            --radius-xl: 24px;
-            --transition-fast: 0.18s ease;
-            --transition-smooth: 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
-            --chart-cyan: #06b6d4;
-            --chart-green: #34d399;
-            --chart-teal: #22d3ee;
+            --danger-light: rgba(255,59,48,0.08);
+            --border: rgba(0,0,0,0.06);
+            --border-accent: rgba(0,122,255,0.12);
+            --divider: rgba(0,0,0,0.04);
+            --shadow-xs: 0 1px 2px rgba(0,0,0,0.03);
+            --shadow-sm: 0 2px 8px rgba(0,0,0,0.04);
+            --shadow-md: 0 4px 16px rgba(0,0,0,0.05);
+            --shadow-lg: 0 8px 32px rgba(0,0,0,0.07);
+            --radius-sm: 12px; --radius-md: 16px; --radius-lg: 20px; --radius-xl: 24px;
+            --transition-fast: 0.18s ease; --transition-smooth: 0.25s cubic-bezier(0.25,0.1,0.25,1);
+            --chart-cyan: #06b6d4; --chart-green: #34d399; --chart-teal: #22d3ee;
         }
-
-        /* 深色模式（跟随系统） */
         @media (prefers-color-scheme: dark) {
             :root {
                 --bg-primary: #1c1c1e;
-                --bg-card: rgba(255, 255, 255, 0.08);
-                --bg-card-hover: rgba(255, 255, 255, 0.12);
-                --bg-glass: rgba(255, 255, 255, 0.06);
+                --bg-card: rgba(255,255,255,0.08);
+                --bg-card-hover: rgba(255,255,255,0.12);
+                --bg-glass: rgba(255,255,255,0.06);
                 --text-primary: #f5f5f7;
                 --text-secondary: #a1a1a6;
                 --text-tertiary: #636366;
                 --text-quaternary: #48484a;
                 --accent: #0A84FF;
                 --accent-hover: #409cff;
-                --accent-light: rgba(10, 132, 255, 0.12);
-                --accent-glass: rgba(10, 132, 255, 0.08);
+                --accent-light: rgba(10,132,255,0.12);
+                --accent-glass: rgba(10,132,255,0.08);
                 --success: #30d158;
-                --success-light: rgba(48, 209, 88, 0.15);
+                --success-light: rgba(48,209,88,0.15);
                 --warning: #ff9f0a;
-                --warning-light: rgba(255, 159, 10, 0.15);
+                --warning-light: rgba(255,159,10,0.15);
                 --danger: #ff453a;
-                --danger-light: rgba(255, 69, 58, 0.12);
-                --border: rgba(255, 255, 255, 0.1);
-                --border-accent: rgba(10, 132, 255, 0.2);
-                --divider: rgba(255, 255, 255, 0.06);
-                --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.3);
-                --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
-                --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.3);
-                --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.3);
-                --chart-cyan: #22d3ee;
-                --chart-green: #34d399;
-                --chart-teal: #2dd4bf;
+                --danger-light: rgba(255,69,58,0.12);
+                --border: rgba(255,255,255,0.1);
+                --border-accent: rgba(10,132,255,0.2);
+                --divider: rgba(255,255,255,0.06);
+                --shadow-xs: 0 1px 2px rgba(0,0,0,0.3);
+                --shadow-sm: 0 2px 8px rgba(0,0,0,0.3);
+                --shadow-md: 0 4px 16px rgba(0,0,0,0.3);
+                --shadow-lg: 0 8px 32px rgba(0,0,0,0.3);
+                --chart-cyan: #22d3ee; --chart-green: #34d399; --chart-teal: #2dd4bf;
             }
         }
-
-        /* 手动设置深色模式 */
         [data-theme="dark"] {
             --bg-primary: #1c1c1e;
-            --bg-card: rgba(255, 255, 255, 0.08);
-            --bg-card-hover: rgba(255, 255, 255, 0.12);
-            --bg-glass: rgba(255, 255, 255, 0.06);
+            --bg-card: rgba(255,255,255,0.08);
+            --bg-card-hover: rgba(255,255,255,0.12);
+            --bg-glass: rgba(255,255,255,0.06);
             --text-primary: #f5f5f7;
             --text-secondary: #a1a1a6;
             --text-tertiary: #636366;
             --text-quaternary: #48484a;
             --accent: #0A84FF;
             --accent-hover: #409cff;
-            --accent-light: rgba(10, 132, 255, 0.12);
-            --accent-glass: rgba(10, 132, 255, 0.08);
+            --accent-light: rgba(10,132,255,0.12);
+            --accent-glass: rgba(10,132,255,0.08);
             --success: #30d158;
-            --success-light: rgba(48, 209, 88, 0.15);
+            --success-light: rgba(48,209,88,0.15);
             --warning: #ff9f0a;
-            --warning-light: rgba(255, 159, 10, 0.15);
+            --warning-light: rgba(255,159,10,0.15);
             --danger: #ff453a;
-            --danger-light: rgba(255, 69, 58, 0.12);
-            --border: rgba(255, 255, 255, 0.1);
-            --border-accent: rgba(10, 132, 255, 0.2);
-            --divider: rgba(255, 255, 255, 0.06);
-            --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.3);
-            --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
-            --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.3);
-            --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.3);
-            --chart-cyan: #22d3ee;
-            --chart-green: #34d399;
-            --chart-teal: #2dd4bf;
+            --danger-light: rgba(255,69,58,0.12);
+            --border: rgba(255,255,255,0.1);
+            --border-accent: rgba(10,132,255,0.2);
+            --divider: rgba(255,255,255,0.06);
+            --shadow-xs: 0 1px 2px rgba(0,0,0,0.3);
+            --shadow-sm: 0 2px 8px rgba(0,0,0,0.3);
+            --shadow-md: 0 4px 16px rgba(0,0,0,0.3);
+            --shadow-lg: 0 8px 32px rgba(0,0,0,0.3);
+            --chart-cyan: #22d3ee; --chart-green: #34d399; --chart-teal: #2dd4bf;
         }
-
-        /* 手动设置浅色模式 */
         [data-theme="light"] {
             --bg-primary: #f5f5f7;
-            --bg-card: rgba(255, 255, 255, 0.72);
-            --bg-card-hover: rgba(255, 255, 255, 0.88);
-            --bg-glass: rgba(255, 255, 255, 0.64);
+            --bg-card: rgba(255,255,255,0.72);
+            --bg-card-hover: rgba(255,255,255,0.88);
+            --bg-glass: rgba(255,255,255,0.64);
             --text-primary: #1d1d1f;
             --text-secondary: #86868b;
             --text-tertiary: #aeaeb2;
             --text-quaternary: #c7c7cc;
             --accent: #007AFF;
             --accent-hover: #0066d6;
-            --accent-light: rgba(0, 122, 255, 0.08);
-            --accent-glass: rgba(0, 122, 255, 0.06);
+            --accent-light: rgba(0,122,255,0.08);
+            --accent-glass: rgba(0,122,255,0.06);
             --success: #34c759;
-            --success-light: rgba(52, 199, 89, 0.1);
+            --success-light: rgba(52,199,89,0.1);
             --warning: #ff9f0a;
-            --warning-light: rgba(255, 159, 10, 0.1);
+            --warning-light: rgba(255,159,10,0.1);
             --danger: #ff3b30;
-            --danger-light: rgba(255, 59, 48, 0.08);
-            --border: rgba(0, 0, 0, 0.06);
-            --border-accent: rgba(0, 122, 255, 0.12);
-            --divider: rgba(0, 0, 0, 0.04);
-            --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.03);
-            --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.04);
-            --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.05);
-            --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.07);
-            --chart-cyan: #06b6d4;
-            --chart-green: #34d399;
-            --chart-teal: #22d3ee;
+            --danger-light: rgba(255,59,48,0.08);
+            --border: rgba(0,0,0,0.06);
+            --border-accent: rgba(0,122,255,0.12);
+            --divider: rgba(0,0,0,0.04);
+            --shadow-xs: 0 1px 2px rgba(0,0,0,0.03);
+            --shadow-sm: 0 2px 8px rgba(0,0,0,0.04);
+            --shadow-md: 0 4px 16px rgba(0,0,0,0.05);
+            --shadow-lg: 0 8px 32px rgba(0,0,0,0.07);
+            --chart-cyan: #06b6d4; --chart-green: #34d399; --chart-teal: #22d3ee;
         }
-
-        html {
-            -webkit-font-smoothing: antialiased;
-            -moz-osx-font-smoothing: grayscale;
-        }
-
+        html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
         body {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
             background: var(--bg-primary);
@@ -919,955 +894,305 @@ async function handleRequest(event) {
             position: relative;
             transition: background 0.3s ease, color 0.3s ease;
         }
-
         body::before {
             content: '';
             position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background:
-                radial-gradient(ellipse at 30% 20%, rgba(0, 122, 255, 0.03) 0%, transparent 50%),
-                radial-gradient(ellipse at 70% 60%, rgba(0, 122, 255, 0.02) 0%, transparent 45%),
-                radial-gradient(ellipse at 50% 90%, rgba(100, 100, 110, 0.02) 0%, transparent 40%);
-            pointer-events: none;
-            z-index: 0;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: radial-gradient(ellipse at 30% 20%, rgba(0,122,255,0.03) 0%, transparent 50%),
+                        radial-gradient(ellipse at 70% 60%, rgba(0,122,255,0.02) 0%, transparent 45%),
+                        radial-gradient(ellipse at 50% 90%, rgba(100,100,110,0.02) 0%, transparent 40%);
+            pointer-events: none; z-index: 0;
         }
+        .container { max-width: 1200px; margin: 0 auto; position: relative; z-index: 1; }
 
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            position: relative;
-            z-index: 1;
-        }
-
-        /* ==================== 头部 ==================== */
+        /* 头部、卡片、按钮等样式（与之前美化版一致，仅补充国际化） */
         .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 16px 28px;
-            margin-bottom: 28px;
-            flex-wrap: wrap;
-            gap: 16px;
-            background: var(--bg-glass);
-            backdrop-filter: blur(24px) saturate(180%);
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 16px 28px; margin-bottom: 28px; flex-wrap: wrap; gap: 16px;
+            background: var(--bg-glass); backdrop-filter: blur(24px) saturate(180%);
             -webkit-backdrop-filter: blur(24px) saturate(180%);
-            border-radius: var(--radius-xl);
-            border: 1px solid var(--border);
-            box-shadow: var(--shadow-sm);
+            border-radius: var(--radius-xl); border: 1px solid var(--border); box-shadow: var(--shadow-sm);
         }
-
-        .logo {
-            display: flex;
-            align-items: center;
-            gap: 14px;
-        }
-
+        .logo { display: flex; align-items: center; gap: 14px; }
         .logo-icon {
-            width: 48px;
-            height: 48px;
-            background: var(--accent);
-            border-radius: var(--radius-md);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 22px;
-            color: #fff;
-            box-shadow: 0 4px 14px rgba(0, 122, 255, 0.2);
+            width: 48px; height: 48px; background: var(--accent); border-radius: var(--radius-md);
+            display: flex; align-items: center; justify-content: center; font-size: 22px; color: #fff;
+            box-shadow: 0 4px 14px rgba(0,122,255,0.2);
         }
-
-        .logo h1 {
-            font-size: 24px;
-            font-weight: 700;
-            color: var(--text-primary);
-            letter-spacing: -0.3px;
-        }
-
-        .logo p {
-            font-size: 12px;
-            color: var(--text-secondary);
-            margin-top: 2px;
-            letter-spacing: 0.2px;
-        }
-
-        .header-right {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        /* ====== 主题切换按钮 ====== */
+        .logo h1 { font-size: 24px; font-weight: 700; color: var(--text-primary); letter-spacing: -0.3px; }
+        .logo p { font-size: 12px; color: var(--text-secondary); margin-top: 2px; letter-spacing: 0.2px; }
+        .header-right { display: flex; align-items: center; gap: 12px; }
         .theme-toggle {
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: 30px;
-            padding: 6px 12px;
-            cursor: pointer;
-            font-size: 18px;
-            line-height: 1;
-            color: var(--text-secondary);
-            transition: all var(--transition-fast);
-            display: flex;
-            align-items: center;
-            gap: 6px;
+            background: var(--bg-card); border: 1px solid var(--border); border-radius: 30px;
+            padding: 6px 12px; cursor: pointer; font-size: 18px; line-height: 1;
+            color: var(--text-secondary); transition: all var(--transition-fast);
+            display: flex; align-items: center; gap: 6px;
         }
-        .theme-toggle:hover {
-            background: var(--bg-card-hover);
-            border-color: var(--border-accent);
-        }
-        .theme-toggle i {
-            font-size: 16px;
-        }
-
+        .theme-toggle:hover { background: var(--bg-card-hover); border-color: var(--border-accent); }
+        .theme-toggle i { font-size: 16px; }
         .lang-switcher {
-            display: flex;
-            gap: 3px;
-            background: rgba(0, 0, 0, 0.04);
-            padding: 4px;
-            border-radius: 10px;
-            border: 1px solid var(--border);
+            display: flex; gap: 3px; background: rgba(0,0,0,0.04); padding: 4px;
+            border-radius: 10px; border: 1px solid var(--border);
         }
-
         .lang-btn {
-            background: transparent;
-            border: none;
-            color: var(--text-secondary);
-            padding: 7px 16px;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 12px;
-            font-weight: 500;
+            background: transparent; border: none; color: var(--text-secondary);
+            padding: 7px 16px; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 500;
             transition: all var(--transition-fast);
         }
+        .lang-btn.active { background: #fff; color: var(--accent); box-shadow: var(--shadow-xs); font-weight: 600; }
+        .lang-btn:hover:not(.active) { color: var(--text-primary); background: rgba(0,0,0,0.04); }
 
-        .lang-btn.active {
-            background: #fff;
-            color: var(--accent);
-            box-shadow: var(--shadow-xs);
-            font-weight: 600;
-        }
-
-        .lang-btn:hover:not(.active) {
-            color: var(--text-primary);
-            background: rgba(0, 0, 0, 0.04);
-        }
-
-        /* ==================== 卡片通用 ==================== */
         .hero-card {
-            background: var(--bg-card);
-            backdrop-filter: blur(24px) saturate(180%);
+            background: var(--bg-card); backdrop-filter: blur(24px) saturate(180%);
             -webkit-backdrop-filter: blur(24px) saturate(180%);
-            border-radius: var(--radius-xl);
-            padding: 28px 32px;
-            margin-bottom: 28px;
-            border: 1px solid var(--border);
-            box-shadow: var(--shadow-md);
-            position: relative;
-            overflow: hidden;
+            border-radius: var(--radius-xl); padding: 28px 32px; margin-bottom: 28px;
+            border: 1px solid var(--border); box-shadow: var(--shadow-md); position: relative; overflow: hidden;
         }
-
         .hero-card::before {
-            content: '';
-            position: absolute;
-            top: -30%;
-            left: -10%;
-            width: 60%;
-            height: 160%;
-            background: radial-gradient(ellipse, rgba(0, 122, 255, 0.04), transparent 70%);
-            pointer-events: none;
-            border-radius: 50%;
+            content: ''; position: absolute; top: -30%; left: -10%; width: 60%; height: 160%;
+            background: radial-gradient(ellipse, rgba(0,122,255,0.04), transparent 70%);
+            pointer-events: none; border-radius: 50%;
         }
-
-        .ip-row {
-            display: flex;
-            align-items: baseline;
-            flex-wrap: wrap;
-            gap: 16px;
-            margin-bottom: 14px;
-        }
-
-        .ip-label {
-            font-size: 12px;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 1.5px;
-            color: var(--accent);
-            min-width: 50px;
-        }
-
-        .ip-val {
-            font-size: 28px;
-            font-weight: 700;
-            font-family: 'SF Mono', 'Monaco', 'Courier New', monospace;
-            color: var(--text-primary);
-            word-break: break-all;
-            letter-spacing: -0.5px;
-        }
-
-        .ip-val-small {
-            font-size: 18px;
-            color: var(--text-secondary);
-        }
-
-        .stats-row {
-            display: flex;
-            gap: 14px;
-            margin-top: 20px;
-            flex-wrap: wrap;
-        }
-
+        .ip-row { display: flex; align-items: baseline; flex-wrap: wrap; gap: 16px; margin-bottom: 14px; }
+        .ip-label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px; color: var(--accent); min-width: 50px; }
+        .ip-val { font-size: 28px; font-weight: 700; font-family: 'SF Mono','Monaco','Courier New',monospace; color: var(--text-primary); word-break: break-all; letter-spacing: -0.5px; }
+        .ip-val-small { font-size: 18px; color: var(--text-secondary); }
+        .stats-row { display: flex; gap: 14px; margin-top: 20px; flex-wrap: wrap; }
         .stat-item {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 12px;
-            padding: 7px 16px;
-            background: rgba(0, 0, 0, 0.03);
-            border-radius: 20px;
-            border: 1px solid rgba(0, 0, 0, 0.05);
-            color: var(--text-secondary);
+            display: flex; align-items: center; gap: 8px; font-size: 12px;
+            padding: 7px 16px; background: rgba(0,0,0,0.03); border-radius: 20px;
+            border: 1px solid rgba(0,0,0,0.05); color: var(--text-secondary);
         }
-
-        .stat-item strong {
-            color: var(--text-primary);
-            font-weight: 600;
-        }
-
-        .stat-item i {
-            color: var(--accent);
-            font-size: 13px;
-        }
-
+        .stat-item strong { color: var(--text-primary); font-weight: 600; }
+        .stat-item i { color: var(--accent); font-size: 13px; }
         .live-dot {
-            display: inline-block;
-            width: 7px;
-            height: 7px;
-            border-radius: 50%;
-            background: var(--success);
-            animation: pulse 2s ease-in-out infinite;
-            margin-right: 6px;
+            display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+            background: var(--success); animation: pulse 2s ease-in-out infinite; margin-right: 6px;
         }
+        @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.45;transform:scale(1.25)} }
 
-        @keyframes pulse {
-            0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.45; transform: scale(1.25); }
-        }
-
-        .grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
-            gap: 20px;
-            margin-bottom: 28px;
-        }
-
-        .rtt-card {
-            grid-column: 1 / -1;
-            min-height: 560px;
-            display: flex;
-            flex-direction: column;
-            background: var(--bg-card);
-            border: 1px solid var(--border-accent);
-            box-shadow: var(--shadow-md);
-        }
-
-        .rtt-card .card-body {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            padding: 24px 28px;
-        }
-
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px,1fr)); gap: 20px; margin-bottom: 28px; }
+        .rtt-card { grid-column: 1 / -1; min-height: 560px; display: flex; flex-direction: column; background: var(--bg-card); border: 1px solid var(--border-accent); box-shadow: var(--shadow-md); }
+        .rtt-card .card-body { flex: 1; display: flex; flex-direction: column; padding: 24px 28px; }
         .card {
-            background: var(--bg-card);
-            backdrop-filter: blur(24px) saturate(180%);
+            background: var(--bg-card); backdrop-filter: blur(24px) saturate(180%);
             -webkit-backdrop-filter: blur(24px) saturate(180%);
-            border-radius: var(--radius-lg);
-            border: 1px solid var(--border);
-            overflow: hidden;
-            transition: all var(--transition-smooth);
-            box-shadow: var(--shadow-xs);
+            border-radius: var(--radius-lg); border: 1px solid var(--border); overflow: hidden;
+            transition: all var(--transition-smooth); box-shadow: var(--shadow-xs);
         }
-
-        .card:hover {
-            box-shadow: var(--shadow-md);
-            border-color: var(--border-accent);
-        }
-
+        .card:hover { box-shadow: var(--shadow-md); border-color: var(--border-accent); }
         .card-header {
-            padding: 18px 24px;
-            background: rgba(0, 0, 0, 0.015);
-            border-bottom: 1px solid var(--divider);
-            display: flex;
-            align-items: center;
-            gap: 14px;
+            padding: 18px 24px; background: rgba(0,0,0,0.015); border-bottom: 1px solid var(--divider);
+            display: flex; align-items: center; gap: 14px;
         }
-
-        .card-header i {
-            font-size: 22px;
-            color: var(--accent);
-            opacity: 0.8;
-        }
-
-        .card-header h3 {
-            font-size: 16px;
-            font-weight: 600;
-            color: var(--text-primary);
-            letter-spacing: -0.2px;
-        }
-
-        .card-header p {
-            font-size: 11px;
-            color: var(--text-tertiary);
-            margin-top: 2px;
-        }
-
-        .card-body {
-            padding: 20px 24px;
-        }
-
+        .card-header i { font-size: 24px; color: var(--accent); opacity: 1; transition: transform 0.3s ease; }
+        .card:hover .card-header i { transform: rotate(5deg) scale(1.05); }
+        .card-header h3 { font-size: 16px; font-weight: 600; color: var(--text-primary); letter-spacing: -0.2px; }
+        .card-header p { font-size: 11px; color: var(--text-tertiary); margin-top: 2px; }
+        .card-body { padding: 20px 24px; }
         .info-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 12px 0;
-            border-bottom: 1px solid var(--divider);
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 12px 0; border-bottom: 1px solid var(--divider);
         }
-
-        .info-row:last-child {
-            border-bottom: none;
-        }
-
+        .info-row:last-child { border-bottom: none; }
         .info-label {
-            font-size: 13px;
-            color: var(--text-secondary);
-            display: flex;
-            align-items: center;
-            gap: 10px;
+            font-size: 13px; color: var(--text-secondary);
+            display: flex; align-items: center; gap: 10px;
         }
-
-        .info-label i {
-            font-size: 14px;
-            width: 18px;
-            color: var(--accent);
-            opacity: 0.7;
-        }
-
-        .info-value {
-            font-size: 13px;
-            font-weight: 500;
-            font-family: 'SF Mono', 'Monaco', 'Courier New', monospace;
-            color: var(--text-primary);
-        }
-
+        .info-label i { font-size: 16px; width: 18px; color: var(--accent); opacity: 1; }
+        .info-value { font-size: 13px; font-weight: 500; font-family: 'SF Mono','Monaco','Courier New',monospace; color: var(--text-primary); }
         .badge {
-            padding: 4px 12px;
-            border-radius: 14px;
-            font-size: 11px;
-            font-weight: 600;
-            display: inline-flex;
-            align-items: center;
-            gap: 5px;
+            padding: 4px 12px; border-radius: 14px; font-size: 11px; font-weight: 600;
+            display: inline-flex; align-items: center; gap: 5px;
         }
+        .badge-success { background: var(--success-light); color: var(--success); border: 1px solid rgba(52,199,89,0.2); }
+        .badge-warning { background: var(--warning-light); color: #cc7a00; border: 1px solid rgba(255,159,10,0.2); }
+        .badge-danger { background: var(--danger-light); color: var(--danger); border: 1px solid rgba(255,59,48,0.2); }
+        .badge-info { background: var(--accent-light); color: var(--accent); border: 1px solid rgba(0,122,255,0.18); }
+        .badge-purple { background: rgba(175,82,222,0.08); color: #8944ab; border: 1px solid rgba(175,82,222,0.18); }
 
-        .badge-success {
-            background: var(--success-light);
-            color: var(--success);
-            border: 1px solid rgba(52, 199, 89, 0.2);
-        }
-
-        .badge-warning {
-            background: var(--warning-light);
-            color: #cc7a00;
-            border: 1px solid rgba(255, 159, 10, 0.2);
-        }
-
-        .badge-danger {
-            background: var(--danger-light);
-            color: var(--danger);
-            border: 1px solid rgba(255, 59, 48, 0.2);
-        }
-
-        .badge-info {
-            background: var(--accent-light);
-            color: var(--accent);
-            border: 1px solid rgba(0, 122, 255, 0.18);
-        }
-
-        .badge-purple {
-            background: rgba(175, 82, 222, 0.08);
-            color: #8944ab;
-            border: 1px solid rgba(175, 82, 222, 0.18);
-        }
-
-        /* ==================== RTT 显示 ==================== */
         .rtt-display {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 18px;
-            margin-bottom: 24px;
+            display: grid; grid-template-columns: repeat(4,1fr); gap: 18px; margin-bottom: 24px;
         }
-
         .rtt-box {
-            background: rgba(0, 0, 0, 0.02);
-            border-radius: var(--radius-lg);
-            padding: 24px 18px;
-            text-align: center;
-            border: 1px solid var(--border);
-            transition: all var(--transition-smooth);
+            background: rgba(0,0,0,0.02); border-radius: var(--radius-lg); padding: 24px 18px;
+            text-align: center; border: 1px solid var(--border); transition: all var(--transition-smooth);
         }
-
-        .rtt-box:hover {
-            background: rgba(0, 122, 255, 0.03);
-            border-color: var(--border-accent);
-        }
-
-        .rtt-value {
-            font-size: 52px;
-            font-weight: 700;
-            color: var(--text-primary);
-            line-height: 1.15;
-            letter-spacing: -1.5px;
-        }
-
-        .rtt-label {
-            font-size: 12px;
-            color: var(--text-secondary);
-            margin-top: 10px;
-            letter-spacing: 0.2px;
-        }
-
+        .rtt-box:hover { background: rgba(0,122,255,0.03); border-color: var(--border-accent); }
+        .rtt-value { font-size: 52px; font-weight: 700; color: var(--text-primary); line-height: 1.15; letter-spacing: -1.5px; }
+        .rtt-label { font-size: 12px; color: var(--text-secondary); margin-top: 10px; letter-spacing: 0.2px; }
+        .rtt-label i { margin-right: 4px; color: var(--accent); opacity: 0.7; }
         .chart-container {
-            background: rgba(0, 0, 0, 0.015);
-            border-radius: var(--radius-md);
-            padding: 20px;
-            margin: 20px 0;
+            background: rgba(0,0,0,0.015); border-radius: var(--radius-md); padding: 20px; margin: 20px 0;
             border: 1px solid var(--border);
         }
-
-        canvas {
-            width: 100%;
-            height: 180px;
-        }
-
+        canvas { width: 100%; height: 180px; }
         .quality-grid {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 12px;
-            margin-top: 20px;
-            padding-top: 18px;
-            border-top: 1px solid var(--divider);
+            display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin-top: 20px;
+            padding-top: 18px; border-top: 1px solid var(--divider);
         }
-
         .quality-card {
-            background: rgba(0, 0, 0, 0.02);
-            border-radius: var(--radius-md);
-            padding: 14px 16px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            transition: all var(--transition-fast);
-            border: 1px solid transparent;
+            background: rgba(0,0,0,0.02); border-radius: var(--radius-md); padding: 14px 16px;
+            display: flex; align-items: center; justify-content: space-between;
+            transition: all var(--transition-fast); border: 1px solid transparent;
         }
+        .quality-card:hover { background: rgba(0,0,0,0.04); border-color: var(--border); }
+        .quality-label { font-size: 12px; color: var(--text-secondary); display: flex; align-items: center; gap: 7px; }
+        .quality-label i { font-size: 13px; color: var(--accent); opacity: 0.7; }
+        .quality-value { font-size: 15px; font-weight: 600; }
 
-        .quality-card:hover {
-            background: rgba(0, 0, 0, 0.04);
-            border-color: var(--border);
-        }
-
-        .quality-label {
-            font-size: 12px;
-            color: var(--text-secondary);
-            display: flex;
-            align-items: center;
-            gap: 7px;
-        }
-
-        .quality-label i {
-            font-size: 13px;
-            color: var(--accent);
-            opacity: 0.7;
-        }
-
-        .quality-value {
-            font-size: 15px;
-            font-weight: 600;
-        }
-
-        /* ==================== 按钮和结果 ==================== */
-        .button-group {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-            margin-bottom: 20px;
-        }
-
+        .button-group { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
         .btn {
-            padding: 10px 22px;
-            border-radius: 20px;
-            font-size: 13px;
-            font-weight: 500;
-            border: none;
-            cursor: pointer;
-            transition: all var(--transition-fast);
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            font-family: inherit;
-            letter-spacing: -0.1px;
+            padding: 10px 22px; border-radius: 20px; font-size: 13px; font-weight: 500;
+            border: none; cursor: pointer; transition: all var(--transition-fast);
+            display: inline-flex; align-items: center; gap: 8px; font-family: inherit; letter-spacing: -0.1px;
         }
-
-        .btn-primary {
-            background: var(--accent);
-            color: #fff;
-            box-shadow: 0 2px 8px rgba(0, 122, 255, 0.25);
-        }
-
-        .btn-primary:hover {
-            background: var(--accent-hover);
-            box-shadow: 0 4px 14px rgba(0, 122, 255, 0.35);
-            transform: translateY(-1px);
-        }
-
-        .btn-outline {
-            background: rgba(0, 0, 0, 0.03);
-            border: 1px solid var(--border);
-            color: var(--text-primary);
-        }
-
-        .btn-outline:hover {
-            background: rgba(0, 0, 0, 0.06);
-            border-color: rgba(0, 0, 0, 0.12);
-        }
-
-        .btn-cyan {
-            background: #007AFF;
-            color: #fff;
-            box-shadow: 0 2px 8px rgba(0, 122, 255, 0.2);
-        }
-
-        .btn-cyan:hover {
-            background: #0066d6;
-            box-shadow: 0 4px 14px rgba(0, 122, 255, 0.3);
-            transform: translateY(-1px);
-        }
-
-        .btn-purple {
-            background: #5856d6;
-            color: #fff;
-            box-shadow: 0 2px 8px rgba(88, 86, 214, 0.2);
-        }
-
-        .btn-purple:hover {
-            background: #4b49c4;
-            box-shadow: 0 4px 14px rgba(88, 86, 214, 0.3);
-            transform: translateY(-1px);
-        }
+        .btn i { transition: transform 0.2s ease; }
+        .btn:hover i { transform: scale(1.15); }
+        .btn-primary { background: var(--accent); color: #fff; box-shadow: 0 2px 8px rgba(0,122,255,0.25); }
+        .btn-primary:hover { background: var(--accent-hover); box-shadow: 0 4px 14px rgba(0,122,255,0.35); transform: translateY(-1px); }
+        .btn-outline { background: rgba(0,0,0,0.03); border: 1px solid var(--border); color: var(--text-primary); }
+        .btn-outline:hover { background: rgba(0,0,0,0.06); border-color: rgba(0,0,0,0.12); }
+        .btn-cyan { background: #007AFF; color: #fff; box-shadow: 0 2px 8px rgba(0,122,255,0.2); }
+        .btn-cyan:hover { background: #0066d6; box-shadow: 0 4px 14px rgba(0,122,255,0.3); transform: translateY(-1px); }
+        .btn-purple { background: #5856d6; color: #fff; box-shadow: 0 2px 8px rgba(88,86,214,0.2); }
+        .btn-purple:hover { background: #4b49c4; box-shadow: 0 4px 14px rgba(88,86,214,0.3); transform: translateY(-1px); }
 
         .result-area {
-            margin-top: 16px;
-            padding: 14px 18px;
-            background: rgba(0, 0, 0, 0.02);
-            border-radius: var(--radius-sm);
-            font-size: 12px;
-            border-left: 3px solid var(--accent);
-            transition: all var(--transition-fast);
-            color: var(--text-secondary);
+            margin-top: 16px; padding: 14px 18px; background: rgba(0,0,0,0.02);
+            border-radius: var(--radius-sm); font-size: 12px; border-left: 3px solid var(--accent);
+            transition: all var(--transition-fast); color: var(--text-secondary);
         }
-
-        .speed-result {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-            margin-top: 10px;
-        }
-
+        .speed-result { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
         .speed-item {
-            background: var(--accent-glass);
-            border-radius: var(--radius-sm);
-            padding: 8px 14px;
-            font-size: 12px;
-            border-left: 2px solid var(--accent);
-            color: var(--text-primary);
+            background: var(--accent-glass); border-radius: var(--radius-sm); padding: 8px 14px;
+            font-size: 12px; border-left: 2px solid var(--accent); color: var(--text-primary);
         }
-
-        .hw-grid {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-        }
-
+        .hw-grid { display: flex; flex-wrap: wrap; gap: 10px; }
         .hw-chip {
-            background: rgba(0, 0, 0, 0.03);
-            border-radius: 20px;
-            padding: 7px 14px;
-            font-size: 12px;
-            display: inline-flex;
-            align-items: center;
-            gap: 7px;
-            border: 1px solid var(--border);
-            color: var(--text-secondary);
+            background: rgba(0,0,0,0.03); border-radius: 20px; padding: 7px 14px;
+            font-size: 12px; display: inline-flex; align-items: center; gap: 7px;
+            border: 1px solid var(--border); color: var(--text-secondary);
         }
-
-        .hw-chip i {
-            color: var(--accent);
-            opacity: 0.7;
-            font-size: 11px;
-        }
+        .hw-chip i { color: var(--accent); opacity: 0.7; font-size: 11px; }
 
         .footer {
-            margin-top: 28px;
-            padding: 18px 28px;
-            text-align: center;
-            font-size: 12px;
-            color: var(--text-tertiary);
-            display: flex;
-            justify-content: space-between;
-            flex-wrap: wrap;
-            gap: 14px;
-            background: var(--bg-glass);
-            backdrop-filter: blur(24px) saturate(180%);
+            margin-top: 28px; padding: 18px 28px; text-align: center; font-size: 12px;
+            color: var(--text-tertiary); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 14px;
+            background: var(--bg-glass); backdrop-filter: blur(24px) saturate(180%);
             -webkit-backdrop-filter: blur(24px) saturate(180%);
-            border-radius: var(--radius-lg);
-            border: 1px solid var(--border);
+            border-radius: var(--radius-lg); border: 1px solid var(--border);
         }
-
         .copy-btn {
-            background: var(--accent-light);
-            padding: 6px 16px;
-            border-radius: 16px;
-            font-size: 12px;
-            cursor: pointer;
-            transition: all var(--transition-fast);
-            border: 1px solid rgba(0, 122, 255, 0.15);
-            color: var(--accent);
-            font-weight: 500;
+            background: var(--accent-light); padding: 6px 16px; border-radius: 16px; font-size: 12px;
+            cursor: pointer; transition: all var(--transition-fast);
+            border: 1px solid rgba(0,122,255,0.15); color: var(--accent); font-weight: 500;
         }
-
-        .copy-btn:hover {
-            background: rgba(0, 122, 255, 0.14);
-            border-color: rgba(0, 122, 255, 0.3);
-        }
+        .copy-btn:hover { background: rgba(0,122,255,0.14); border-color: rgba(0,122,255,0.3); }
 
         .driver-badge {
-            width: 100%;
-            text-align: center;
-            padding: 10px 20px;
-            margin-top: 14px;
-            background: rgba(0, 0, 0, 0.02);
-            border-radius: 20px;
-            border: 1px solid var(--border);
-            font-size: 11px;
-            color: var(--text-quaternary);
-            letter-spacing: 0.2px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 6px;
+            width: 100%; text-align: center; padding: 10px 20px; margin-top: 14px;
+            background: rgba(0,0,0,0.02); border-radius: 20px; border: 1px solid var(--border);
+            font-size: 11px; color: var(--text-quaternary); letter-spacing: 0.2px;
+            display: flex; align-items: center; justify-content: center; gap: 6px;
         }
+        .driver-badge a { color: var(--accent); text-decoration: none; font-weight: 500; transition: color var(--transition-fast); opacity: 0.7; }
+        .driver-badge a:hover { color: var(--accent-hover); opacity: 1; }
+        .driver-badge i { color: var(--accent); font-size: 10px; opacity: 0.4; }
 
-        .driver-badge a {
-            color: var(--accent);
-            text-decoration: none;
-            font-weight: 500;
-            transition: color var(--transition-fast);
-            opacity: 0.7;
-        }
-
-        .driver-badge a:hover {
-            color: var(--accent-hover);
-            opacity: 1;
-        }
-
-        .driver-badge i {
-            color: var(--accent);
-            font-size: 10px;
-            opacity: 0.4;
-        }
-
-        @keyframes spin {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
-        }
-
+        @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
         .loading {
-            display: inline-block;
-            width: 14px;
-            height: 14px;
-            border: 2px solid rgba(0, 122, 255, 0.2);
-            border-top-color: var(--accent);
-            border-radius: 50%;
-            animation: spin 0.7s linear infinite;
-            margin-right: 8px;
-            vertical-align: middle;
+            display: inline-block; width: 14px; height: 14px;
+            border: 2px solid rgba(0,122,255,0.2); border-top-color: var(--accent);
+            border-radius: 50%; animation: spin 0.7s linear infinite;
+            margin-right: 8px; vertical-align: middle;
         }
 
-        /* ==================== 统计卡片 ==================== */
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 20px;
-            margin-bottom: 24px;
-        }
-
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px,1fr)); gap: 20px; margin-bottom: 24px; }
         .stats-card {
-            background: var(--bg-card);
-            backdrop-filter: blur(24px) saturate(180%);
+            background: var(--bg-card); backdrop-filter: blur(24px) saturate(180%);
             -webkit-backdrop-filter: blur(24px) saturate(180%);
-            border: 1px solid var(--border);
-            border-radius: var(--radius-lg);
-            padding: 22px;
-            overflow: hidden;
-            box-shadow: var(--shadow-xs);
+            border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 22px;
+            overflow: hidden; box-shadow: var(--shadow-xs);
         }
-
         .stats-card .card-header {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 14px;
-            border-bottom: 1px solid var(--divider);
-            padding-bottom: 12px;
-            background: transparent;
+            display: flex; align-items: center; gap: 10px; margin-bottom: 14px;
+            border-bottom: 1px solid var(--divider); padding-bottom: 12px; background: transparent;
         }
+        .stats-card .card-header i { font-size: 18px; color: var(--accent); opacity: 0.8; }
+        .stats-card .card-header h3 { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+        .stats-card .card-header p { font-size: 11px; color: var(--text-tertiary); }
+        .stats-card .card-body { padding: 0; }
 
-        .stats-card .card-header i {
-            font-size: 18px;
-            color: var(--accent);
-            opacity: 0.8;
-        }
-
-        .stats-card .card-header h3 {
-            font-size: 14px;
-            font-weight: 600;
-            color: var(--text-primary);
-        }
-
-        .stats-card .card-header p {
-            font-size: 11px;
-            color: var(--text-tertiary);
-        }
-
-        .stats-card .card-body {
-            padding: 0;
-        }
-
-        .speed-history-table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 12px;
-        }
-
-        .speed-history-table th {
-            text-align: left;
-            padding: 8px 10px;
-            color: var(--text-tertiary);
-            font-weight: 500;
-            border-bottom: 1px solid var(--divider);
-            font-size: 11px;
-        }
-
-        .speed-history-table td {
-            padding: 8px 10px;
-            border-bottom: 1px solid var(--divider);
-            color: var(--text-secondary);
-        }
-
-        .speed-history-table .speed-val {
-            font-weight: 600;
-            color: var(--accent);
-        }
-
+        .speed-history-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        .speed-history-table th { text-align: left; padding: 8px 10px; color: var(--text-tertiary); font-weight: 500; border-bottom: 1px solid var(--divider); font-size: 11px; }
+        .speed-history-table td { padding: 8px 10px; border-bottom: 1px solid var(--divider); color: var(--text-secondary); }
+        .speed-history-table .speed-val { font-weight: 600; color: var(--accent); }
         .speed-history-table .speed-good { color: var(--success); font-weight: 600; }
         .speed-history-table .speed-mid { color: var(--warning); font-weight: 600; }
         .speed-history-table .speed-low { color: var(--danger); font-weight: 600; }
-
         .speed-bar {
-            display: inline-block;
-            height: 5px;
-            border-radius: 3px;
-            margin-right: 6px;
-            vertical-align: middle;
-            background: var(--accent);
-            opacity: 0.5;
+            display: inline-block; height: 5px; border-radius: 3px; margin-right: 6px;
+            vertical-align: middle; background: var(--accent); opacity: 0.5;
         }
 
-        .usage-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 7px 0;
-            border-bottom: 1px solid var(--divider);
-            font-size: 12px;
-        }
+        .usage-row { display: flex; justify-content: space-between; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--divider); font-size: 12px; }
+        .usage-row .ep { color: var(--text-secondary); font-family: 'SF Mono','Monaco','Courier New',monospace; font-size: 11px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .usage-row .count { color: var(--accent); font-weight: 600; }
+        .usage-total { text-align: center; padding: 14px; font-size: 26px; font-weight: 700; color: var(--text-primary); letter-spacing: -0.5px; }
+        .usage-total-label { text-align: center; font-size: 11px; color: var(--text-tertiary); margin-top: 2px; }
+        .no-data { text-align: center; padding: 28px; color: var(--text-quaternary); font-size: 13px; }
 
-        .usage-row .ep {
-            color: var(--text-secondary);
-            font-family: 'SF Mono', 'Monaco', 'Courier New', monospace;
-            font-size: 11px;
-            max-width: 200px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-
-        .usage-row .count {
-            color: var(--accent);
-            font-weight: 600;
-        }
-
-        .usage-total {
-            text-align: center;
-            padding: 14px;
-            font-size: 26px;
-            font-weight: 700;
-            color: var(--text-primary);
-            letter-spacing: -0.5px;
-        }
-
-        .usage-total-label {
-            text-align: center;
-            font-size: 11px;
-            color: var(--text-tertiary);
-            margin-top: 2px;
-        }
-
-        .no-data {
-            text-align: center;
-            padding: 28px;
-            color: var(--text-quaternary);
-            font-size: 13px;
-        }
-
-        /* ====== 新增：多节点对比表格 ====== */
-        .node-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 12px;
-            font-size: 13px;
-        }
-        .node-table th {
-            text-align: left;
-            padding: 8px 12px;
-            background: rgba(0,0,0,0.02);
-            border-bottom: 2px solid var(--border);
-            color: var(--text-secondary);
-            font-weight: 600;
-        }
-        .node-table td {
-            padding: 8px 12px;
-            border-bottom: 1px solid var(--divider);
-            color: var(--text-primary);
-        }
+        .node-table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 13px; }
+        .node-table th { text-align: left; padding: 8px 12px; background: rgba(0,0,0,0.02); border-bottom: 2px solid var(--border); color: var(--text-secondary); font-weight: 600; }
+        .node-table td { padding: 8px 12px; border-bottom: 1px solid var(--divider); color: var(--text-primary); }
         .node-table .good { color: var(--success); font-weight: 600; }
         .node-table .mid { color: var(--warning); font-weight: 600; }
         .node-table .bad { color: var(--danger); font-weight: 600; }
 
-        /* ====== 新增：对话框 ====== */
         .modal-overlay {
-            position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0,0,0,0.5);
-            backdrop-filter: blur(4px);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 1000;
-            opacity: 0;
-            visibility: hidden;
-            transition: all 0.2s ease;
+            position: fixed; top:0; left:0; right:0; bottom:0; background: rgba(0,0,0,0.5);
+            backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center;
+            z-index: 1000; opacity: 0; visibility: hidden; transition: all 0.2s ease;
         }
-        .modal-overlay.active {
-            opacity: 1;
-            visibility: visible;
-        }
+        .modal-overlay.active { opacity: 1; visibility: visible; }
         .modal-box {
-            background: var(--bg-card);
-            backdrop-filter: blur(24px);
-            border-radius: var(--radius-lg);
-            padding: 28px 32px;
-            max-width: 560px;
-            width: 90%;
-            box-shadow: var(--shadow-lg);
+            background: var(--bg-card); backdrop-filter: blur(24px); border-radius: var(--radius-lg);
+            padding: 28px 32px; max-width: 560px; width: 90%; box-shadow: var(--shadow-lg);
             border: 1px solid var(--border);
         }
-        .modal-box h3 {
-            margin-bottom: 16px;
-            font-weight: 600;
-            color: var(--text-primary);
-        }
-        .modal-box p {
-            color: var(--text-secondary);
-            font-size: 13px;
-            margin-bottom: 12px;
-        }
+        .modal-box h3 { margin-bottom: 16px; font-weight: 600; color: var(--text-primary); }
+        .modal-box p { color: var(--text-secondary); font-size: 13px; margin-bottom: 12px; }
         .modal-box textarea {
-            width: 100%;
-            padding: 12px;
-            border-radius: var(--radius-sm);
-            border: 1px solid var(--border);
-            background: var(--bg-primary);
-            color: var(--text-primary);
-            font-family: inherit;
-            font-size: 14px;
-            resize: vertical;
-            min-height: 80px;
+            width: 100%; padding: 12px; border-radius: var(--radius-sm);
+            border: 1px solid var(--border); background: var(--bg-primary); color: var(--text-primary);
+            font-family: inherit; font-size: 14px; resize: vertical; min-height: 80px;
         }
-        .modal-box .btn-group {
-            display: flex;
-            gap: 10px;
-            margin-top: 16px;
-            justify-content: flex-end;
-        }
+        .modal-box .btn-group { display: flex; gap: 10px; margin-top: 16px; justify-content: flex-end; }
 
-        /* ==================== 滚动条 ==================== */
-        ::-webkit-scrollbar {
-            width: 5px;
-            height: 5px;
-        }
-        ::-webkit-scrollbar-track {
-            background: transparent;
-            border-radius: 10px;
-        }
-        ::-webkit-scrollbar-thumb {
-            background: rgba(0, 0, 0, 0.15);
-            border-radius: 10px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: rgba(0, 0, 0, 0.25);
-        }
+        ::-webkit-scrollbar { width:5px; height:5px; }
+        ::-webkit-scrollbar-track { background:transparent; border-radius:10px; }
+        ::-webkit-scrollbar-thumb { background:rgba(0,0,0,0.15); border-radius:10px; }
+        ::-webkit-scrollbar-thumb:hover { background:rgba(0,0,0,0.25); }
 
-        /* ==================== 响应式 ==================== */
-        @media (max-width: 1024px) {
-            .rtt-display { grid-template-columns: repeat(2, 1fr); }
-            .quality-grid { grid-template-columns: repeat(2, 1fr); }
-        }
-        @media (max-width: 768px) {
-            body { padding: 14px; }
-            .container { max-width: 100%; }
-            .grid { grid-template-columns: 1fr; gap: 14px; }
-            .ip-val { font-size: 18px; }
-            .ip-val-small { font-size: 15px; }
-            .header { flex-direction: column; text-align: center; padding: 14px 20px; border-radius: var(--radius-lg); }
-            .logo { flex-direction: column; gap: 8px; }
-            .logo-icon { width: 44px; height: 44px; font-size: 20px; border-radius: var(--radius-sm); }
-            .logo h1 { font-size: 22px; }
-            .button-group { justify-content: center; }
-            .btn { padding: 9px 18px; font-size: 12px; }
-            .rtt-value { font-size: 36px; }
-            .rtt-display { grid-template-columns: 1fr; gap: 12px; }
-            .rtt-box { padding: 18px 14px; }
-            .stats-row { justify-content: center; }
-            .footer { flex-direction: column; text-align: center; padding: 14px 20px; border-radius: var(--radius-md); }
-            .quality-grid { grid-template-columns: 1fr; gap: 10px; }
-            .hero-card { padding: 20px; border-radius: var(--radius-lg); }
-            .rtt-card { min-height: auto; }
-            .rtt-card .card-body { padding: 16px; }
-            .card-header { padding: 14px 18px; }
-            .card-body { padding: 14px 18px; }
-            .stats-grid { grid-template-columns: 1fr; gap: 14px; }
-            .header-right { flex-wrap: wrap; justify-content: center; }
+        @media (max-width:1024px) { .rtt-display { grid-template-columns: repeat(2,1fr); } .quality-grid { grid-template-columns: repeat(2,1fr); } }
+        @media (max-width:768px) {
+            body { padding:14px; } .container { max-width:100%; } .grid { grid-template-columns:1fr; gap:14px; }
+            .ip-val { font-size:18px; } .ip-val-small { font-size:15px; }
+            .header { flex-direction:column; text-align:center; padding:14px 20px; border-radius:var(--radius-lg); }
+            .logo { flex-direction:column; gap:8px; }
+            .logo-icon { width:44px; height:44px; font-size:20px; border-radius:var(--radius-sm); }
+            .logo h1 { font-size:22px; }
+            .button-group { justify-content:center; } .btn { padding:9px 18px; font-size:12px; }
+            .rtt-value { font-size:36px; } .rtt-display { grid-template-columns:1fr; gap:12px; }
+            .rtt-box { padding:18px 14px; } .stats-row { justify-content:center; }
+            .footer { flex-direction:column; text-align:center; padding:14px 20px; border-radius:var(--radius-md); }
+            .quality-grid { grid-template-columns:1fr; gap:10px; }
+            .hero-card { padding:20px; border-radius:var(--radius-lg); }
+            .rtt-card { min-height:auto; } .rtt-card .card-body { padding:16px; }
+            .card-header { padding:14px 18px; } .card-body { padding:14px 18px; }
+            .stats-grid { grid-template-columns:1fr; gap:14px; }
+            .header-right { flex-wrap:wrap; justify-content:center; }
         }
     </style>
 </head>
@@ -1876,24 +1201,18 @@ async function handleRequest(event) {
         <!-- ==================== 头部 ==================== -->
         <div class="header">
             <div class="logo">
-                <div class="logo-icon">
-                    <i class="fas fa-chart-network"></i>
-                </div>
+                <div class="logo-icon"><i class="fas fa-chart-network"></i></div>
                 <div>
                     <h1>NetSight Pro</h1>
-                    <p><i class="fas fa-bolt"></i> 极光诊断 · 实时网络分析</p>
+                    <p><i class="fas fa-bolt"></i> <span id="t-subtitle">极光诊断 · 实时网络分析</span></p>
                 </div>
             </div>
             <div class="header-right">
-                <!-- 主题切换 -->
-                <button class="theme-toggle" id="themeToggle" title="切换主题">
-                    <i class="fas fa-moon"></i>
-                </button>
-                <!-- 语言切换 -->
+                <button class="theme-toggle" id="themeToggle" title="切换主题"><i class="fas fa-moon"></i></button>
                 <div class="lang-switcher">
-                    <button class="lang-btn" data-lang="en" onclick="setLang('en')">EN</button>
-                    <button class="lang-btn" data-lang="zh-CN" onclick="setLang('zh-CN')">简体</button>
-                    <button class="lang-btn" data-lang="zh-TW" onclick="setLang('zh-TW')">繁體</button>
+                    <button class="lang-btn" data-lang="en">EN</button>
+                    <button class="lang-btn" data-lang="zh-CN">简体</button>
+                    <button class="lang-btn" data-lang="zh-TW">繁體</button>
                 </div>
             </div>
         </div>
@@ -1909,8 +1228,8 @@ async function handleRequest(event) {
                 <span id="v6" class="ip-val ip-val-small">检测中...</span>
             </div>
             <div class="stats-row">
-                <div class="stat-item"><i class="fas fa-map-marker-alt"></i> 边缘节点: <strong id="colo-display">${data.colo}</strong></div>
-                <div class="stat-item"><i class="far fa-clock"></i> Worker 耗时: <strong>${workerDuration}ms</strong></div>
+                <div class="stat-item"><i class="fas fa-map-marker-alt"></i> <span id="t-edge-label">边缘节点</span>: <strong id="colo-display">${data.colo}</strong></div>
+                <div class="stat-item"><i class="far fa-clock"></i> <span id="t-worker-label">Worker 耗时</span>: <strong>${workerDuration}ms</strong></div>
                 <div class="stat-item"><span class="live-dot"></span> <span id="t-live">实时监控中</span></div>
             </div>
         </div>
@@ -1921,14 +1240,14 @@ async function handleRequest(event) {
                 <i class="fas fa-waveform"></i>
                 <div>
                     <h3 id="t-rtt">实时延迟监控</h3>
-                    <p>RTT · 抖动 · 实时图表 · 网络质量评估</p>
+                    <p><span id="t-rtt-sub">RTT · 抖动 · 实时图表 · 网络质量评估</span></p>
                 </div>
             </div>
             <div class="card-body">
                 <div class="rtt-display">
                     <div class="rtt-box">
                         <div class="rtt-value" id="rtt-num">--</div>
-                        <div class="rtt-label"><i class="fas fa-arrow-right"></i> 当前 RTT (ms)</div>
+                        <div class="rtt-label"><i class="fas fa-arrow-right"></i> <span id="t-rtt-current">当前 RTT</span> (ms)</div>
                     </div>
                     <div class="rtt-box">
                         <div class="rtt-value" id="jitter-val">--</div>
@@ -1936,33 +1255,29 @@ async function handleRequest(event) {
                     </div>
                     <div class="rtt-box">
                         <div class="rtt-value" id="min-rtt">--</div>
-                        <div class="rtt-label"><i class="fas fa-arrow-down"></i> 最低 RTT (ms)</div>
+                        <div class="rtt-label"><i class="fas fa-arrow-down"></i> <span id="t-rtt-min">最低 RTT</span> (ms)</div>
                     </div>
                     <div class="rtt-box">
                         <div class="rtt-value" id="max-rtt">--</div>
-                        <div class="rtt-label"><i class="fas fa-arrow-up"></i> 最高 RTT (ms)</div>
+                        <div class="rtt-label"><i class="fas fa-arrow-up"></i> <span id="t-rtt-max">最高 RTT</span> (ms)</div>
                     </div>
                 </div>
-                
-                <div class="chart-container">
-                    <canvas id="chart"></canvas>
-                </div>
-                
+                <div class="chart-container"><canvas id="chart"></canvas></div>
                 <div class="quality-grid">
                     <div class="quality-card">
-                        <span class="quality-label"><i class="fas fa-signal"></i> 连接质量</span>
+                        <span class="quality-label"><i class="fas fa-signal"></i> <span id="t-quality">连接质量</span></span>
                         <span class="quality-value" id="quality-badge" style="color: var(--chart-green);">优秀</span>
                     </div>
                     <div class="quality-card">
-                        <span class="quality-label"><i class="fas fa-chart-simple"></i> 网络稳定性</span>
+                        <span class="quality-label"><i class="fas fa-chart-simple"></i> <span id="t-stability">网络稳定性</span></span>
                         <span class="quality-value" id="stability-badge" style="color: var(--chart-teal);">稳定</span>
                     </div>
                     <div class="quality-card">
-                        <span class="quality-label"><i class="fas fa-chart-bar"></i> 样本数量</span>
+                        <span class="quality-label"><i class="fas fa-chart-bar"></i> <span id="t-samples">样本数量</span></span>
                         <span class="quality-value" id="sample-count" style="font-family: monospace;">0</span>
                     </div>
                     <div class="quality-card">
-                        <span class="quality-label"><i class="fas fa-exchange-alt"></i> 丢包率</span>
+                        <span class="quality-label"><i class="fas fa-exchange-alt"></i> <span id="t-loss">丢包率</span></span>
                         <span class="quality-value" id="loss-rate" style="color: var(--chart-green);">0%</span>
                     </div>
                 </div>
@@ -1977,7 +1292,7 @@ async function handleRequest(event) {
                     <i class="fas fa-shield-haltered"></i>
                     <div>
                         <h3 id="t-sec">安全与协议</h3>
-                        <p>TLS · 加密 · 身份验证</p>
+                        <p><span id="t-sec-sub">TLS · 加密 · 身份验证</span></p>
                     </div>
                 </div>
                 <div class="card-body">
@@ -1990,7 +1305,7 @@ async function handleRequest(event) {
                         <span class="info-value" id="s-risk">---</span>
                     </div>
                     <div class="info-row">
-                        <span class="info-label"><i class="fas fa-network-wired"></i> ASN</span>
+                        <span class="info-label"><i class="fas fa-network-wired"></i> <span id="t-asn">ASN</span></span>
                         <span class="info-value">${data.asn}</span>
                     </div>
                     <div class="info-row">
@@ -1998,12 +1313,12 @@ async function handleRequest(event) {
                         <span class="info-value" id="proto-val">${data.proto}</span>
                     </div>
                     <div class="info-row">
-                        <span class="info-label"><i class="fas fa-lock"></i> TLS 版本</span>
+                        <span class="info-label"><i class="fas fa-lock"></i> <span id="t-tls-version">TLS 版本</span></span>
                         <span class="info-value"><span class="badge badge-info">${data.tlsVersion}</span></span>
                     </div>
                     <div class="info-row">
-                        <span class="info-label"><i class="fas fa-key"></i> <span id="t-cipher-label">加密套件</span></span>
-                        <span class="info-value" style="font-size: 11px; font-family: monospace;">${data.tlsCipher}</span>
+                        <span class="info-label"><i class="fas fa-key"></i> <span id="t-cipher">加密套件</span></span>
+                        <span class="info-value" style="font-size:11px;font-family:monospace;">${data.tlsCipher}</span>
                     </div>
                     <div class="info-row">
                         <span class="info-label"><i class="fas fa-eye"></i> ECH</span>
@@ -2030,24 +1345,24 @@ async function handleRequest(event) {
                     <i class="fas fa-map-pin"></i>
                     <div>
                         <h3 id="t-geo">边缘节点位置</h3>
-                        <p>Cloudflare 数据中心</p>
+                        <p><span id="t-geo-sub">Cloudflare 数据中心</span></p>
                     </div>
                 </div>
                 <div class="card-body">
-                    <div style="text-align: center; margin-bottom: 20px;">
-                        <i class="fas fa-globe-asia" style="font-size: 48px; color: var(--chart-cyan); opacity: 0.7;"></i>
+                    <div style="text-align:center;margin-bottom:20px;">
+                        <i class="fas fa-globe-asia" style="font-size:48px;color:var(--chart-cyan);opacity:0.7;"></i>
                     </div>
                     <div class="info-row">
-                        <span class="info-label"><i class="fas fa-location-dot"></i> 位置</span>
+                        <span class="info-label"><i class="fas fa-location-dot"></i> <span id="t-geo-location">位置</span></span>
                         <span class="info-value">${data.city}, ${data.region}, ${data.country}</span>
                     </div>
                     <div class="info-row">
-                        <span class="info-label"><i class="fas fa-crosshairs"></i> 坐标</span>
+                        <span class="info-label"><i class="fas fa-crosshairs"></i> <span id="t-geo-coord">坐标</span></span>
                         <span class="info-value">${data.lat}°${data.latDir} / ${data.lon}°${data.lonDir}</span>
                     </div>
                     <div class="info-row">
-                        <span class="info-label"><i class="fas fa-building"></i> 运营商</span>
-                        <span class="info-value" style="font-size: 12px;">${data.asOrg}</span>
+                        <span class="info-label"><i class="fas fa-building"></i> <span id="t-geo-org">运营商</span></span>
+                        <span class="info-value" style="font-size:12px;">${data.asOrg}</span>
                     </div>
                 </div>
             </div>
@@ -2058,24 +1373,22 @@ async function handleRequest(event) {
                     <i class="fas fa-user-secret"></i>
                     <div>
                         <h3 id="t-user-geo">真实 IP 位置</h3>
-                        <p>客户端地理位置 & 风险评分</p>
+                        <p><span id="t-user-geo-sub">客户端地理位置 & 风险评分</span></p>
                     </div>
                 </div>
                 <div class="card-body" id="user-geo-info">
-                    <div style="text-align: center; padding: 30px;">
-                        <i class="fas fa-spinner fa-spin"></i> 定位中...
-                    </div>
+                    <div style="text-align:center;padding:30px;"><i class="fas fa-spinner fa-spin"></i> <span id="t-geo-loading">定位中...</span></div>
                 </div>
             </div>
         </div>
 
         <!-- ==================== 诊断工具集 ==================== -->
-        <div class="card" style="margin-bottom: 28px;">
+        <div class="card" style="margin-bottom:28px;">
             <div class="card-header">
                 <i class="fas fa-flask"></i>
                 <div>
-                    <h3>诊断工具集</h3>
-                    <p>一键测试 · 全面诊断</p>
+                    <h3><span id="t-tools-title">诊断工具集</span></h3>
+                    <p><span id="t-tools-sub">一键测试 · 全面诊断</span></p>
                 </div>
             </div>
             <div class="card-body">
@@ -2088,20 +1401,17 @@ async function handleRequest(event) {
                     <button class="btn btn-cyan" id="btn-concurrent-test"><i class="fas fa-layer-group"></i> <span id="t-concurrent-btn">并发测试</span></button>
                     <button class="btn btn-outline" id="btn-stream-test"><i class="fas fa-stream"></i> <span id="t-stream-btn">流式传输</span></button>
                     <button class="btn btn-outline" id="btn-media-unlock"><i class="fas fa-play-circle"></i> <span id="t-media-btn">流媒体连通性</span></button>
-                    <!-- 多节点对比 -->
                     <button class="btn btn-outline" id="btn-multi-node"><i class="fas fa-globe-asia"></i> <span id="t-multi-btn">多节点对比</span></button>
                 </div>
-
-                <!-- 结果区域 -->
-                <div id="loss-result" class="result-area" style="display: none;"></div>
-                <div id="speed-result" style="display: none;"></div>
-                <div id="dns-result" class="result-area" style="display: none;"></div>
-                <div id="cpu-result" class="result-area" style="display: none;"></div>
-                <div id="ws-result" class="result-area" style="display: none;"></div>
-                <div id="concurrent-result" class="result-area" style="display: none;"></div>
-                <div id="stream-result" class="result-area" style="display: none;"></div>
-                <div id="media-result" class="result-area" style="display: none;"></div>
-                <div id="multi-node-result" class="result-area" style="display: none;"></div>
+                <div id="loss-result" class="result-area" style="display:none;"></div>
+                <div id="speed-result" style="display:none;"></div>
+                <div id="dns-result" class="result-area" style="display:none;"></div>
+                <div id="cpu-result" class="result-area" style="display:none;"></div>
+                <div id="ws-result" class="result-area" style="display:none;"></div>
+                <div id="concurrent-result" class="result-area" style="display:none;"></div>
+                <div id="stream-result" class="result-area" style="display:none;"></div>
+                <div id="media-result" class="result-area" style="display:none;"></div>
+                <div id="multi-node-result" class="result-area" style="display:none;"></div>
             </div>
         </div>
 
@@ -2111,7 +1421,7 @@ async function handleRequest(event) {
                 <i class="fas fa-desktop"></i>
                 <div>
                     <h3 id="t-hw">硬件信息</h3>
-                    <p>客户端环境</p>
+                    <p><span id="t-hw-sub">客户端环境</span></p>
                 </div>
             </div>
             <div class="card-body">
@@ -2125,45 +1435,41 @@ async function handleRequest(event) {
                 <div class="card-header">
                     <i class="fas fa-chart-line"></i>
                     <div>
-                        <h3>测速历史</h3>
-                        <p>最近 10 条带宽测速记录</p>
+                        <h3><span id="t-history-title">测速历史</span></h3>
+                        <p><span id="t-history-sub">最近 10 条带宽测速记录</span></p>
                     </div>
                 </div>
                 <div class="card-body" id="speed-history-panel">
-                    <div class="no-data"><i class="fas fa-inbox"></i> 暂无测速记录</div>
+                    <div class="no-data"><i class="fas fa-inbox"></i> <span id="t-no-records">暂无测速记录</span></div>
                 </div>
             </div>
             <div class="stats-card">
                 <div class="card-header">
                     <i class="fas fa-chart-bar"></i>
                     <div>
-                        <h3>用量统计</h3>
-                        <p>API 端点调用统计</p>
+                        <h3><span id="t-usage-title">用量统计</span></h3>
+                        <p><span id="t-usage-sub">API 端点调用统计</span></p>
                     </div>
                 </div>
                 <div class="card-body" id="usage-stats-panel">
-                    <div class="no-data"><i class="fas fa-spinner fa-spin"></i> 加载中...</div>
+                    <div class="no-data"><i class="fas fa-spinner fa-spin"></i> <span id="t-loading-stats">加载中...</span></div>
                 </div>
             </div>
         </div>
 
         <!-- ==================== 底部 ==================== -->
         <div class="footer">
-            <span><i class="fas fa-fingerprint"></i> RAY ID: <span style="font-family: monospace;">${data.rayId}</span></span>
-            <span><i class="fas fa-ip"></i> 客户端: ${data.clientIp}</span>
+            <span><i class="fas fa-fingerprint"></i> RAY ID: <span style="font-family:monospace;">${data.rayId}</span></span>
+            <span><i class="fas fa-ip"></i> <span id="t-client-label">客户端</span>: ${data.clientIp}</span>
             <span class="copy-btn" id="copy-report"><i class="fas fa-copy"></i> <span id="t-copy">复制报告</span></span>
         </div>
 
         <div class="driver-badge">
             <i class="fas fa-bolt"></i>
-            由 
-            <a href="https://github.com/BlueDriftHK/CF-workers-netdiag" 
-               target="_blank" 
-               rel="noopener noreferrer">
-                CF-workers-netdiag
-            </a>
-            <span style="color: var(--text-quaternary);">·</span>
-            <span style="color: var(--text-quaternary);">强力驱动</span>
+            <span id="t-powered">由</span>
+            <a href="https://github.com/BlueDriftHK/CF-workers-netdiag" target="_blank" rel="noopener noreferrer">CF-workers-netdiag</a>
+            <span style="color:var(--text-quaternary);">·</span>
+            <span style="color:var(--text-quaternary);"><span id="t-driven">强力驱动</span></span>
             <i class="fas fa-rocket"></i>
         </div>
     </div>
@@ -2183,29 +1489,96 @@ async function handleRequest(event) {
 
     <script nonce="${nonce}">
         (function(){
-            // ==================== 国际化 ====================
+            // ==================== 国际化（全界面覆盖） ====================
             const i18n = {
                 'en': {
-                    sec: 'Security & Protocol', geo: 'Edge Location', userGeo: 'Client Location',
-                    rtt: 'Real-time RTT', hw: 'Hardware Info', live: 'Live Monitoring',
-                    risk: 'Risk Level', clean: 'Low Risk', high: 'High Risk', yes: 'YES', no: 'NO',
-                    unavailable: 'Unavailable', copy: 'Copy Report', copied: 'Copied!',
-                    dcLabel: 'DC / Proxy', protoLabel: 'Protocol', echLabel: 'ECH',
-                    echEnabled: 'Enabled', echDisabled: 'Disabled', botLabel: 'Bot Score',
-                    lossBtn: 'Packet Loss', speedBtn: 'Bandwidth', dnsBtn: 'DNS',
-                    cpuBtn: 'CPU', wsBtn: 'WebSocket', concurrentBtn: 'Concurrent', streamBtn: 'Stream',
-                    lossTesting: 'Testing...', lossNone: '0% (no loss)',
-                    jitter: 'Jitter', dnsTesting: 'Testing DNS...',
-                    speedTesting: 'Testing bandwidth...', cpuTesting: 'CPU benchmark...',
-                    wsTesting: 'WebSocket latency...', concurrentTesting: 'Concurrency test...',
-                    streamTesting: 'Stream throughput...', compressLabel: 'Compression',
-                    http2Label: 'HTTP/2', lossResult: 'Loss', http2Enabled: 'HTTP/2 Enabled',
-                    http2Disabled: 'HTTP/1.1', earlyHints: 'Early Hints',
-                    mediaTesting: 'Testing connectivity from your IP...', mediaBtn: 'Streaming Connectivity',
-                    fraudScore: 'Fraud Score', proxy: 'Proxy', vpn: 'VPN', tor: 'Tor', hosting: 'Hosting',
-                    fraudLow: 'Low Risk', fraudMedium: 'Medium Risk', fraudHigh: 'High Risk',
-                    fraudUnknown: 'Unknown',
+                    // 头部
+                    subtitle: 'Aurora Diagnostics · Real-time Network Analysis',
+                    edgeLabel: 'Edge Node',
+                    workerLabel: 'Worker Time',
+                    live: 'Live Monitoring',
+                    // RTT
+                    rtt: 'Real-time RTT',
+                    rttSub: 'RTT · Jitter · Live Chart · Network Quality',
+                    rttCurrent: 'Current RTT',
+                    jitter: 'Jitter',
+                    rttMin: 'Min RTT',
+                    rttMax: 'Max RTT',
+                    quality: 'Connection Quality',
+                    stability: 'Network Stability',
+                    samples: 'Samples',
+                    loss: 'Loss Rate',
+                    // 卡片标题
+                    sec: 'Security & Protocol',
+                    secSub: 'TLS · Encryption · Authentication',
+                    geo: 'Edge Location',
+                    geoSub: 'Cloudflare Data Center',
+                    userGeo: 'Client Location',
+                    userGeoSub: 'Client Geolocation & Risk Score',
+                    geoLoading: 'Locating...',
+                    // 工具集
+                    toolsTitle: 'Diagnostic Tools',
+                    toolsSub: 'One-Click Tests · Full Diagnosis',
+                    lossBtn: 'Packet Loss',
+                    speedBtn: 'Bandwidth',
+                    dnsBtn: 'DNS',
+                    cpuBtn: 'CPU',
+                    wsBtn: 'WebSocket',
+                    concurrentBtn: 'Concurrent',
+                    streamBtn: 'Stream',
+                    mediaBtn: 'Streaming Connectivity',
                     multiBtn: 'Multi-Node Compare',
+                    // 安全与协议字段
+                    dcLabel: 'DC / Proxy',
+                    risk: 'Risk Level',
+                    asn: 'ASN',
+                    protoLabel: 'Protocol',
+                    tlsVersion: 'TLS Version',
+                    cipher: 'Cipher Suite',
+                    echLabel: 'ECH',
+                    compressLabel: 'Compression',
+                    http2Label: 'HTTP/2',
+                    botLabel: 'Bot Score',
+                    // 地理位置
+                    geoLocation: 'Location',
+                    geoCoord: 'Coordinates',
+                    geoOrg: 'ISP',
+                    // 用户地理位置
+                    userLocation: 'Location',
+                    userDistance: 'Distance to Node',
+                    userOrg: 'ISP',
+                    userIp: 'IP Address',
+                    // 硬件
+                    hw: 'Hardware Info',
+                    hwSub: 'Client Environment',
+                    // 历史/统计
+                    historyTitle: 'Speed History',
+                    historySub: 'Last 10 Bandwidth Records',
+                    noRecords: 'No speed records',
+                    usageTitle: 'Usage Statistics',
+                    usageSub: 'API Endpoint Calls',
+                    loadingStats: 'Loading...',
+                    // 底部
+                    clientLabel: 'Client',
+                    copy: 'Copy Report',
+                    copied: 'Copied!',
+                    powered: 'Powered by',
+                    driven: 'Driven',
+                    // 状态
+                    yes: 'YES', no: 'NO',
+                    clean: 'Low Risk', high: 'High Risk',
+                    unavailable: 'Unavailable',
+                    // 测试结果
+                    lossTesting: 'Testing...',
+                    lossNone: '0% (no loss)',
+                    lossResult: 'Loss',
+                    dnsTesting: 'Testing DNS...',
+                    speedTesting: 'Testing bandwidth...',
+                    cpuTesting: 'CPU benchmark...',
+                    wsTesting: 'WebSocket latency...',
+                    concurrentTesting: 'Concurrency test...',
+                    streamTesting: 'Stream throughput...',
+                    mediaTesting: 'Testing connectivity from your IP...',
                     multiTesting: 'Comparing nodes...',
                     multiResult: 'Node Comparison Result',
                     nodeName: 'Node',
@@ -2213,29 +1586,99 @@ async function handleRequest(event) {
                     status: 'Status',
                     enterNodeUrls: 'Enter node URLs (one per line)',
                     cancel: 'Cancel',
-                    start: 'Start Test'
+                    start: 'Start Test',
+                    // 欺诈
+                    fraudScore: 'Fraud Score',
+                    proxy: 'Proxy',
+                    vpn: 'VPN',
+                    tor: 'Tor',
+                    hosting: 'Hosting',
+                    fraudLow: 'Low Risk',
+                    fraudMedium: 'Medium Risk',
+                    fraudHigh: 'High Risk',
+                    fraudUnknown: 'Unknown',
+                    echEnabled: 'Enabled',
+                    echDisabled: 'Disabled',
+                    http2Enabled: 'HTTP/2 Enabled',
+                    http2Disabled: 'HTTP/1.1',
+                    earlyHints: 'Early Hints'
                 },
                 'zh-CN': {
-                    sec: '安全与协议', geo: '边缘节点位置', userGeo: '真实 IP 位置',
-                    rtt: '实时延迟监控', hw: '硬件信息', live: '实时监控',
-                    risk: '风险等级', clean: '低风险', high: '高风险', yes: '是', no: '否',
-                    unavailable: '获取失败', copy: '复制报告', copied: '已复制!',
-                    dcLabel: '数据中心/代理', protoLabel: '协议', echLabel: 'ECH',
-                    echEnabled: '已启用', echDisabled: '未启用', botLabel: '机器人评分',
-                    lossBtn: '丢包率', speedBtn: '带宽测速', dnsBtn: 'DNS 解析',
-                    cpuBtn: 'CPU 性能', wsBtn: 'WebSocket', concurrentBtn: '并发测试', streamBtn: '流式传输',
-                    lossTesting: '测试中...', lossNone: '0% (无丢包)',
-                    jitter: '抖动', dnsTesting: '正在测试 DNS...',
-                    speedTesting: '正在测速...', cpuTesting: 'CPU 基准测试...',
-                    wsTesting: 'WebSocket 延迟测试...', concurrentTesting: '并发测试中...',
-                    streamTesting: '流式吞吐量测试...', compressLabel: '压缩算法',
-                    http2Label: 'HTTP/2 状态', lossResult: '丢包率', http2Enabled: 'HTTP/2 已启用',
-                    http2Disabled: 'HTTP/1.1', earlyHints: 'Early Hints',
-                    mediaTesting: '正在检测您 IP 的连通性...', mediaBtn: '流媒体连通性',
-                    fraudScore: '欺诈评分', proxy: '代理', vpn: 'VPN', tor: 'Tor', hosting: '托管',
-                    fraudLow: '低风险', fraudMedium: '中风险', fraudHigh: '高风险',
-                    fraudUnknown: '未知',
+                    subtitle: '极光诊断 · 实时网络分析',
+                    edgeLabel: '边缘节点',
+                    workerLabel: 'Worker 耗时',
+                    live: '实时监控',
+                    rtt: '实时延迟监控',
+                    rttSub: 'RTT · 抖动 · 实时图表 · 网络质量评估',
+                    rttCurrent: '当前 RTT',
+                    jitter: '抖动',
+                    rttMin: '最低 RTT',
+                    rttMax: '最高 RTT',
+                    quality: '连接质量',
+                    stability: '网络稳定性',
+                    samples: '样本数量',
+                    loss: '丢包率',
+                    sec: '安全与协议',
+                    secSub: 'TLS · 加密 · 身份验证',
+                    geo: '边缘节点位置',
+                    geoSub: 'Cloudflare 数据中心',
+                    userGeo: '真实 IP 位置',
+                    userGeoSub: '客户端地理位置 & 风险评分',
+                    geoLoading: '定位中...',
+                    toolsTitle: '诊断工具集',
+                    toolsSub: '一键测试 · 全面诊断',
+                    lossBtn: '丢包率',
+                    speedBtn: '带宽测速',
+                    dnsBtn: 'DNS 解析',
+                    cpuBtn: 'CPU 性能',
+                    wsBtn: 'WebSocket',
+                    concurrentBtn: '并发测试',
+                    streamBtn: '流式传输',
+                    mediaBtn: '流媒体连通性',
                     multiBtn: '多节点对比',
+                    dcLabel: '数据中心/代理',
+                    risk: '风险等级',
+                    asn: 'ASN',
+                    protoLabel: '协议',
+                    tlsVersion: 'TLS 版本',
+                    cipher: '加密套件',
+                    echLabel: 'ECH',
+                    compressLabel: '压缩算法',
+                    http2Label: 'HTTP/2 状态',
+                    botLabel: '机器人评分',
+                    geoLocation: '位置',
+                    geoCoord: '坐标',
+                    geoOrg: '运营商',
+                    userLocation: '位置',
+                    userDistance: '到节点距离',
+                    userOrg: '运营商',
+                    userIp: 'IP 地址',
+                    hw: '硬件信息',
+                    hwSub: '客户端环境',
+                    historyTitle: '测速历史',
+                    historySub: '最近 10 条带宽测速记录',
+                    noRecords: '暂无测速记录',
+                    usageTitle: '用量统计',
+                    usageSub: 'API 端点调用统计',
+                    loadingStats: '加载中...',
+                    clientLabel: '客户端',
+                    copy: '复制报告',
+                    copied: '已复制!',
+                    powered: '由',
+                    driven: '强力驱动',
+                    yes: '是', no: '否',
+                    clean: '低风险', high: '高风险',
+                    unavailable: '获取失败',
+                    lossTesting: '测试中...',
+                    lossNone: '0% (无丢包)',
+                    lossResult: '丢包率',
+                    dnsTesting: '正在测试 DNS...',
+                    speedTesting: '正在测速...',
+                    cpuTesting: 'CPU 基准测试...',
+                    wsTesting: 'WebSocket 延迟测试...',
+                    concurrentTesting: '并发测试中...',
+                    streamTesting: '流式吞吐量测试...',
+                    mediaTesting: '正在检测您 IP 的连通性...',
                     multiTesting: '正在对比节点...',
                     multiResult: '节点对比结果',
                     nodeName: '节点',
@@ -2243,29 +1686,98 @@ async function handleRequest(event) {
                     status: '状态',
                     enterNodeUrls: '输入节点 URL（每行一个）',
                     cancel: '取消',
-                    start: '开始测试'
+                    start: '开始测试',
+                    fraudScore: '欺诈评分',
+                    proxy: '代理',
+                    vpn: 'VPN',
+                    tor: 'Tor',
+                    hosting: '托管',
+                    fraudLow: '低风险',
+                    fraudMedium: '中风险',
+                    fraudHigh: '高风险',
+                    fraudUnknown: '未知',
+                    echEnabled: '已启用',
+                    echDisabled: '未启用',
+                    http2Enabled: 'HTTP/2 已启用',
+                    http2Disabled: 'HTTP/1.1',
+                    earlyHints: 'Early Hints'
                 },
                 'zh-TW': {
-                    sec: '安全與協議', geo: '邊緣節點位置', userGeo: '真實 IP 位置',
-                    rtt: '即時延遲監控', hw: '硬體資訊', live: '即時監控',
-                    risk: '風險等級', clean: '低風險', high: '高風險', yes: '是', no: '否',
-                    unavailable: '獲取失敗', copy: '複製報告', copied: '已複製!',
-                    dcLabel: '資料中心/代理', protoLabel: '協議', echLabel: 'ECH',
-                    echEnabled: '已啟用', echDisabled: '未啟用', botLabel: '機器人評分',
-                    lossBtn: '丟包率', speedBtn: '頻寬測速', dnsBtn: 'DNS 解析',
-                    cpuBtn: 'CPU 性能', wsBtn: 'WebSocket', concurrentBtn: '併發測試', streamBtn: '串流傳輸',
-                    lossTesting: '測試中...', lossNone: '0% (無丟包)',
-                    jitter: '抖動', dnsTesting: '正在測試 DNS...',
-                    speedTesting: '正在測速...', cpuTesting: 'CPU 基準測試...',
-                    wsTesting: 'WebSocket 延遲測試...', concurrentTesting: '併發測試中...',
-                    streamTesting: '串流吞吐量測試...', compressLabel: '壓縮演算法',
-                    http2Label: 'HTTP/2 狀態', lossResult: '丟包率', http2Enabled: 'HTTP/2 已啟用',
-                    http2Disabled: 'HTTP/1.1', earlyHints: 'Early Hints',
-                    mediaTesting: '正在檢測您 IP 的連通性...', mediaBtn: '串流媒體連通性',
-                    fraudScore: '詐欺評分', proxy: '代理', vpn: 'VPN', tor: 'Tor', hosting: '託管',
-                    fraudLow: '低風險', fraudMedium: '中風險', fraudHigh: '高風險',
-                    fraudUnknown: '未知',
+                    subtitle: '極光診斷 · 即時網路分析',
+                    edgeLabel: '邊緣節點',
+                    workerLabel: 'Worker 耗時',
+                    live: '即時監控',
+                    rtt: '即時延遲監控',
+                    rttSub: 'RTT · 抖動 · 即時圖表 · 網路品質評估',
+                    rttCurrent: '當前 RTT',
+                    jitter: '抖動',
+                    rttMin: '最低 RTT',
+                    rttMax: '最高 RTT',
+                    quality: '連線品質',
+                    stability: '網路穩定性',
+                    samples: '樣本數量',
+                    loss: '丟包率',
+                    sec: '安全與協議',
+                    secSub: 'TLS · 加密 · 身份驗證',
+                    geo: '邊緣節點位置',
+                    geoSub: 'Cloudflare 資料中心',
+                    userGeo: '真實 IP 位置',
+                    userGeoSub: '客戶端地理位置 & 風險評分',
+                    geoLoading: '定位中...',
+                    toolsTitle: '診斷工具集',
+                    toolsSub: '一鍵測試 · 全面診斷',
+                    lossBtn: '丟包率',
+                    speedBtn: '頻寬測速',
+                    dnsBtn: 'DNS 解析',
+                    cpuBtn: 'CPU 性能',
+                    wsBtn: 'WebSocket',
+                    concurrentBtn: '併發測試',
+                    streamBtn: '串流傳輸',
+                    mediaBtn: '串流媒體連通性',
                     multiBtn: '多節點對比',
+                    dcLabel: '資料中心/代理',
+                    risk: '風險等級',
+                    asn: 'ASN',
+                    protoLabel: '協議',
+                    tlsVersion: 'TLS 版本',
+                    cipher: '加密套件',
+                    echLabel: 'ECH',
+                    compressLabel: '壓縮演算法',
+                    http2Label: 'HTTP/2 狀態',
+                    botLabel: '機器人評分',
+                    geoLocation: '位置',
+                    geoCoord: '座標',
+                    geoOrg: '運營商',
+                    userLocation: '位置',
+                    userDistance: '到節點距離',
+                    userOrg: '運營商',
+                    userIp: 'IP 位址',
+                    hw: '硬體資訊',
+                    hwSub: '客戶端環境',
+                    historyTitle: '測速歷史',
+                    historySub: '最近 10 條頻寬測速記錄',
+                    noRecords: '暫無測速記錄',
+                    usageTitle: '用量統計',
+                    usageSub: 'API 端點呼叫統計',
+                    loadingStats: '載入中...',
+                    clientLabel: '客戶端',
+                    copy: '複製報告',
+                    copied: '已複製!',
+                    powered: '由',
+                    driven: '強力驅動',
+                    yes: '是', no: '否',
+                    clean: '低風險', high: '高風險',
+                    unavailable: '獲取失敗',
+                    lossTesting: '測試中...',
+                    lossNone: '0% (無丟包)',
+                    lossResult: '丟包率',
+                    dnsTesting: '正在測試 DNS...',
+                    speedTesting: '正在測速...',
+                    cpuTesting: 'CPU 基準測試...',
+                    wsTesting: 'WebSocket 延遲測試...',
+                    concurrentTesting: '併發測試中...',
+                    streamTesting: '串流吞吐量測試...',
+                    mediaTesting: '正在檢測您 IP 的連通性...',
                     multiTesting: '正在對比節點...',
                     multiResult: '節點對比結果',
                     nodeName: '節點',
@@ -2273,7 +1785,21 @@ async function handleRequest(event) {
                     status: '狀態',
                     enterNodeUrls: '輸入節點 URL（每行一個）',
                     cancel: '取消',
-                    start: '開始測試'
+                    start: '開始測試',
+                    fraudScore: '詐欺評分',
+                    proxy: '代理',
+                    vpn: 'VPN',
+                    tor: 'Tor',
+                    hosting: '託管',
+                    fraudLow: '低風險',
+                    fraudMedium: '中風險',
+                    fraudHigh: '高風險',
+                    fraudUnknown: '未知',
+                    echEnabled: '已啟用',
+                    echDisabled: '未啟用',
+                    http2Enabled: 'HTTP/2 已啟用',
+                    http2Disabled: 'HTTP/1.1',
+                    earlyHints: 'Early Hints'
                 }
             };
 
@@ -2372,34 +1898,89 @@ async function handleRequest(event) {
                 }
             }
 
-            // ==================== UI 更新 ====================
+            // ==================== UI 更新（全界面国际化） ====================
             function updateUI() {
                 const t = i18n[currentLang];
-                const textIds = {
-                    't-sec': t.sec, 't-geo': t.geo, 't-user-geo': t.userGeo,
-                    't-rtt': t.rtt, 't-hw': t.hw, 't-live': t.live,
-                    't-risk': t.risk, 't-copy': t.copy,
-                    't-dc-label': t.dcLabel, 't-proto-label': t.protoLabel,
-                    't-ech-label': t.echLabel, 't-bot-label': t.botLabel,
-                    't-jitter': t.jitter, 't-loss-btn': t.lossBtn,
-                    't-speed-btn': t.speedBtn, 't-dns-btn': t.dnsBtn,
-                    't-cpu-btn': t.cpuBtn, 't-ws-btn': t.wsBtn,
-                    't-concurrent-btn': t.concurrentBtn, 't-stream-btn': t.streamBtn,
-                    't-compress-label': t.compressLabel, 't-http2-label': t.http2Label,
-                    't-media-btn': t.mediaBtn, 't-multi-btn': t.multiBtn,
-                    'modal-title': t.multiBtn, 'modal-desc': t.enterNodeUrls,
-                    'modal-cancel': t.cancel, 'modal-start': t.start
+                // 所有需要国际化的文本 ID 与对应的 i18n 键
+                const map = {
+                    't-subtitle': t.subtitle,
+                    't-edge-label': t.edgeLabel,
+                    't-worker-label': t.workerLabel,
+                    't-live': t.live,
+                    't-rtt': t.rtt,
+                    't-rtt-sub': t.rttSub,
+                    't-rtt-current': t.rttCurrent,
+                    't-jitter': t.jitter,
+                    't-rtt-min': t.rttMin,
+                    't-rtt-max': t.rttMax,
+                    't-quality': t.quality,
+                    't-stability': t.stability,
+                    't-samples': t.samples,
+                    't-loss': t.loss,
+                    't-sec': t.sec,
+                    't-sec-sub': t.secSub,
+                    't-geo': t.geo,
+                    't-geo-sub': t.geoSub,
+                    't-user-geo': t.userGeo,
+                    't-user-geo-sub': t.userGeoSub,
+                    't-geo-loading': t.geoLoading,
+                    't-tools-title': t.toolsTitle,
+                    't-tools-sub': t.toolsSub,
+                    't-loss-btn': t.lossBtn,
+                    't-speed-btn': t.speedBtn,
+                    't-dns-btn': t.dnsBtn,
+                    't-cpu-btn': t.cpuBtn,
+                    't-ws-btn': t.wsBtn,
+                    't-concurrent-btn': t.concurrentBtn,
+                    't-stream-btn': t.streamBtn,
+                    't-media-btn': t.mediaBtn,
+                    't-multi-btn': t.multiBtn,
+                    't-dc-label': t.dcLabel,
+                    't-risk': t.risk,
+                    't-asn': t.asn,
+                    't-proto-label': t.protoLabel,
+                    't-tls-version': t.tlsVersion,
+                    't-cipher': t.cipher,
+                    't-ech-label': t.echLabel,
+                    't-compress-label': t.compressLabel,
+                    't-http2-label': t.http2Label,
+                    't-bot-label': t.botLabel,
+                    't-geo-location': t.geoLocation,
+                    't-geo-coord': t.geoCoord,
+                    't-geo-org': t.geoOrg,
+                    't-user-location': t.userLocation,
+                    't-user-distance': t.userDistance,
+                    't-user-org': t.userOrg,
+                    't-user-ip': t.userIp,
+                    't-hw': t.hw,
+                    't-hw-sub': t.hwSub,
+                    't-history-title': t.historyTitle,
+                    't-history-sub': t.historySub,
+                    't-no-records': t.noRecords,
+                    't-usage-title': t.usageTitle,
+                    't-usage-sub': t.usageSub,
+                    't-loading-stats': t.loadingStats,
+                    't-client-label': t.clientLabel,
+                    't-copy': t.copy,
+                    't-powered': t.powered,
+                    't-driven': t.driven,
+                    'modal-title': t.multiBtn,
+                    'modal-desc': t.enterNodeUrls,
+                    'modal-cancel': t.cancel,
+                    'modal-start': t.start
                 };
-                Object.entries(textIds).forEach(([id, text]) => {
+                Object.entries(map).forEach(([id, text]) => {
                     const el = document.getElementById(id);
                     if (el) el.textContent = text;
                 });
-                
+
+                // 语言按钮激活状态
                 document.querySelectorAll('.lang-btn').forEach(btn => {
                     const lang = btn.getAttribute('data-lang');
                     btn.classList.toggle('active', lang === currentLang);
                 });
-                
+
+                // 动态数据（DC/Proxy, Risk Level）
                 const dc = isDataCenter();
                 if (elements.sDc) {
                     elements.sDc.innerHTML = dc ? '<span class="badge badge-danger">' + t.yes + '</span>' : '<span class="badge badge-success">' + t.no + '</span>';
@@ -2408,6 +1989,7 @@ async function handleRequest(event) {
                     elements.sRisk.innerHTML = dc ? '<span class="badge badge-danger">' + t.high + '</span>' : '<span class="badge badge-success">' + t.clean + '</span>';
                 }
 
+                // 协议显示
                 if (elements.protoVal) {
                     const rawProto = BACKEND_DATA.httpProtocolRaw;
                     let displayText = rawProto;
@@ -2417,6 +1999,7 @@ async function handleRequest(event) {
                     elements.protoVal.innerHTML = displayText;
                 }
 
+                // ECH
                 if (elements.echVal) {
                     const helloLen = BACKEND_DATA.tlsClientHelloLength;
                     if (helloLen > 0) {
@@ -2426,6 +2009,7 @@ async function handleRequest(event) {
                     }
                 }
 
+                // Compression
                 if (elements.compressVal) {
                     const parts = [];
                     if (BACKEND_DATA.compressionBrotli) parts.push('<span class="badge badge-info">br</span>');
@@ -2434,6 +2018,7 @@ async function handleRequest(event) {
                     elements.compressVal.innerHTML = parts.join(' ');
                 }
 
+                // Bot Score
                 if (elements.botScoreVal) {
                     const score = parseInt(BACKEND_DATA.botScore, 10);
                     let badgeClass = 'badge-info';
@@ -2448,6 +2033,17 @@ async function handleRequest(event) {
                 currentLang = lang;
                 localStorage.setItem('pref-lang', lang);
                 updateUI();
+                // 重新加载可能已经显示的地理位置欺诈信息（可刷新，但为了简便，不强制刷新）
+                // 用户切语言后欺诈信息会重新加载，但这里暂不处理，因为欺诈信息是动态加载的，其文本会在 loadFraudScore 中使用 t 变量。
+                // 为了即时更新，可以重新调用 loadFraudScore，但需要确保 t 是最新的。
+                // 由于 loadFraudScore 内部使用了 i18n[currentLang]，直接重新调用即可。
+                // 但因为 loadFraudScore 是异步的，且在 fetchUserGeo 之后调用，我们可以在这里触发重新加载。
+                // 但为了简单，用户切语言后，可以手动刷新页面，或者我们重新调用 fetchUserGeo？
+                // 更好的方式：在 loadFraudScore 中读取最新的 currentLang，由于它是闭包，每次调用都会使用当前值。
+                // 所以直接重新调用 loadFraudScore 即可。
+                if (document.querySelector('.fraud-info')) {
+                    loadFraudScore(); // 重新渲染欺诈信息
+                }
             };
 
             // ==================== 图表 ====================
@@ -2519,25 +2115,48 @@ async function handleRequest(event) {
             function updateQuality(currentRtt) {
                 const qualityEl = document.getElementById('quality-badge');
                 const stabilityEl = document.getElementById('stability-badge');
-                
+                const t = i18n[currentLang];
+                // 质量文本（不国际化，因为值是根据数值动态显示的，但可以用固定中文/英文？为了保持统一，我们用数值对应的等级，但这里只用颜色和文本，但文本是硬编码的“优秀”“良好”等，这些也需要国际化。
+                // 我们可以改成根据数值设置文本，但为了简单，我们保留原逻辑（因为“优秀”等词在中文环境下是中文，英文环境下需要英文）。但原代码是硬编码中文。
+                // 修改：根据语言设置对应的等级文本。
+                let qualityText = '', qualityColor = '';
+                if (currentRtt < 50) {
+                    qualityText = currentLang === 'en' ? 'Excellent' : (currentLang === 'zh-TW' ? '優秀' : '优秀');
+                    qualityColor = '#34d399';
+                } else if (currentRtt < 100) {
+                    qualityText = currentLang === 'en' ? 'Good' : (currentLang === 'zh-TW' ? '良好' : '良好');
+                    qualityColor = '#34d399';
+                } else if (currentRtt < 150) {
+                    qualityText = currentLang === 'en' ? 'Fair' : (currentLang === 'zh-TW' ? '一般' : '一般');
+                    qualityColor = '#fbbf24';
+                } else if (currentRtt < 250) {
+                    qualityText = currentLang === 'en' ? 'Poor' : (currentLang === 'zh-TW' ? '較差' : '较差');
+                    qualityColor = '#f87171';
+                } else {
+                    qualityText = currentLang === 'en' ? 'Very Poor' : (currentLang === 'zh-TW' ? '極差' : '极差');
+                    qualityColor = '#f87171';
+                }
                 if (qualityEl) {
-                    let qualityText = '', qualityColor = '';
-                    if (currentRtt < 50) { qualityText = '优秀'; qualityColor = '#34d399'; }
-                    else if (currentRtt < 100) { qualityText = '良好'; qualityColor = '#34d399'; }
-                    else if (currentRtt < 150) { qualityText = '一般'; qualityColor = '#fbbf24'; }
-                    else if (currentRtt < 250) { qualityText = '较差'; qualityColor = '#f87171'; }
-                    else { qualityText = '极差'; qualityColor = '#f87171'; }
                     qualityEl.textContent = qualityText;
                     qualityEl.style.color = qualityColor;
                 }
-                
+
                 if (stabilityEl && jitterHistory.length > 0) {
                     const avgJitter = jitterHistory.reduce((a,b) => a+b, 0) / jitterHistory.length;
                     let stabilityText = '', stabilityColor = '';
-                    if (avgJitter < 10) { stabilityText = '非常稳定'; stabilityColor = '#34d399'; }
-                    else if (avgJitter < 30) { stabilityText = '稳定'; stabilityColor = '#22d3ee'; }
-                    else if (avgJitter < 60) { stabilityText = '不稳定'; stabilityColor = '#fbbf24'; }
-                    else { stabilityText = '极不稳定'; stabilityColor = '#f87171'; }
+                    if (avgJitter < 10) {
+                        stabilityText = currentLang === 'en' ? 'Very Stable' : (currentLang === 'zh-TW' ? '非常穩定' : '非常稳定');
+                        stabilityColor = '#34d399';
+                    } else if (avgJitter < 30) {
+                        stabilityText = currentLang === 'en' ? 'Stable' : (currentLang === 'zh-TW' ? '穩定' : '稳定');
+                        stabilityColor = '#22d3ee';
+                    } else if (avgJitter < 60) {
+                        stabilityText = currentLang === 'en' ? 'Unstable' : (currentLang === 'zh-TW' ? '不穩定' : '不稳定');
+                        stabilityColor = '#fbbf24';
+                    } else {
+                        stabilityText = currentLang === 'en' ? 'Very Unstable' : (currentLang === 'zh-TW' ? '極不穩定' : '极不稳定');
+                        stabilityColor = '#f87171';
+                    }
                     stabilityEl.textContent = stabilityText;
                     stabilityEl.style.color = stabilityColor;
                 }
@@ -2555,7 +2174,6 @@ async function handleRequest(event) {
             function updateMinMax(currentRtt) {
                 const minEl = document.getElementById('min-rtt');
                 const maxEl = document.getElementById('max-rtt');
-                
                 if (currentRtt < minRtt) {
                     minRtt = currentRtt;
                     if (minEl) minEl.textContent = minRtt;
@@ -2620,11 +2238,9 @@ async function handleRequest(event) {
                         } else if (data.http2) {
                             badgeHtml = '<span class="badge badge-success"><i class="fas fa-check"></i> ' + t.http2Enabled + '</span>';
                         }
-                        
                         if (data.earlyHints) {
                             badgeHtml += ' <span class="badge badge-info"><i class="fas fa-rocket"></i> ' + t.earlyHints + '</span>';
                         }
-                        
                         elements.http2Val.innerHTML = badgeHtml;
                     } else {
                         elements.http2Val.innerHTML = '<span class="badge badge-warning"><i class="fas fa-exclamation-triangle"></i> ' + t.http2Disabled + '</span>';
@@ -2695,22 +2311,22 @@ async function handleRequest(event) {
                         BACKEND_DATA.latNum, BACKEND_DATA.lonNum,
                         BACKEND_DATA.realGeoLat, BACKEND_DATA.realGeoLon
                     );
-                    
+                    const t = i18n[currentLang];
                     elements.userGeoInfo.innerHTML = \`
                         <div class="info-row">
-                            <span class="info-label"><i class="fas fa-city"></i> 位置</span>
+                            <span class="info-label"><i class="fas fa-city"></i> \${t.userLocation}</span>
                             <span class="info-value">\${BACKEND_DATA.realGeoCity}, \${BACKEND_DATA.realGeoRegion}, \${BACKEND_DATA.realGeoCountry}</span>
                         </div>
                         <div class="info-row">
-                            <span class="info-label"><i class="fas fa-ruler"></i> 到节点距离</span>
+                            <span class="info-label"><i class="fas fa-ruler"></i> \${t.userDistance}</span>
                             <span class="info-value"><span class="badge badge-info">\${dist} 公里</span></span>
                         </div>
                         <div class="info-row">
-                            <span class="info-label"><i class="fas fa-building"></i> 运营商</span>
+                            <span class="info-label"><i class="fas fa-building"></i> \${t.userOrg}</span>
                             <span class="info-value">\${BACKEND_DATA.realGeoOrg}</span>
                         </div>
                         <div class="info-row">
-                            <span class="info-label"><i class="fas fa-ip"></i> IP 地址</span>
+                            <span class="info-label"><i class="fas fa-ip"></i> \${t.userIp}</span>
                             <span class="info-value"><code>\${BACKEND_DATA.realGeoIp}</code></span>
                         </div>
                     \`;
@@ -2719,7 +2335,8 @@ async function handleRequest(event) {
                 }
                 
                 const ip = elements.v4 ? elements.v4.textContent : '';
-                if (!ip || ip.includes('检测中') || ip.includes(i18n[currentLang].unavailable)) {
+                const t = i18n[currentLang];
+                if (!ip || ip.includes('检测中') || ip.includes(t.unavailable)) {
                     if (geoRetryCount < MAX_GEO_RETRY) {
                         geoRetryCount++;
                         setTimeout(fetchUserGeo, 1500);
@@ -2739,25 +2356,25 @@ async function handleRequest(event) {
                     
                     elements.userGeoInfo.innerHTML = \`
                         <div class="info-row">
-                            <span class="info-label"><i class="fas fa-city"></i> 位置</span>
+                            <span class="info-label"><i class="fas fa-city"></i> \${t.userLocation}</span>
                             <span class="info-value">\${geoData.city}, \${geoData.region}, \${geoData.country_name}</span>
                         </div>
                         <div class="info-row">
-                            <span class="info-label"><i class="fas fa-ruler"></i> 到节点距离</span>
+                            <span class="info-label"><i class="fas fa-ruler"></i> \${t.userDistance}</span>
                             <span class="info-value"><span class="badge badge-info">\${dist} 公里</span></span>
                         </div>
                         <div class="info-row">
-                            <span class="info-label"><i class="fas fa-building"></i> 运营商</span>
+                            <span class="info-label"><i class="fas fa-building"></i> \${t.userOrg}</span>
                             <span class="info-value">\${geoData.org}</span>
                         </div>
                         <div class="info-row">
-                            <span class="info-label"><i class="fas fa-ip"></i> IP 地址</span>
+                            <span class="info-label"><i class="fas fa-ip"></i> \${t.userIp}</span>
                             <span class="info-value"><code>\${ip}</code></span>
                         </div>
                     \`;
                     loadFraudScore();
                 } catch (e) {
-                    elements.userGeoInfo.innerHTML = '<div style="text-align: center; padding: 30px; color: #f87171;"><i class="fas fa-exclamation-triangle"></i> 地理位置查询失败</div>';
+                    elements.userGeoInfo.innerHTML = '<div style="text-align:center;padding:30px;color:#f87171;"><i class="fas fa-exclamation-triangle"></i> 地理位置查询失败</div>';
                 }
             }
 
@@ -3166,7 +2783,7 @@ async function handleRequest(event) {
                 showResult(elements.multiResult, html);
             }
 
-            // ==================== 报告生成（优化版） ====================
+            // ==================== 报告生成 ====================
             function generateReportText() {
                 const t = i18n[currentLang];
                 const now = new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
@@ -3181,7 +2798,6 @@ async function handleRequest(event) {
                 const clientLocation = BACKEND_DATA.realGeoCity ? BACKEND_DATA.realGeoCity + ', ' + BACKEND_DATA.realGeoCountry : '未知';
                 const http2Status = elements.http2Val ? elements.http2Val.textContent.trim() : '--';
 
-                // 获取欺诈评分
                 let fraudInfo = '';
                 const fraudSection = document.querySelector('.fraud-info');
                 if (fraudSection) {
@@ -3263,10 +2879,10 @@ async function handleRequest(event) {
                     const res = await fetch('/api/speed-history?limit=5');
                     const records = await res.json();
                     if (!records || records.length === 0) {
-                        panel.innerHTML = '<div class="no-data"><i class="fas fa-inbox"></i> 暂无测速记录</div>';
+                        panel.innerHTML = '<div class="no-data"><i class="fas fa-inbox"></i> <span id="t-no-records">' + i18n[currentLang].noRecords + '</span></div>';
                         return;
                     }
-                    let html = '<table class="speed-history-table"><thead><tr><th>时间</th><th>平均速度</th><th>节点</th></tr></thead><tbody>';
+                    let html = '<table class="speed-history-table"><thead><tr><th>' + i18n[currentLang].historyTitle + '</th><th>平均速度</th><th>节点</th></tr></thead><tbody>';
                     const maxSpeed = Math.max(...records.map(r => r.avgSpeed), 1);
                     records.forEach(r => {
                         const d = new Date(r.timestamp);
@@ -3360,6 +2976,13 @@ async function handleRequest(event) {
                 loadSpeedHistory();
                 loadUsageStats();
                 setInterval(() => { loadSpeedHistory(); loadUsageStats(); }, 30000);
+
+                // 语言按钮绑定
+                document.querySelectorAll('.lang-btn').forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        setLang(this.getAttribute('data-lang'));
+                    });
+                });
             }
             
             init();
