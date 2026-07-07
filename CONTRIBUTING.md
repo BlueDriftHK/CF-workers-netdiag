@@ -1,277 +1,163 @@
 # 贡献指南
 
-感谢您对 **NetSight Pro** 的兴趣！我们欢迎来自社区的各种贡献，无论是报告 Bug、提交代码、改进文档，还是提出新功能建议。  
-本指南将帮助您了解如何参与项目，并确保您的贡献能够顺利被合并。
+感谢您对 **NetSight Pro** 的关注与支持！我们欢迎任何形式的贡献——无论是报告 Bug、提出新功能建议、改进文档，还是提交代码。
+
+请花几分钟阅读本指南，以使贡献过程更顺畅高效。
 
 ---
 
 ## 📋 目录
 
-- [行为准则](#-行为准则)
-- [如何报告问题](#-如何报告问题)
-- [如何请求新功能](#-如何请求新功能)
-- [贡献代码](#-贡献代码)
-  - [准备工作](#准备工作)
-  - [分支命名](#分支命名)
-  - [代码风格](#代码风格)
-  - [提交信息规范](#提交信息规范)
-  - [测试](#测试)
-  - [提交 Pull Request](#提交-pull-request)
-- [其他贡献方式](#-其他贡献方式)
-- [贡献者许可协议](#-贡献者许可协议)
-- [获取帮助](#-获取帮助)
+- [行为准则](#行为准则)
+- [如何贡献](#如何贡献)
+  - [报告 Bug](#报告-bug)
+  - [提出新功能](#提出新功能)
+  - [改进文档](#改进文档)
+  - [提交代码](#提交代码)
+- [开发环境准备](#开发环境准备)
+- [代码规范](#代码规范)
+- [测试指南](#测试指南)
+- [提交 Pull Request](#提交-pull-request)
+- [代码审核流程](#代码审核流程)
+- [社区沟通](#社区沟通)
 
 ---
 
-## 📜 行为准则
+## 行为准则
 
-本项目遵循 [Contributor Covenant 行为准则](./CODE_OF_CONDUCT.md)。  
-参与本项目的所有贡献者都必须遵守该准则。如有违反，项目维护者有权采取相应措施。
+本项目遵循 [Contributor Covenant](https://www.contributor-covenant.org) 行为准则。参与即表示您同意遵守其条款。如有不可接受的行为，请向项目维护者报告（邮箱见 [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md)）。
 
 ---
 
-## 🐛 如何报告问题
+## 如何贡献
 
-### 检查现有 Issue
+### 报告 Bug
 
-在提交新 Issue 之前，请先搜索现有的 [Issues](https://github.com/BlueDriftHK/CF-workers-netdiag/issues)，看看您遇到的问题是否已经被报告或正在解决中。
+如果您发现 Bug，请通过 [Issues](https://github.com/BlueDriftHK/CF-workers-netdiag/issues) 提交，并尽量包含以下信息：
 
-### 创建新 Issue
+- **标题**：清晰简洁地描述问题
+- **环境**：浏览器/操作系统/Cloudflare Worker 版本
+- **复现步骤**：详细的操作步骤
+- **预期行为**：您期望发生什么
+- **实际行为**：实际发生了什么（附截图或日志更佳）
+- **其他上下文**：如是否稳定复现、是否与特定网络环境相关
 
-如果问题尚未被报告，请点击 [New Issue](https://github.com/BlueDriftHK/CF-workers-netdiag/issues/new) 并选择合适的模板（如果存在）或按照以下格式填写：
+### 提出新功能
 
-```markdown
-### 问题描述
-（清晰描述您遇到的问题）
+欢迎提出新功能建议！请在 Issue 中说明：
 
-### 复现步骤
-1. 访问 [URL]
-2. 执行 [操作]
-3. 看到 [错误现象]
+- **功能描述**：该功能解决什么问题
+- **使用场景**：谁会用、怎么用
+- **替代方案**（如有）：当前有哪些变通方法
+- **额外上下文**：相关技术背景或参考实现
 
-### 预期行为
-（您期望发生什么）
+### 改进文档
 
-### 实际行为
-（实际发生了什么）
+文档（README、API 说明、本贡献指南等）若有错别字、表述不清或遗漏，欢迎提交 PR 修正。即使是很小的改进也很有价值。
 
-### 环境信息
-- NetSight Pro 版本: [v4.0]
-- 浏览器及版本: [Chrome 120]
-- Cloudflare Worker 区域: [可选]
-- 其他相关信息: [如网络环境、操作系统等]
+### 提交代码
 
-### 日志/截图
-（如果有 Worker 日志或浏览器控制台输出，请附上）
+如果您想贡献代码，请遵循以下流程：
+
+1. **先沟通**：较大改动（如新增功能、重构）建议先在 Issue 中讨论，避免做无用功。
+2. **保持聚焦**：每个 PR 只解决一个问题或新增一个功能。
+3. **写测试**：若可行，请为新增功能或修复添加测试用例。
+4. **更新文档**：如有 API 变更或新功能，请同步更新 README 和本指南。
+
+---
+
+## 开发环境准备
+
+本项目是 Cloudflare Worker，使用 JavaScript (ES2022) 编写，部署在 Worker 运行时。
+
+### 必备工具
+
+- [Node.js](https://nodejs.org/) 18+ 及 npm
+- [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/)（Cloudflare Workers 官方 CLI）
+
+### 本地运行
+
+```bash
+# 克隆仓库
+git clone https://github.com/BlueDriftHK/CF-workers-netdiag.git
+cd CF-workers-netdiag
+
+# 安装依赖（如果有 package.json，但目前是单文件 Worker，无需依赖）
+# 若后续引入测试框架等，可添加
+
+# 本地启动开发服务器（需要 Cloudflare 账号）
+wrangler dev _workers.js
+
+# 访问 http://localhost:8787 预览
 ```
 
-### 安全问题
-
-**请勿**在公开的 GitHub Issues 中报告安全漏洞。请参考 [SECURITY.md](./SECURITY.md) 中的指引，通过邮件私下报告。
+> 注意：由于 Worker 依赖 Cloudflare 环境（如 `caches`、`WebSocket`、`KV` 等），本地开发时某些功能可能受限。建议直接部署到测试环境进行完整验证。
 
 ---
 
-## 💡 如何请求新功能
+## 代码规范
 
-我们也欢迎功能建议！请遵循以下步骤：
-
-1. 查看现有的 [Issues](https://github.com/BlueDriftHK/CF-workers-netdiag/issues)，看看是否已有类似建议。
-2. 如果不存在，请创建新 Issue，并选择 “Feature Request” 模板（如果有）或填写：
-   - **功能描述**：清晰描述您希望添加的功能。
-   - **使用场景**：说明该功能在什么场景下有用。
-   - **实现思路**（可选）：如果您有初步的想法，欢迎分享。
-
-我们会根据项目方向和社区需求，评估并决定是否采纳。
-
----
-
-## 👨‍💻 贡献代码
-
-### 准备工作
-
-1. **Fork 本仓库**：点击右上角的 “Fork” 按钮，将项目复制到您的 GitHub 账户下。
-2. **克隆您的 Fork**：
-   ```bash
-   git clone https://github.com/您的用户名/CF-workers-netdiag.git
-   cd CF-workers-netdiag
-   ```
-3. **添加上游仓库**：
-   ```bash
-   git remote add upstream https://github.com/BlueDriftHK/CF-workers-netdiag.git
-   ```
-4. **安装依赖**（如果需要）：
-   本项目不需要额外的构建工具，但您可以使用 `wrangler` 进行本地测试：
-   ```bash
-   npm install -g wrangler
-   ```
-
-### 分支命名
-
-请基于 `main` 分支创建您的功能分支，并遵循以下命名规范：
-
-- `feature/功能名称` —— 新功能
-- `fix/问题描述` —— 修复 Bug
-- `docs/文档改进` —— 文档更新
-- `refactor/重构内容` —— 代码重构
-- `chore/杂项` —— 构建、配置等
-
-示例：`feature/multi-node-compare`
-
-### 代码风格
-
-为了保持代码的一致性和可维护性，请遵循以下规范：
-
-#### JavaScript（Worker 主文件 `_workers.js`）
-
-- 使用 **ES modules** 语法（`import`/`export`）。
-- 使用 **单引号** 表示字符串（除非包含单引号）。
-- 使用 **2 个空格** 缩进。
-- 使用 `const` 和 `let`，避免 `var`。
-- 每个语句末尾使用 **分号**。
-- 使用 **对象/数组解构** 提高可读性。
-- 函数命名使用 **camelCase**。
-- 常量使用 **UPPER_SNAKE_CASE**（如 `CORS_HEADERS`）。
-- 适当添加注释，尤其是复杂逻辑。
-- 保持代码简洁，避免过长的函数（建议不超过 50 行）。
-
-示例：
-```javascript
-// 好的风格
-const CORS_HEADERS = {
-  'access-control-allow-origin': '*',
-  'cache-control': 'no-store'
-};
-
-function isRateLimited(ip, maxRequests = 60) {
-  // 逻辑...
-}
-```
-
-#### CSS（内嵌在 `_workers.js` 的 HTML 中）
-
-- 使用 **CSS 变量**（`var(--accent)`）管理主题。
-- 选择器使用 **连字符**（kebab-case）命名类。
-- 遵循 **BEM 方法论**（可选）。
-- 保持规则按模块分组，添加注释分隔。
-- 避免使用 `!important`，除非绝对必要。
-- 深色/浅色模式通过 `[data-theme="dark"]` 和 `[data-theme="light"]` 控制。
-
-#### HTML
-
-- 使用 **语义化标签**（`<header>`, `<section>`, `<article>` 等）。
-- `id` 和 `class` 使用 **kebab-case**。
-- 确保内容在无 CSS 时可读（渐进增强）。
-- 添加合适的 `alt` 属性（如有图片）。
-
-#### 提交信息规范
-
-我们遵循 [Conventional Commits](https://www.conventionalcommits.org/) 规范，以便自动生成更新日志。
-
-提交信息格式：
-```
-<类型>(<范围>): <简短描述>
-
-<详细描述（可选）>
-
-<脚注（可选）>
-```
-
-**类型**：
-- `feat`：新功能
-- `fix`：Bug 修复
-- `docs`：文档更新
-- `style`：代码格式（不影响逻辑）
-- `refactor`：代码重构（不修改功能）
-- `perf`：性能优化
-- `test`：测试相关
-- `chore`：构建/工具/依赖更新
-
-**范围**（可选）：如 `api`、`ui`、`kv` 等。
-
-示例：
-```
-feat(api): 添加多节点对比端点
-
-新增 /api/multi-node-compare 接口，支持并行测试多个 Worker 节点的延迟。
-```
-
-### 测试
-
-- 如果您的更改涉及新功能或修复，请确保现有功能仍能正常工作。
-- 您可以使用 `wrangler dev` 在本地进行测试：
-  ```bash
-  wrangler dev --local --main _workers.js
-  ```
-  然后在浏览器中访问 `http://localhost:8787`。
-- 对于 API 更改，建议使用 `curl` 或 Postman 进行测试。
-- 我们不强制要求编写单元测试，但对于关键逻辑（如限流、安全头），欢迎添加。
-
-### 提交 Pull Request
-
-1. **同步上游代码**：
-   ```bash
-   git checkout main
-   git pull upstream main
-   git push origin main  # 更新您的 Fork 的 main
-   ```
-
-2. **基于 main 创建分支**：
-   ```bash
-   git checkout -b feature/your-feature
-   ```
-
-3. **进行更改并提交**（遵循提交规范）：
-   ```bash
-   git add .
-   git commit -m "feat: 添加某个功能"
-   ```
-
-4. **推送到您的 Fork**：
-   ```bash
-   git push origin feature/your-feature
-   ```
-
-5. **打开 Pull Request**：
-   - 访问您的 Fork 页面，点击 “Compare & pull request”。
-   - 填写 PR 标题和描述，清晰说明更改内容、目的和测试情况。
-   - 关联相关的 Issue（如有）：“Closes #123”。
-
-6. **等待审查**：
-   - 维护者会审核您的 PR，可能会提出修改意见。
-   - 请及时响应反馈并进行调整。
-   - 一旦通过，PR 将被合并到 `main` 分支。
+- **语言**：JavaScript (ES2022)，使用严格模式 (`'use strict'`)。
+- **缩进**：2 个空格，不要使用 Tab。
+- **分号**：每个语句末尾加分号。
+- **命名**：
+  - 变量/函数：`camelCase`
+  - 类/构造函数：`PascalCase`
+  - 常量：`UPPER_SNAKE_CASE`（仅用于全局常量）
+- **注释**：复杂逻辑、公共函数、关键算法需添加清晰注释，优先使用英文。
+- **单文件**：所有代码在 `_workers.js` 中（目前设计如此），但若扩展为多文件，请保持模块化。
+- **避免全局污染**：尽量使用 IIFE 或模块作用域。
+- **错误处理**：对 I/O 操作（fetch、KV）使用 `try/catch`，并给出有意义的错误信息。
+- **安全**：始终进行输入校验（`parseInt` 钳制、URL 白名单等），避免 XSS 和注入。
 
 ---
 
-## 🌟 其他贡献方式
+## 测试指南
 
-除了代码，您还可以通过以下方式贡献：
+目前项目暂无自动化测试框架，但欢迎贡献测试。手动测试时，请重点验证：
 
-- **完善文档**：修正错别字、补充示例、翻译（如果支持）。
-- **测试**：在多种环境下测试，反馈兼容性问题。
-- **回答 Issues**：帮助其他用户解决遇到的问题。
-- **推广**：向更多人介绍 NetSight Pro，或撰写博客/教程。
-- **设计**：改进 UI/UX，优化图标或配色。
+- 所有 API 端点返回预期状态码和数据格式
+- WebSocket 连接及双向通信正常
+- 限流机制生效（触发 429）
+- 不同语言（中/英/繁）界面显示正确
+- 主题切换（深色/浅色/自动）正常
+- 各诊断按钮（丢包率、测速、CPU 等）结果合理
 
-您的每一点贡献都值得赞赏！
-
----
-
-## 📄 贡献者许可协议（CLA）
-
-提交贡献即表示您同意将您的代码贡献视为符合项目许可证（**AGPL-3.0**）的条款。  
-您无需签署额外的 CLA，但请确保您的贡献完全由您创作，或者您有权授权其使用。
+若编写自动化测试，建议使用 [Vitest](https://vitest.dev/) 或 [Jest](https://jestjs.io/) 配合 `wrangler` 的测试工具。
 
 ---
 
-## 💬 获取帮助
+## 提交 Pull Request
 
-如果您在贡献过程中有任何疑问，欢迎通过以下方式联系我们：
+1. **Fork 仓库**：点击 GitHub 右上角的 Fork 按钮。
+2. **创建分支**：从 `main` 分支创建您的特性分支（如 `feature/add-new-test`）。
+3. **提交更改**：写清晰的提交信息（推荐使用 [Conventional Commits](https://www.conventionalcommits.org/) 格式）。
+4. **推送分支**：推送到您的 Fork。
+5. **打开 PR**：前往原始仓库，点击 New Pull Request，选择您的分支并填写 PR 模板。
 
-- 在 [GitHub Discussions](https://github.com/BlueDriftHK/CF-workers-netdiag/discussions) 中提问
-- 在 [GitHub Issues](https://github.com/BlueDriftHK/CF-workers-netdiag/issues) 中留言（如果与现有问题相关）
-- 发送邮件至项目维护者（见 [SECURITY.md](./SECURITY.md) 中的联系方式）
+### PR 描述要求
+
+- **标题**：简洁描述改动（如 `feat: add multi-node comparison table`）
+- **内容**：说明改动目的、实现方式、影响范围，以及如何测试
+- **关联 Issue**：如修复或关联某个 Issue，请注明 `Closes #xxx` 或 `Related to #xxx`
 
 ---
 
-感谢您的贡献，让我们一起让 NetSight Pro 变得更好！🎉
+## 代码审核流程
+
+- 所有 PR 至少需要一位维护者审核通过方可合并。
+- 审核者会关注代码质量、性能影响、安全性和文档完整性。
+- 如有修改意见，请友善回应并积极调整。
+- 合并后，您的贡献将出现在项目历史中，并会在更新日志中致谢。
+
+---
+
+## 社区沟通
+
+- **问题讨论**：请在 [Issues](https://github.com/BlueDriftHK/CF-workers-netdiag/issues) 中讨论，便于追踪。
+- **实时交流**：暂未建立聊天群组，如有紧急事宜可邮件联系维护者（asiacomk@gmail.com）。
+- **尊重他人**：请遵循行为准则，保持友好和建设性的讨论氛围。
+
+---
+
+感谢您为 **NetSight Pro** 添砖加瓦！🎉 期待您的贡献！
