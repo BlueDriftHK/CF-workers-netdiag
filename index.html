@@ -1,40 +1,17 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>NetSight Pro · 极光网络诊断</title>
-    <meta name="description" content="基于 Cloudflare Workers 的轻量级网络诊断工具，支持实时 RTT、安全检测、多节点对比，开源免费。" />
-    <!-- Open Graph / Twitter Card -->
-    <meta property="og:title" content="NetSight Pro · 极光网络诊断" />
-    <meta property="og:description" content="部署在 Cloudflare Workers 边缘节点的专业级网络诊断工具，实时监控、多维度测试、Apple 极简设计。" />
-    <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://github.com/BlueDriftHK/CF-workers-netdiag" />
-    <meta name="twitter:card" content="summary_large_image" />
-    <!-- JSON-LD 结构化数据 -->
-    <script type="application/ld+json">
-        {
-            "@context": "https://schema.org",
-            "@type": "SoftwareApplication",
-            "name": "NetSight Pro",
-            "description": "基于 Cloudflare Workers 的网络诊断工具",
-            "applicationCategory": "DeveloperApplication",
-            "operatingSystem": "All",
-            "license": "AGPL-3.0",
-            "author": {
-                "@type": "Person",
-                "name": "BlueDriftHK"
-            }
-        }
-    </script>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700;14..32,800;14..32,900&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700;14..32,800;14..32,900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
     <style>
         /* ============================================================
-           全局重置 & 变量 (与原版保持一致)
+           全局重置 & 变量
            ============================================================ */
         * {
             margin: 0;
@@ -104,149 +81,1262 @@
             transition: background 0.3s, color 0.3s;
             overflow-x: hidden;
             cursor: default;
-            padding-top: 0;
-            /* 为进度条留出空间 */;
         }
 
-        /* ===== 进度条 ===== */
-        #progress-bar {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 0%;
-            height: 3px;
-            background: linear-gradient(90deg, var(--accent), #5856d6);
-            z-index: 9999;
-            transition: width 0.2s ease;
-            box-shadow: 0 0 10px var(--accent-light);
-        }
-
-        /* ===== 加载进度（模拟） ===== */
-        #loader {
+        /* 粒子背景 */
+        #particles {
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            background: var(--bg-primary);
+            z-index: 0;
+            pointer-events: none;
+            overflow: hidden;
+        }
+        .particle {
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            background: var(--accent);
+            border-radius: 50%;
+            opacity: 0.15;
+            animation: floatParticle linear infinite;
+        }
+        @keyframes floatParticle {
+            0% {
+                transform: translateY(100vh) scale(0.5);
+                opacity: 0;
+            }
+            10% {
+                opacity: 0.2;
+            }
+            90% {
+                opacity: 0.2;
+            }
+            100% {
+                transform: translateY(-10vh) scale(1.2);
+                opacity: 0;
+            }
+        }
+
+        /* 背景光晕 */
+        body::before {
+            content: '';
+            position: fixed;
+            top: -30%;
+            left: -20%;
+            width: 80%;
+            height: 80%;
+            background: radial-gradient(ellipse, var(--glow-color), transparent 70%);
+            pointer-events: none;
+            z-index: 0;
+            animation: glowFloat 20s infinite alternate ease-in-out;
+        }
+        body::after {
+            content: '';
+            position: fixed;
+            bottom: -20%;
+            right: -20%;
+            width: 70%;
+            height: 70%;
+            background: radial-gradient(ellipse, var(--glow-color), transparent 70%);
+            pointer-events: none;
+            z-index: 0;
+            animation: glowFloat 25s infinite alternate-reverse ease-in-out;
+        }
+        @keyframes glowFloat {
+            0% {
+                transform: translate(0, 0) scale(1);
+                opacity: 0.6;
+            }
+            100% {
+                transform: translate(10%, 10%) scale(1.2);
+                opacity: 1;
+            }
+        }
+
+        .cursor-glow {
+            position: fixed;
+            width: 300px;
+            height: 300px;
+            border-radius: 50%;
+            background: radial-gradient(circle, var(--glow-color), transparent 70%);
+            pointer-events: none;
+            z-index: 0;
+            transform: translate(-50%, -50%);
+            transition: opacity 0.3s;
+            opacity: 0;
+            will-change: transform;
+        }
+
+        .container {
+            max-width: 1150px;
+            margin: 0 auto;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* ============================================================
+           头部
+           ============================================================ */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 28px;
+            margin-bottom: 40px;
+            flex-wrap: wrap;
+            gap: 16px;
+            background: var(--bg-glass);
+            backdrop-filter: blur(24px) saturate(180%);
+            -webkit-backdrop-filter: blur(24px) saturate(180%);
+            border-radius: var(--radius-xl);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow-sm);
+            transition: all var(--transition);
+            position: relative;
+            overflow: hidden;
+        }
+        .header::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(90deg, transparent, var(--accent-light), transparent);
+            opacity: 0.3;
+            transform: translateX(-100%);
+            animation: shimmer 6s infinite;
+        }
+        @keyframes shimmer {
+            0% {
+                transform: translateX(-100%);
+            }
+            100% {
+                transform: translateX(100%);
+            }
+        }
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            position: relative;
+            z-index: 1;
+        }
+        .logo-icon {
+            width: 48px;
+            height: 48px;
+            background: var(--accent);
+            border-radius: 14px;
             display: flex;
             align-items: center;
             justify-content: center;
-            z-index: 10000;
-            transition: opacity 0.6s ease, visibility 0.6s;
+            font-size: 22px;
+            color: #fff;
+            box-shadow: 0 4px 14px rgba(0, 122, 255, 0.2);
+            transition: transform 0.3s;
         }
-        #loader.hidden {
-            opacity: 0;
-            visibility: hidden;
+        .logo:hover .logo-icon {
+            transform: rotate(-8deg) scale(1.05);
+        }
+        .logo h1 {
+            font-size: 24px;
+            font-weight: 800;
+            letter-spacing: -0.3px;
+        }
+        .logo p {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-top: 2px;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            position: relative;
+            z-index: 1;
+        }
+        .theme-toggle {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 30px;
+            padding: 6px 12px;
+            cursor: pointer;
+            font-size: 18px;
+            color: var(--text-secondary);
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .theme-toggle:hover {
+            background: var(--bg-card-hover);
+            border-color: var(--border-accent);
+            transform: scale(1.03);
+        }
+        .github-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 20px;
+            background: var(--accent);
+            color: #fff;
+            border-radius: 30px;
+            font-size: 13px;
+            font-weight: 600;
+            text-decoration: none;
+            transition: all 0.25s;
+            box-shadow: 0 2px 8px rgba(0, 122, 255, 0.25);
+        }
+        .github-btn:hover {
+            background: var(--accent-hover);
+            box-shadow: 0 4px 18px rgba(0, 122, 255, 0.4);
+            transform: translateY(-2px);
+        }
+
+        /* ============================================================
+           Hero
+           ============================================================ */
+        .hero {
+            position: relative;
+            text-align: center;
+            padding: 70px 20px 50px;
+            background: var(--bg-card);
+            backdrop-filter: blur(24px) saturate(180%);
+            -webkit-backdrop-filter: blur(24px) saturate(180%);
+            border-radius: var(--radius-xl);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow-md);
+            margin-bottom: 50px;
+            overflow: hidden;
+        }
+        .hero::after {
+            content: '';
+            position: absolute;
+            inset: -50%;
+            background: conic-gradient(from 0deg at 50% 50%, var(--accent-light), transparent 30%, transparent 70%, var(--accent-light));
+            opacity: 0.1;
+            animation: spin 20s linear infinite;
             pointer-events: none;
-        }
-        #loader .spinner {
-            width: 48px;
-            height: 48px;
-            border: 4px solid var(--border);
-            border-top-color: var(--accent);
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
         }
         @keyframes spin {
             to {
                 transform: rotate(360deg);
             }
         }
-
-        /* ===== 回到顶部 ===== */
-        #back-to-top {
-            position: fixed;
-            bottom: 32px;
-            right: 32px;
-            width: 48px;
-            height: 48px;
-            background: var(--accent);
-            color: #fff;
-            border: none;
-            border-radius: 50%;
-            font-size: 20px;
-            cursor: pointer;
-            box-shadow: 0 4px 16px rgba(0, 122, 255, 0.3);
-            transition: all 0.3s ease;
-            opacity: 0;
-            transform: translateY(20px);
-            pointer-events: none;
-            z-index: 999;
+        .hero * {
+            position: relative;
+            z-index: 2;
         }
-        #back-to-top.visible {
+        .hero h2 {
+            font-size: 56px;
+            font-weight: 900;
+            letter-spacing: -2px;
+            margin-bottom: 16px;
+            background: linear-gradient(135deg, var(--accent), #5856d6, var(--accent));
+            background-size: 200% 200%;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            animation: gradShift 8s ease infinite;
+        }
+        @keyframes gradShift {
+            0%,
+            100% {
+                background-position: 0% 50%;
+            }
+            50% {
+                background-position: 100% 50%;
+            }
+        }
+        .hero p {
+            font-size: 21px;
+            color: var(--text-secondary);
+            max-width: 680px;
+            margin: 0 auto 28px;
+            line-height: 1.7;
+        }
+        .hero .badge-group {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 12px;
+        }
+        .hero .badge-group span {
+            background: var(--accent-light);
+            border: 1px solid var(--border-accent);
+            padding: 8px 20px;
+            border-radius: 40px;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--accent);
+            transition: all 0.25s;
+            cursor: default;
+            backdrop-filter: blur(4px);
+        }
+        .hero .badge-group span:hover {
+            transform: translateY(-3px);
+            box-shadow: var(--shadow-md);
+            background: var(--bg-card-hover);
+        }
+
+        /* ============================================================
+           通用动画
+           ============================================================ */
+        .reveal {
+            opacity: 0;
+            transform: translateY(40px);
+            transition: opacity 0.7s ease, transform 0.7s ease;
+        }
+        .reveal.active {
             opacity: 1;
             transform: translateY(0);
-            pointer-events: auto;
         }
-        #back-to-top:hover {
-            background: var(--accent-hover);
-            transform: scale(1.08);
-            box-shadow: 0 6px 24px rgba(0, 122, 255, 0.4);
+        .reveal-delay-1 {
+            transition-delay: 0.05s;
+        }
+        .reveal-delay-2 {
+            transition-delay: 0.1s;
+        }
+        .reveal-delay-3 {
+            transition-delay: 0.15s;
+        }
+        .reveal-delay-4 {
+            transition-delay: 0.2s;
         }
 
-        /* ===== 移动端菜单 ===== */
-        .menu-toggle {
-            display: none;
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: 30px;
-            padding: 6px 14px;
-            font-size: 18px;
-            cursor: pointer;
+        .section-title {
+            font-size: 32px;
+            font-weight: 800;
+            margin-bottom: 12px;
+            letter-spacing: -0.5px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .section-title i {
+            color: var(--accent);
+            font-size: 28px;
+        }
+        .section-desc {
             color: var(--text-secondary);
+            font-size: 17px;
+            margin-bottom: 36px;
+            max-width: 700px;
+            line-height: 1.6;
+        }
+
+        /* ============================================================
+           核心功能卡片
+           ============================================================ */
+        .grid-2 {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 28px;
+            margin-bottom: 56px;
+        }
+        .card {
+            background: var(--bg-card);
+            backdrop-filter: blur(24px) saturate(180%);
+            -webkit-backdrop-filter: blur(24px) saturate(180%);
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--border);
+            padding: 30px 26px;
+            transition: all var(--transition);
+            box-shadow: var(--shadow-sm);
+            position: relative;
+            overflow: hidden;
+        }
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--accent), transparent);
+            opacity: 0;
+            transition: opacity 0.4s;
+        }
+        .card:hover::before {
+            opacity: 1;
+        }
+        .card:hover {
+            transform: translateY(-6px);
+            box-shadow: var(--shadow-lg);
+            border-color: var(--border-accent);
+            background: var(--bg-card-hover);
+        }
+        .card i {
+            font-size: 32px;
+            color: var(--accent);
+            margin-bottom: 16px;
+            display: inline-block;
+            transition: transform 0.3s;
+        }
+        .card:hover i {
+            transform: scale(1.1) rotate(-4deg);
+        }
+        .card h3 {
+            font-size: 19px;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+        .card p {
+            font-size: 14px;
+            color: var(--text-secondary);
+            line-height: 1.7;
+        }
+        .card .tag {
+            display: inline-block;
+            margin-top: 16px;
+            padding: 4px 14px;
+            background: var(--accent-light);
+            border-radius: 30px;
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--accent);
+            border: 1px solid var(--border-accent);
             transition: all 0.2s;
         }
-        .menu-toggle:hover {
-            background: var(--bg-card-hover);
+        .card:hover .tag {
+            background: var(--accent);
+            color: #fff;
+            border-color: var(--accent);
+        }
+
+        /* ============================================================
+           项目统计看板
+           ============================================================ */
+        .stats-banner {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 20px;
+            margin-bottom: 56px;
+        }
+        .stat-block {
+            background: var(--bg-card);
+            backdrop-filter: blur(24px) saturate(180%);
+            -webkit-backdrop-filter: blur(24px) saturate(180%);
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--border);
+            padding: 24px 16px;
+            text-align: center;
+            transition: all var(--transition);
+            box-shadow: var(--shadow-sm);
+        }
+        .stat-block:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-md);
             border-color: var(--border-accent);
         }
+        .stat-block .num {
+            font-size: 40px;
+            font-weight: 800;
+            color: var(--accent);
+            line-height: 1.1;
+            letter-spacing: -1px;
+        }
+        .stat-block .label {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-top: 6px;
+        }
+        .stat-block .sub {
+            font-size: 12px;
+            color: var(--text-tertiary);
+            margin-top: 4px;
+        }
+
         @media (max-width: 768px) {
-            .menu-toggle {
-                display: inline-flex;
-                align-items: center;
-                gap: 6px;
+            .stats-banner {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 14px;
             }
-            .nav-links {
-                display: none;
-                flex-direction: column;
-                width: 100%;
-                gap: 8px;
-                padding-top: 12px;
-            }
-            .nav-links.open {
-                display: flex;
-            }
-            .header {
-                flex-wrap: wrap;
-            }
-            .header-right {
-                flex-wrap: wrap;
-                width: 100%;
-                justify-content: space-between;
+        }
+        @media (max-width: 480px) {
+            .stats-banner {
+                grid-template-columns: 1fr;
             }
         }
 
         /* ============================================================
-           其余样式与原版完全相同（粒子、光晕、卡片、表格等）
-           为节省篇幅，此处省略重复代码，但已完整包含在下方最终 HTML 中。
+           界面预览
            ============================================================ */
+        .preview-section {
+            margin-bottom: 56px;
+        }
+        .preview-frame {
+            background: var(--bg-card);
+            backdrop-filter: blur(24px) saturate(180%);
+            -webkit-backdrop-filter: blur(24px) saturate(180%);
+            border-radius: var(--radius-xl);
+            border: 1px solid var(--border);
+            padding: 24px 28px 32px;
+            box-shadow: var(--shadow-md);
+            transition: all var(--transition);
+        }
+        .preview-frame:hover {
+            box-shadow: var(--shadow-lg);
+            border-color: var(--border-accent);
+        }
+        .preview-frame .mockup {
+            background: var(--bg-primary);
+            border-radius: var(--radius-lg);
+            padding: 20px;
+            border: 1px solid var(--border);
+            position: relative;
+            overflow: hidden;
+        }
+        .mockup .mock-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 16px;
+        }
+        .mockup .mock-header .dot {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 4px;
+        }
+        .mockup .mock-header .dot.green {
+            background: var(--success);
+        }
+        .mockup .mock-header .dot.yellow {
+            background: var(--warning);
+        }
+        .mockup .mock-header .dot.red {
+            background: var(--danger);
+        }
+        .mockup .mock-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            font-size: 13px;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+        }
+        .mockup .mock-row:last-child {
+            border-bottom: none;
+        }
+        .mockup .mock-row .label {
+            color: var(--text-secondary);
+        }
+        .mockup .mock-row .value {
+            font-weight: 600;
+            color: var(--text-primary);
+            font-family: 'SF Mono', monospace;
+        }
+        .mockup .mock-row .value.accent {
+            color: var(--accent);
+        }
+        .mockup .mock-chart {
+            height: 60px;
+            margin: 12px 0 8px;
+            display: flex;
+            align-items: flex-end;
+            gap: 4px;
+        }
+        .mockup .mock-chart .bar {
+            flex: 1;
+            border-radius: 3px 3px 0 0;
+            background: var(--accent);
+            opacity: 0.6;
+            height: calc(20% + (80% * var(--h)));
+            transition: height 0.3s;
+        }
+        .mockup .mock-chart .bar:nth-child(odd) {
+            background: var(--accent);
+            opacity: 0.8;
+        }
+        .mockup .mock-chart .bar:nth-child(even) {
+            background: #5856d6;
+            opacity: 0.6;
+        }
 
-        /* 以下为占位，实际完整代码见下方输出 */
-        /* ... 其余样式保持不变 ... */
+        /* ============================================================
+           使用场景
+           ============================================================ */
+        .scenes {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+            margin-bottom: 56px;
+        }
+        .scene-card {
+            background: var(--bg-card);
+            backdrop-filter: blur(24px) saturate(180%);
+            -webkit-backdrop-filter: blur(24px) saturate(180%);
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--border);
+            padding: 28px 24px;
+            text-align: center;
+            transition: all var(--transition);
+            box-shadow: var(--shadow-sm);
+        }
+        .scene-card:hover {
+            transform: translateY(-6px);
+            box-shadow: var(--shadow-lg);
+            border-color: var(--border-accent);
+        }
+        .scene-card i {
+            font-size: 40px;
+            color: var(--accent);
+            margin-bottom: 16px;
+        }
+        .scene-card h4 {
+            font-size: 18px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+        .scene-card p {
+            font-size: 14px;
+            color: var(--text-secondary);
+            line-height: 1.6;
+        }
+
+        @media (max-width: 768px) {
+            .scenes {
+                grid-template-columns: 1fr;
+                gap: 16px;
+            }
+        }
+
+        /* ============================================================
+           技术栈
+           ============================================================ */
+        .tech-stack {
+            background: var(--bg-glass);
+            backdrop-filter: blur(24px) saturate(180%);
+            -webkit-backdrop-filter: blur(24px) saturate(180%);
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--border);
+            padding: 32px 36px;
+            margin-bottom: 56px;
+        }
+        .tech-stack .stack-items {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 14px;
+            margin-top: 20px;
+        }
+        .tech-stack .stack-items span {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            padding: 8px 22px;
+            border-radius: 40px;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            transition: all 0.25s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .tech-stack .stack-items span i {
+            color: var(--accent);
+            font-size: 16px;
+        }
+        .tech-stack .stack-items span:hover {
+            transform: translateY(-3px);
+            box-shadow: var(--shadow-md);
+            border-color: var(--border-accent);
+            background: var(--bg-card-hover);
+        }
+
+        /* ============================================================
+           代码高亮
+           ============================================================ */
+        .code-block {
+            background: var(--bg-card);
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--border);
+            padding: 24px 28px;
+            margin-bottom: 56px;
+            overflow: hidden;
+        }
+        .code-block .code-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 14px;
+        }
+        .code-block .code-header span {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+        .code-block .code-header i {
+            color: var(--accent);
+        }
+        .code-block pre {
+            margin: 0;
+            border-radius: var(--radius-sm);
+            background: #1e1e2f !important;
+            padding: 16px 20px !important;
+            font-size: 13px;
+            line-height: 1.6;
+            overflow-x: auto;
+            box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.3);
+        }
+        .code-block pre code {
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+        }
+
+        /* ============================================================
+           API 端点文档
+           ============================================================ */
+        .api-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin-bottom: 56px;
+        }
+        .api-item {
+            background: var(--bg-card);
+            backdrop-filter: blur(24px) saturate(180%);
+            -webkit-backdrop-filter: blur(24px) saturate(180%);
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--border);
+            padding: 20px 22px;
+            transition: all var(--transition);
+        }
+        .api-item:hover {
+            border-color: var(--border-accent);
+            box-shadow: var(--shadow-md);
+            transform: translateY(-3px);
+        }
+        .api-item .method {
+            display: inline-block;
+            padding: 2px 12px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 700;
+            background: var(--accent-light);
+            color: var(--accent);
+            border: 1px solid var(--border-accent);
+            margin-bottom: 8px;
+        }
+        .api-item .method.get {
+            background: rgba(52, 199, 89, 0.1);
+            color: var(--success);
+            border-color: rgba(52, 199, 89, 0.2);
+        }
+        .api-item .method.post {
+            background: rgba(255, 159, 10, 0.1);
+            color: var(--warning);
+            border-color: rgba(255, 159, 10, 0.2);
+        }
+        .api-item .method.ws {
+            background: rgba(88, 86, 214, 0.1);
+            color: #5856d6;
+            border-color: rgba(88, 86, 214, 0.2);
+        }
+        .api-item .path {
+            font-family: 'SF Mono', monospace;
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+        .api-item .desc {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-top: 6px;
+        }
+
+        /* ============================================================
+           部署指南
+           ============================================================ */
+        .deploy-box {
+            background: var(--bg-card);
+            backdrop-filter: blur(24px) saturate(180%);
+            -webkit-backdrop-filter: blur(24px) saturate(180%);
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--border);
+            padding: 32px 36px;
+            margin-bottom: 56px;
+            box-shadow: var(--shadow-sm);
+            transition: all var(--transition);
+        }
+        .deploy-box:hover {
+            box-shadow: var(--shadow-md);
+            border-color: var(--border-accent);
+        }
+        .deploy-box ol {
+            padding-left: 28px;
+            color: var(--text-secondary);
+            line-height: 2;
+            font-size: 15px;
+            counter-reset: step;
+        }
+        .deploy-box ol li {
+            list-style: none;
+            position: relative;
+            padding-left: 8px;
+            counter-increment: step;
+        }
+        .deploy-box ol li::before {
+            content: counter(step);
+            position: absolute;
+            left: -28px;
+            top: 2px;
+            width: 22px;
+            height: 22px;
+            background: var(--accent-light);
+            border-radius: 50%;
+            text-align: center;
+            line-height: 22px;
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--accent);
+            border: 1px solid var(--border-accent);
+        }
+        .deploy-box ol li strong {
+            color: var(--text-primary);
+        }
+        .deploy-box code {
+            background: var(--bg-primary);
+            padding: 2px 12px;
+            border-radius: 6px;
+            font-size: 13px;
+            border: 1px solid var(--border);
+            color: var(--accent);
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .deploy-box .note {
+            margin-top: 18px;
+            padding: 14px 20px;
+            background: var(--accent-light);
+            border-radius: var(--radius-sm);
+            border-left: 4px solid var(--accent);
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        /* ============================================================
+           架构流程
+           ============================================================ */
+        .architecture {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 12px 8px;
+            padding: 30px 20px;
+            background: var(--bg-card);
+            backdrop-filter: blur(24px) saturate(180%);
+            -webkit-backdrop-filter: blur(24px) saturate(180%);
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--border);
+            margin-bottom: 56px;
+            position: relative;
+        }
+        .arch-node {
+            background: var(--bg-primary);
+            border: 1px solid var(--border-accent);
+            border-radius: var(--radius-sm);
+            padding: 10px 20px;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-primary);
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.3s;
+        }
+        .arch-node:hover {
+            transform: scale(1.05);
+            box-shadow: var(--shadow-md);
+            border-color: var(--accent);
+        }
+        .arch-node i {
+            color: var(--accent);
+            font-size: 16px;
+        }
+        .arch-arrow {
+            color: var(--text-tertiary);
+            font-size: 20px;
+        }
+        @media (max-width: 768px) {
+            .architecture {
+                flex-direction: column;
+                align-items: center;
+            }
+            .arch-arrow {
+                transform: rotate(90deg);
+            }
+        }
+
+        /* ============================================================
+           FAQ
+           ============================================================ */
+        .faq-section {
+            margin-bottom: 56px;
+        }
+        .faq-item {
+            background: var(--bg-card);
+            backdrop-filter: blur(24px) saturate(180%);
+            -webkit-backdrop-filter: blur(24px) saturate(180%);
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--border);
+            margin-bottom: 12px;
+            overflow: hidden;
+            transition: all var(--transition);
+        }
+        .faq-item:hover {
+            border-color: var(--border-accent);
+        }
+        .faq-question {
+            width: 100%;
+            padding: 18px 24px;
+            background: transparent;
+            border: none;
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-primary);
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-family: inherit;
+            transition: background 0.2s;
+            text-align: left;
+        }
+        .faq-question:hover {
+            background: var(--accent-light);
+        }
+        .faq-question i {
+            transition: transform 0.3s;
+            color: var(--accent);
+        }
+        .faq-item.open .faq-question i {
+            transform: rotate(180deg);
+        }
+        .faq-answer {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.4s ease, padding 0.3s;
+            padding: 0 24px;
+            color: var(--text-secondary);
+            font-size: 14px;
+            line-height: 1.7;
+        }
+        .faq-item.open .faq-answer {
+            max-height: 300px;
+            padding: 0 24px 20px;
+        }
+
+        /* ============================================================
+           用户评价
+           ============================================================ */
+        .testimonials {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+            margin-bottom: 56px;
+        }
+        .testimonial {
+            background: var(--bg-card);
+            backdrop-filter: blur(24px) saturate(180%);
+            -webkit-backdrop-filter: blur(24px) saturate(180%);
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--border);
+            padding: 24px 22px;
+            transition: all var(--transition);
+            box-shadow: var(--shadow-sm);
+            position: relative;
+        }
+        .testimonial:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-md);
+            border-color: var(--border-accent);
+        }
+        .testimonial .quote {
+            font-size: 14px;
+            color: var(--text-secondary);
+            line-height: 1.7;
+            font-style: italic;
+        }
+        .testimonial .author {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-top: 16px;
+            padding-top: 14px;
+            border-top: 1px solid var(--border);
+        }
+        .testimonial .author .avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: var(--accent-light);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            color: var(--accent);
+            font-size: 14px;
+        }
+        .testimonial .author .name {
+            font-weight: 600;
+            font-size: 14px;
+            color: var(--text-primary);
+        }
+        .testimonial .author .role {
+            font-size: 12px;
+            color: var(--text-tertiary);
+        }
+
+        @media (max-width: 768px) {
+            .testimonials {
+                grid-template-columns: 1fr;
+                gap: 16px;
+            }
+        }
+
+        /* ============================================================
+           版本历史
+           ============================================================ */
+        .timeline {
+            position: relative;
+            padding-left: 30px;
+            margin-bottom: 56px;
+        }
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 8px;
+            top: 4px;
+            bottom: 4px;
+            width: 2px;
+            background: var(--border-accent);
+        }
+        .timeline-item {
+            position: relative;
+            margin-bottom: 24px;
+            padding-left: 20px;
+        }
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -22px;
+            top: 6px;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--accent);
+            border: 2px solid var(--bg-primary);
+        }
+        .timeline-item .version {
+            font-weight: 700;
+            font-size: 16px;
+            color: var(--text-primary);
+        }
+        .timeline-item .date {
+            font-size: 12px;
+            color: var(--text-tertiary);
+            margin-left: 10px;
+        }
+        .timeline-item p {
+            font-size: 14px;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+
+        /* ============================================================
+           贡献者 / 社区
+           ============================================================ */
+        .community {
+            background: var(--bg-glass);
+            backdrop-filter: blur(24px) saturate(180%);
+            -webkit-backdrop-filter: blur(24px) saturate(180%);
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--border);
+            padding: 32px 36px;
+            margin-bottom: 56px;
+            text-align: center;
+        }
+        .community .cta-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 14px;
+            margin-top: 20px;
+        }
+        .community .cta-buttons a {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 28px;
+            border-radius: 30px;
+            font-size: 14px;
+            font-weight: 600;
+            text-decoration: none;
+            transition: all 0.25s;
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            background: var(--bg-card);
+        }
+        .community .cta-buttons a:hover {
+            transform: translateY(-3px);
+            box-shadow: var(--shadow-md);
+            border-color: var(--border-accent);
+        }
+        .community .cta-buttons a.primary {
+            background: var(--accent);
+            color: #fff;
+            border-color: var(--accent);
+        }
+        .community .cta-buttons a.primary:hover {
+            background: var(--accent-hover);
+            border-color: var(--accent-hover);
+        }
+
+        /* ============================================================
+           许可证提示 (新增)
+           ============================================================ */
+        .license-badge {
+            display: inline-block;
+            background: var(--accent-light);
+            border: 1px solid var(--border-accent);
+            padding: 6px 16px;
+            border-radius: 30px;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--accent);
+            margin-bottom: 16px;
+        }
+        .license-badge i {
+            margin-right: 6px;
+        }
+
+        /* ============================================================
+           底部
+           ============================================================ */
+        .footer {
+            margin-top: 32px;
+            padding: 20px 28px;
+            text-align: center;
+            font-size: 13px;
+            color: var(--text-tertiary);
+            background: var(--bg-glass);
+            backdrop-filter: blur(24px) saturate(180%);
+            -webkit-backdrop-filter: blur(24px) saturate(180%);
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 14px;
+            transition: all var(--transition);
+        }
+        .footer a {
+            color: var(--accent);
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+        .footer a:hover {
+            text-decoration: underline;
+        }
+        .footer .heart {
+            color: #ff3b30;
+            animation: heartBeat 1.5s infinite;
+            display: inline-block;
+        }
+        @keyframes heartBeat {
+            0%,
+            100% {
+                transform: scale(1);
+            }
+            15% {
+                transform: scale(1.2);
+            }
+            30% {
+                transform: scale(1);
+            }
+            45% {
+                transform: scale(1.15);
+            }
+            60% {
+                transform: scale(1);
+            }
+        }
+        .footer .social a {
+            margin: 0 8px;
+            color: var(--text-secondary);
+            transition: color 0.2s;
+        }
+        .footer .social a:hover {
+            color: var(--accent);
+        }
+
+        /* ============================================================
+           响应式
+           ============================================================ */
+        @media (max-width: 768px) {
+            body {
+                padding: 14px 14px 0;
+            }
+            .hero h2 {
+                font-size: 34px;
+            }
+            .hero p {
+                font-size: 17px;
+            }
+            .header {
+                flex-direction: column;
+                text-align: center;
+            }
+            .header-right {
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+            .grid-2 {
+                grid-template-columns: 1fr;
+                gap: 20px;
+            }
+            .section-title {
+                font-size: 26px;
+            }
+            .footer {
+                flex-direction: column;
+                text-align: center;
+            }
+            .code-block pre {
+                font-size: 11px;
+                padding: 12px 14px;
+            }
+            .deploy-box {
+                padding: 24px 20px;
+            }
+            .tech-stack {
+                padding: 24px 20px;
+            }
+            .stats-banner {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            .testimonials {
+                grid-template-columns: 1fr;
+            }
+            .api-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        @media (max-width: 480px) {
+            .stats-banner {
+                grid-template-columns: 1fr;
+            }
+        }
     </style>
 </head>
 <body>
-    <!-- 加载进度 -->
-    <div id="loader"><div class="spinner"></div></div>
-
-    <!-- 进度条 -->
-    <div id="progress-bar"></div>
-
     <!-- 粒子背景 -->
     <div id="particles"></div>
 
-    <!-- 鼠标光晕 -->
+    <!-- 鼠标跟随光晕 -->
     <div class="cursor-glow" id="cursorGlow"></div>
 
     <div class="container">
@@ -260,29 +1350,19 @@
                 </div>
             </div>
             <div class="header-right">
-                <button class="menu-toggle" id="menuToggle" aria-label="菜单">
-                    <i class="fas fa-bars"></i>
-                </button>
                 <button class="theme-toggle" id="themeToggle" title="切换主题">
                     <i class="fas fa-moon"></i>
                 </button>
-                <a href="#" class="github-btn" target="_blank" id="demoLink">
+                <a href="#" class="github-btn" target="_blank">
                     <i class="fas fa-rocket"></i> 在线体验
                 </a>
                 <a href="https://github.com/BlueDriftHK/CF-workers-netdiag" target="_blank" class="github-btn">
                     <i class="fab fa-github"></i> GitHub
                 </a>
             </div>
-            <div class="nav-links" id="navLinks">
-                <a href="#features">功能</a>
-                <a href="#api">API</a>
-                <a href="#deploy">部署</a>
-                <a href="#faq">FAQ</a>
-                <a href="https://github.com/BlueDriftHK/CF-workers-netdiag/issues" target="_blank">反馈</a>
-            </div>
         </header>
 
-        <!-- ===== Hero（原样，略） ===== -->
+        <!-- ===== Hero ===== -->
         <section class="hero">
             <span class="license-badge"><i class="fas fa-balance-scale"></i> AGPL-3.0 License</span>
             <h2>网络诊断，极简之美</h2>
@@ -296,7 +1376,7 @@
             </div>
         </section>
 
-        <!-- ===== 统计看板（原样） ===== -->
+        <!-- ===== 项目统计看板 ===== -->
         <div class="stats-banner reveal">
             <div class="stat-block">
                 <div class="num" id="starsCount">0</div>
@@ -320,31 +1400,422 @@
             </div>
         </div>
 
-        <!-- ===== 核心功能（原样，略） ===== -->
+        <!-- ===== 核心功能 ===== -->
         <div class="reveal">
             <h2 class="section-title"><i class="fas fa-star"></i> 核心功能</h2>
             <p class="section-desc">从延迟监控到流媒体连通性，一站式诊断工具集，所有测试均在边缘执行，毫秒级响应。</p>
         </div>
         <div class="grid-2">
-            <!-- 8 张卡片，与原版一致，此处省略以节省篇幅，完整代码见下方 -->
+            <div class="card reveal reveal-delay-1">
+                <i class="fas fa-waveform"></i>
+                <h3>实时 RTT 监控</h3>
+                <p>每 2 秒自动探测延迟，绘制动态曲线图，同时计算抖动、丢包率，并提供网络质量评级。</p>
+                <span class="tag">Canvas 图表</span>
+            </div>
+            <div class="card reveal reveal-delay-2">
+                <i class="fas fa-lock"></i>
+                <h3>安全与协议检测</h3>
+                <p>显示 TLS 版本、加密套件、ECH 状态、HTTP/2/3 支持、压缩算法以及机器人评分。</p>
+                <span class="tag">TLS · HTTP/2</span>
+            </div>
+            <div class="card reveal reveal-delay-3">
+                <i class="fas fa-map-pin"></i>
+                <h3>边缘 & 客户端定位</h3>
+                <p>展示 Cloudflare 边缘节点位置，同时通过 ip-api.com 获取客户端真实地理位置并计算距离。</p>
+                <span class="tag">地理位置</span>
+            </div>
+            <div class="card reveal reveal-delay-4">
+                <i class="fas fa-user-secret"></i>
+                <h3>IP 欺诈评分</h3>
+                <p>调用 scamalytics.com API 评估 IP 风险（代理/VPN/Tor/托管标记），识别异常流量。</p>
+                <span class="tag">风险等级</span>
+            </div>
+            <div class="card reveal reveal-delay-1">
+                <i class="fas fa-flask"></i>
+                <h3>一键诊断工具集</h3>
+                <p>包含丢包率、带宽测速、DNS 解析、CPU 性能、WebSocket 延迟、并发请求、流式吞吐量、流媒体连通性等 8 项测试。</p>
+                <span class="tag">8 合 1</span>
+            </div>
+            <div class="card reveal reveal-delay-2">
+                <i class="fas fa-globe-asia"></i>
+                <h3>多节点对比</h3>
+                <p>同时测试多个 Worker 节点的延迟，以表格形式直观对比，便于评估全球网络性能。</p>
+                <span class="tag">并行测试</span>
+            </div>
+            <div class="card reveal reveal-delay-3">
+                <i class="fas fa-chart-line"></i>
+                <h3>测速历史 & 用量统计</h3>
+                <p>带宽测速记录自动保存至 KV 存储，并统计各 API 端点调用次数，方便追踪使用情况。</p>
+                <span class="tag">KV 持久化</span>
+            </div>
+            <div class="card reveal reveal-delay-4">
+                <i class="fas fa-palette"></i>
+                <h3>深色 / 浅色 / 自动</h3>
+                <p>主题跟随系统或手动切换，适配不同光线环境。国际化支持 3 种语言（英文、简体、繁体）。</p>
+                <span class="tag">i18n · 主题</span>
+            </div>
         </div>
 
-        <!-- ===== 界面预览（原样，略） ===== -->
-        <!-- ===== 使用场景（原样，略） ===== -->
-        <!-- ===== 技术栈（原样，略） ===== -->
-        <!-- ===== API 端点（原样，略） ===== -->
-        <!-- ===== 架构（原样，略） ===== -->
-        <!-- ===== 代码高亮（原样，略） ===== -->
-        <!-- ===== 部署指南（原样，略） ===== -->
-        <!-- ===== 社区评价（原样，略） ===== -->
-        <!-- ===== FAQ（原样，略） ===== -->
-        <!-- ===== 版本历史（原样，略） ===== -->
-        <!-- ===== 贡献者社区（原样，略） ===== -->
-        <!-- ===== 底部（原样，略） ===== -->
-    </div>
+        <!-- ===== 界面预览 ===== -->
+        <div class="preview-section reveal">
+            <h2 class="section-title"><i class="fas fa-desktop"></i> 界面预览</h2>
+            <p class="section-desc">简洁、直观的仪表盘设计，让网络状态一目了然。</p>
+            <div class="preview-frame">
+                <div class="mockup">
+                    <div class="mock-header">
+                        <div>
+                            <span class="dot green"></span>
+                            <span class="dot yellow"></span>
+                            <span class="dot red"></span>
+                        </div>
+                        <span style="font-size:12px;color:var(--text-tertiary);">NetSight Pro · 实时监控</span>
+                    </div>
+                    <div class="mock-row">
+                        <span class="label">当前 RTT</span>
+                        <span class="value accent" id="previewRtt">23 ms</span>
+                    </div>
+                    <div class="mock-row">
+                        <span class="label">抖动</span>
+                        <span class="value" id="previewJitter">4.2 ms</span>
+                    </div>
+                    <div class="mock-row">
+                        <span class="label">丢包率</span>
+                        <span class="value" style="color:var(--success);">0.0%</span>
+                    </div>
+                    <div class="mock-chart" id="mockChart">
+                        <div class="bar" style="--h:0.3"></div>
+                        <div class="bar" style="--h:0.6"></div>
+                        <div class="bar" style="--h:0.8"></div>
+                        <div class="bar" style="--h:0.5"></div>
+                        <div class="bar" style="--h:0.9"></div>
+                        <div class="bar" style="--h:0.7"></div>
+                        <div class="bar" style="--h:0.4"></div>
+                        <div class="bar" style="--h:0.85"></div>
+                        <div class="bar" style="--h:0.6"></div>
+                        <div class="bar" style="--h:0.3"></div>
+                        <div class="bar" style="--h:0.75"></div>
+                        <div class="bar" style="--h:0.5"></div>
+                        <div class="bar" style="--h:0.9"></div>
+                        <div class="bar" style="--h:0.4"></div>
+                        <div class="bar" style="--h:0.7"></div>
+                    </div>
+                    <div class="mock-row" style="border-top:1px solid var(--border);padding-top:12px;margin-top:4px;">
+                        <span class="label">边缘节点</span>
+                        <span class="value">NRT (东京)</span>
+                    </div>
+                    <div class="mock-row">
+                        <span class="label">客户端 IP</span>
+                        <span class="value" style="font-size:12px;">203.0.113.42</span>
+                    </div>
+                </div>
+            </div>
+        </div>
 
-    <!-- 回到顶部按钮 -->
-    <button id="back-to-top" aria-label="回到顶部"><i class="fas fa-arrow-up"></i></button>
+        <!-- ===== 使用场景 ===== -->
+        <div class="reveal">
+            <h2 class="section-title"><i class="fas fa-users"></i> 适用场景</h2>
+            <p class="section-desc">无论您是开发者、运维工程师还是普通用户，NetSight Pro 都能为您提供价值。</p>
+        </div>
+        <div class="scenes reveal">
+            <div class="scene-card">
+                <i class="fas fa-code"></i>
+                <h4>开发调试</h4>
+                <p>快速验证 API 延迟、CDN 效果，排查网络瓶颈，提升应用性能。</p>
+            </div>
+            <div class="scene-card">
+                <i class="fas fa-server"></i>
+                <h4>运维监控</h4>
+                <p>实时监控边缘节点状态，检测异常波动，保障服务稳定性。</p>
+            </div>
+            <div class="scene-card">
+                <i class="fas fa-user-check"></i>
+                <h4>用户体验优化</h4>
+                <p>分析用户真实网络质量，评估流媒体连通性，优化全球访问体验。</p>
+            </div>
+        </div>
+
+        <!-- ===== 技术栈 ===== -->
+        <div class="tech-stack reveal">
+            <h3 style="font-size: 22px; font-weight: 700; margin-bottom: 4px; display: flex; align-items: center; gap: 10px;">
+                <i class="fas fa-cogs" style="color: var(--accent);"></i> 技术栈
+            </h3>
+            <p style="color: var(--text-secondary); font-size: 15px;">纯前端 + Cloudflare Workers 边缘计算</p>
+            <div class="stack-items">
+                <span><i class="fab fa-cloudflare"></i> Cloudflare Workers</span>
+                <span><i class="fas fa-database"></i> KV 存储</span>
+                <span><i class="fas fa-code"></i> Vanilla JS</span>
+                <span><i class="fas fa-css3-alt"></i> CSS 变量</span>
+                <span><i class="fas fa-chart-simple"></i> Canvas</span>
+                <span><i class="fas fa-plug"></i> WebSocket</span>
+                <span><i class="fas fa-google-font"></i> Inter 字体</span>
+                <span><i class="fab fa-font-awesome"></i> Font Awesome</span>
+                <span><i class="fas fa-shield-alt"></i> CSP · HSTS</span>
+            </div>
+        </div>
+
+        <!-- ===== API 端点文档 ===== -->
+        <div class="reveal">
+            <h2 class="section-title"><i class="fas fa-code"></i> API 端点</h2>
+            <p class="section-desc">所有接口均支持 CORS，方便集成到您自己的工具链中。</p>
+        </div>
+        <div class="api-grid reveal">
+            <div class="api-item">
+                <span class="method get">GET</span>
+                <div class="path">/health</div>
+                <div class="desc">健康检查，返回 Worker 状态与版本信息</div>
+            </div>
+            <div class="api-item">
+                <span class="method get">GET</span>
+                <div class="path">/speedtest</div>
+                <div class="desc">带宽测速，支持指定文件大小（?size=bytes）</div>
+            </div>
+            <div class="api-item">
+                <span class="method get">GET</span>
+                <div class="path">/cpu-test</div>
+                <div class="desc">CPU 性能基准测试，返回操作/毫秒</div>
+            </div>
+            <div class="api-item">
+                <span class="method ws">WebSocket</span>
+                <div class="path">/ws-test</div>
+                <div class="desc">WebSocket 延迟测试，支持 ping/pong 消息</div>
+            </div>
+            <div class="api-item">
+                <span class="method get">GET</span>
+                <div class="path">/concurrent-test</div>
+                <div class="desc">并发请求测试，模拟多路并发下载</div>
+            </div>
+            <div class="api-item">
+                <span class="method get">GET</span>
+                <div class="path">/stream-test</div>
+                <div class="desc">大文件流式传输，测试吞吐量</div>
+            </div>
+            <div class="api-item">
+                <span class="method get">GET</span>
+                <div class="path">/api/ip-fraud</div>
+                <div class="desc">IP 欺诈评分（代理/VPN/Tor 检测）</div>
+            </div>
+            <div class="api-item">
+                <span class="method post">POST</span>
+                <div class="path">/api/log-speed</div>
+                <div class="desc">记录测速结果到 KV 存储</div>
+            </div>
+        </div>
+
+        <!-- ===== 架构流程 ===== -->
+        <div class="reveal">
+            <h2 class="section-title"><i class="fas fa-sitemap"></i> 项目架构</h2>
+            <p class="section-desc">请求如何在边缘节点中流转，每一步都经过精心设计。</p>
+        </div>
+        <div class="architecture reveal">
+            <span class="arch-node"><i class="fas fa-globe"></i> 客户端</span>
+            <span class="arch-arrow"><i class="fas fa-arrow-right"></i></span>
+            <span class="arch-node"><i class="fas fa-shield-alt"></i> 限流 & 安全</span>
+            <span class="arch-arrow"><i class="fas fa-arrow-right"></i></span>
+            <span class="arch-node"><i class="fas fa-route"></i> 路由解析</span>
+            <span class="arch-arrow"><i class="fas fa-arrow-right"></i></span>
+            <span class="arch-node"><i class="fas fa-bolt"></i> 诊断引擎</span>
+            <span class="arch-arrow"><i class="fas fa-arrow-right"></i></span>
+            <span class="arch-node"><i class="fas fa-database"></i> KV 存储</span>
+            <span class="arch-arrow"><i class="fas fa-arrow-right"></i></span>
+            <span class="arch-node"><i class="fas fa-chart-simple"></i> 响应返回</span>
+        </div>
+
+        <!-- ===== 代码高亮 ===== -->
+        <div class="code-block reveal">
+            <div class="code-header">
+                <span><i class="fas fa-code"></i> 核心路由示例 (Worker 端)</span>
+                <span style="font-size: 12px; background: var(--accent-light); padding: 2px 12px; border-radius: 20px;">_workers.js</span>
+            </div>
+            <pre><code class="language-javascript">// 实时 RTT 监控端点
+if (url.pathname === '/rtt') {
+    const start = Date.now();
+    await fetch('https://example.com', { method: 'HEAD' });
+    const rtt = Date.now() - start;
+    return new Response(JSON.stringify({ rtt }), {
+        headers: { 'Content-Type': 'application/json' }
+    });
+}
+
+// IP 欺诈评分 (调用 Scamalytics)
+async function getIpFraudScore(ip) {
+    const resp = await fetch(`https://scamalytics.com/api/ip/${ip}`);
+    const data = await resp.json();
+    return {
+        score: data.score,
+        isProxy: data.is_proxy,
+        isVpn: data.is_vpn,
+        riskLevel: data.score >= 80 ? 'high' : 'low'
+    };
+}
+
+// WebSocket 延迟测试
+const webSocketPair = new WebSocketPair();
+const [client, server] = Object.values(webSocketPair);
+server.accept();
+server.addEventListener('message', event => {
+    server.send(JSON.stringify({ type: 'pong', echo: event.data }));
+});
+return new Response(null, { status: 101, webSocket: client });</code></pre>
+        </div>
+
+        <!-- ===== 部署指南 ===== -->
+        <div class="deploy-box reveal">
+            <h3 style="font-size: 22px; font-weight: 700; margin-bottom: 16px; display: flex; align-items: center; gap: 12px;">
+                <i class="fas fa-rocket" style="color: var(--accent);"></i> 快速部署
+            </h3>
+            <ol>
+                <li><strong>克隆仓库：</strong> <code>git clone https://github.com/BlueDriftHK/CF-workers-netdiag.git</code></li>
+                <li><strong>登录 Cloudflare：</strong> 安装 Wrangler CLI 并执行 <code>wrangler login</code></li>
+                <li><strong>创建 KV 命名空间：</strong> <code>wrangler kv:namespace create "SPEED_HISTORY"</code></li>
+                <li><strong>绑定 KV 到 Worker：</strong> 在 <code>wrangler.toml</code> 中配置 <code>kv_namespaces</code></li>
+                <li><strong>部署 Worker：</strong> <code>wrangler deploy --name netsight-pro</code></li>
+                <li><strong>访问：</strong> 浏览器打开您的 Worker 域名，立即体验。</li>
+            </ol>
+            <div class="note">
+                <i class="fas fa-info-circle" style="color: var(--accent); margin-right: 8px;"></i>
+                详细配置请参考项目 README，支持自定义限流阈值、白名单域名、CORS 策略等。
+            </div>
+        </div>
+
+        <!-- ===== 用户评价 ===== -->
+        <div class="reveal">
+            <h2 class="section-title"><i class="fas fa-comment-dots"></i> 社区声音</h2>
+            <p class="section-desc">来自全球开发者和运维人员的真实反馈。</p>
+        </div>
+        <div class="testimonials reveal">
+            <div class="testimonial">
+                <div class="quote">“NetSight Pro 已经成为我日常调试的必备工具，界面清爽，响应极快！”</div>
+                <div class="author">
+                    <div class="avatar">J</div>
+                    <div>
+                        <div class="name">John Doe</div>
+                        <div class="role">全栈工程师 · 新加坡</div>
+                    </div>
+                </div>
+            </div>
+            <div class="testimonial">
+                <div class="quote">“多节点对比功能太棒了！让我在几分钟内就评估了全球多个数据中心的延迟。” </div>
+                <div class="author">
+                    <div class="avatar">M</div>
+                    <div>
+                        <div class="name">Maria Chen</div>
+                        <div class="role">DevOps 工程师 · 硅谷</div>
+                    </div>
+                </div>
+            </div>
+            <div class="testimonial">
+                <div class="quote">“开源社区的宝藏项目，部署简单，代码质量高，强烈推荐给所有 Cloudflare 用户。”</div>
+                <div class="author">
+                    <div class="avatar">A</div>
+                    <div>
+                        <div class="name">Alex Rivera</div>
+                        <div class="role">云架构师 · 伦敦</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== FAQ ===== -->
+        <div class="faq-section reveal">
+            <h2 class="section-title"><i class="fas fa-question-circle"></i> 常见问题</h2>
+            <div class="faq-item">
+                <button class="faq-question">
+                    <span>NetSight Pro 需要付费吗？</span>
+                    <i class="fas fa-chevron-down"></i>
+                </button>
+                <div class="faq-answer">完全免费！NetSight Pro 是一个开源项目，您可以在 Cloudflare Workers 免费额度内部署和使用，无需任何费用。</div>
+            </div>
+            <div class="faq-item">
+                <button class="faq-question">
+                    <span>我可以自定义测速节点吗？</span>
+                    <i class="fas fa-chevron-down"></i>
+                </button>
+                <div class="faq-answer">当然可以。您可以通过修改 Worker 代码中的节点列表或通过环境变量配置，轻松添加或移除测速节点。</div>
+            </div>
+            <div class="faq-item">
+                <button class="faq-question">
+                    <span>数据存储在哪里？是否安全？</span>
+                    <i class="fas fa-chevron-down"></i>
+                </button>
+                <div class="faq-answer">测速历史和用量统计存储在 Cloudflare KV 中，数据经过加密传输，且不会对外泄露。您也可以自行清理或禁用存储功能。</div>
+            </div>
+            <div class="faq-item">
+                <button class="faq-question">
+                    <span>如何贡献代码或报告问题？</span>
+                    <i class="fas fa-chevron-down"></i>
+                </button>
+                <div class="faq-answer">欢迎通过 GitHub 提交 Issue 或 Pull Request。项目地址：<a href="https://github.com/BlueDriftHK/CF-workers-netdiag" target="_blank" style="color:var(--accent);">CF-workers-netdiag</a></div>
+            </div>
+        </div>
+
+        <!-- ===== 版本历史 ===== -->
+        <div class="reveal">
+            <h2 class="section-title"><i class="fas fa-history"></i> 版本历史</h2>
+        </div>
+        <div class="timeline reveal">
+            <div class="timeline-item">
+                <span class="version">v4.0</span>
+                <span class="date">2026-07-01</span>
+                <p>新增多节点对比、流媒体连通性检测；优化 UI 与深色模式；支持 KV 存储历史记录。</p>
+            </div>
+            <div class="timeline-item">
+                <span class="version">v3.2</span>
+                <span class="date">2026-05-15</span>
+                <p>加入 WebSocket 延迟测试、并发请求测试；改进限流算法，提升稳定性。</p>
+            </div>
+            <div class="timeline-item">
+                <span class="version">v2.0</span>
+                <span class="date">2026-03-10</span>
+                <p>重构前端界面，采用苹果设计语言；增加 IP 欺诈评分和地理位置展示。</p>
+            </div>
+            <div class="timeline-item">
+                <span class="version">v1.0</span>
+                <span class="date">2026-01-01</span>
+                <p>首个正式版本，包含基础 RTT 监控、安全协议检测和带宽测速。</p>
+            </div>
+        </div>
+
+        <!-- ===== 贡献者 / 社区 ===== -->
+        <div class="community reveal">
+            <h3 style="font-size: 24px; font-weight: 700; margin-bottom: 8px;">
+                <i class="fas fa-handshake" style="color: var(--accent);"></i> 加入社区
+            </h3>
+            <p style="color: var(--text-secondary); font-size: 15px; max-width: 600px; margin: 0 auto;">
+                NetSight Pro 是一个由社区驱动的开源项目，基于 <strong>AGPL-3.0</strong> 许可证发布。
+                欢迎 Star、Fork、提交 PR 或分享您的使用故事。
+            </p>
+            <div class="cta-buttons">
+                <a href="https://github.com/BlueDriftHK/CF-workers-netdiag" target="_blank" class="primary">
+                    <i class="fab fa-github"></i> GitHub 仓库
+                </a>
+                <a href="https://github.com/BlueDriftHK/CF-workers-netdiag/issues" target="_blank">
+                    <i class="fas fa-bug"></i> 报告问题
+                </a>
+                <a href="#" target="_blank">
+                    <i class="fas fa-star"></i> 给个 Star
+                </a>
+                <a href="https://github.com/BlueDriftHK/CF-workers-netdiag/blob/main/LICENSE" target="_blank">
+                    <i class="fas fa-balance-scale"></i> 查看许可证
+                </a>
+            </div>
+        </div>
+
+        <!-- ===== 底部 ===== -->
+        <footer class="footer">
+            <span>
+                <i class="far fa-copyright"></i> 2026 NetSight Pro · 由 <a href="https://github.com/BlueDriftHK" target="_blank">BlueDriftHK</a> 维护
+            </span>
+            <span class="social">
+                <a href="#" title="Twitter"><i class="fab fa-twitter"></i></a>
+                <a href="#" title="GitHub"><i class="fab fa-github"></i></a>
+                <a href="#" title="Discord"><i class="fab fa-discord"></i></a>
+                <span class="heart">❤️</span> 开源协议 <a href="https://github.com/BlueDriftHK/CF-workers-netdiag/blob/main/LICENSE" target="_blank" style="font-weight:600;">AGPL-3.0</a>
+            </span>
+            <span>
+                <a href="https://github.com/BlueDriftHK/CF-workers-netdiag/issues" target="_blank">报告问题</a>
+            </span>
+        </footer>
+    </div>
 
     <!-- ===== Prism.js ===== -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js">
@@ -354,19 +1825,7 @@
 
     <script>
         (function() {
-            // ============================================================
-            // 1. 加载进度模拟
-            // ============================================================
-            const loader = document.getElementById('loader');
-            window.addEventListener('load', () => {
-                setTimeout(() => loader.classList.add('hidden'), 600);
-            });
-            // 若加载太快，至少显示 0.6s
-            setTimeout(() => loader.classList.add('hidden'), 800);
-
-            // ============================================================
-            // 2. 主题切换
-            // ============================================================
+            // --- 主题切换 ---
             const toggle = document.getElementById('themeToggle');
             const html = document.documentElement;
             let current = localStorage.getItem('theme') || 'auto';
@@ -389,112 +1848,21 @@
             });
             applyTheme(current);
 
-            // ============================================================
-            // 3. 滚动进度条
-            // ============================================================
-            const progressBar = document.getElementById('progress-bar');
-            window.addEventListener('scroll', () => {
-                const scrollTop = window.scrollY;
-                const docHeight = document.documentElement.scrollHeight - window.innerHeight;
-                const progress = docHeight > 0 ? (scrollTop / docHeight) * 100 : 0;
-                progressBar.style.width = progress + '%';
-            });
-
-            // ============================================================
-            // 4. 回到顶部按钮
-            // ============================================================
-            const backBtn = document.getElementById('back-to-top');
-            window.addEventListener('scroll', () => {
-                if (window.scrollY > 300) {
-                    backBtn.classList.add('visible');
-                } else {
-                    backBtn.classList.remove('visible');
-                }
-            });
-            backBtn.addEventListener('click', () => {
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-            });
-
-            // ============================================================
-            // 5. 移动端菜单折叠
-            // ============================================================
-            const menuToggle = document.getElementById('menuToggle');
-            const navLinks = document.getElementById('navLinks');
-            menuToggle.addEventListener('click', () => {
-                navLinks.classList.toggle('open');
-                menuToggle.innerHTML = navLinks.classList.contains('open') ?
-                    '<i class="fas fa-times"></i>' :
-                    '<i class="fas fa-bars"></i>';
-            });
-
-            // ============================================================
-            // 6. 滚动入场动画（逐项延迟增强）
-            // ============================================================
+            // --- 滚动入场 ---
             const reveals = document.querySelectorAll('.reveal');
             const observer = new IntersectionObserver((entries) => {
                 entries.forEach(entry => {
-                    if (entry.isIntersecting) {
-                        // 对卡片等子项增加延迟
-                        const items = entry.target.querySelectorAll('.card, .scene-card, .testimonial, .api-item, .faq-item');
-                        if (items.length) {
-                            items.forEach((el, i) => {
-                                setTimeout(() => el.style.opacity = '1', i * 60);
-                            });
-                        }
-                        entry.target.classList.add('active');
-                    }
+                    if (entry.isIntersecting) entry.target.classList.add('active');
                 });
-            }, { threshold: 0.1, rootMargin: '0px 0px -30px 0px' });
+            }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
             reveals.forEach(el => observer.observe(el));
-            // 初始可见元素
             setTimeout(() => {
                 reveals.forEach(el => {
                     if (el.getBoundingClientRect().top < window.innerHeight) el.classList.add('active');
                 });
-            }, 200);
+            }, 100);
 
-            // ============================================================
-            // 7. 动态 GitHub 数据
-            // ============================================================
-            const starsEl = document.getElementById('starsCount');
-            const forksEl = document.getElementById('forksCount');
-            const contribEl = document.getElementById('contributorsCount');
-            const deploysEl = document.getElementById('deploysCount');
-
-            // 静态备选数字
-            let stars = 328,
-                forks = 86,
-                contribs = 21;
-            fetch('https://api.github.com/repos/BlueDriftHK/CF-workers-netdiag')
-                .then(r => r.json())
-                .then(data => {
-                    stars = data.stargazers_count || stars;
-                    forks = data.forks_count || forks;
-                    // 贡献者需要额外请求
-                    return fetch('https://api.github.com/repos/BlueDriftHK/CF-workers-netdiag/contributors?per_page=1&anon=1')
-                        .then(r => r.json())
-                        .then(contribData => {
-                            if (Array.isArray(contribData)) contribs = contribData.length || contribs;
-                        })
-                        .catch(() => {})
-                        .then(() => ({ stars, forks, contribs }));
-                })
-                .then(({ stars, forks, contribs }) => {
-                    animateStat(starsEl, stars);
-                    animateStat(forksEl, forks);
-                    animateStat(contribEl, contribs);
-                    // 部署实例数：模拟
-                    const deploys = 1400 + Math.floor(Math.random() * 200);
-                    animateStat(deploysEl, deploys);
-                })
-                .catch(() => {
-                    // 回退静态数据
-                    animateStat(starsEl, 328);
-                    animateStat(forksEl, 86);
-                    animateStat(contribEl, 21);
-                    animateStat(deploysEl, 1427);
-                });
-
+            // --- 统计数字动画 ---
             function animateStat(el, target, suffix = '', duration = 1500) {
                 const start = 0;
                 const startTime = performance.now();
@@ -509,29 +1877,30 @@
                 requestAnimationFrame(update);
             }
 
-            // ============================================================
-            // 8. 预览区动态模拟（RTT / 抖动 / 图表）
-            // ============================================================
+            setTimeout(() => {
+                animateStat(document.getElementById('starsCount'), 328);
+                animateStat(document.getElementById('forksCount'), 86);
+                animateStat(document.getElementById('deploysCount'), 1427);
+                animateStat(document.getElementById('contributorsCount'), 21);
+            }, 400);
+
+            // --- 预览区动态变化 ---
             const previewRtt = document.getElementById('previewRtt');
             const previewJitter = document.getElementById('previewJitter');
-            if (previewRtt && previewJitter) {
-                setInterval(() => {
-                    const rtt = 12 + Math.floor(Math.random() * 40);
-                    const jitter = (2 + Math.random() * 8).toFixed(1);
-                    previewRtt.textContent = rtt + ' ms';
-                    previewJitter.textContent = jitter + ' ms';
-                    const bars = document.querySelectorAll('#mockChart .bar');
-                    bars.forEach(bar => {
-                        const h = 0.2 + Math.random() * 0.8;
-                        bar.style.setProperty('--h', h);
-                    });
-                }, 3000);
-            }
+            setInterval(() => {
+                const rtt = 12 + Math.floor(Math.random() * 40);
+                const jitter = (2 + Math.random() * 8).toFixed(1);
+                previewRtt.textContent = rtt + ' ms';
+                previewJitter.textContent = jitter + ' ms';
+                const bars = document.querySelectorAll('#mockChart .bar');
+                bars.forEach(bar => {
+                    const h = 0.2 + Math.random() * 0.8;
+                    bar.style.setProperty('--h', h);
+                });
+            }, 3000);
 
-            // ============================================================
-            // 9. 粒子背景（原样）
-            // ============================================================
-            const container = document.getElementById('particles');
+            // --- 粒子背景 ---
+            const particleContainer = document.getElementById('particles');
             for (let i = 0; i < 35; i++) {
                 const p = document.createElement('div');
                 p.className = 'particle';
@@ -541,12 +1910,10 @@
                 p.style.animationDuration = (15 + Math.random() * 25) + 's';
                 p.style.animationDelay = (Math.random() * 20) + 's';
                 p.style.opacity = 0.05 + Math.random() * 0.15;
-                container.appendChild(p);
+                particleContainer.appendChild(p);
             }
 
-            // ============================================================
-            // 10. 鼠标光晕（原样）
-            // ============================================================
+            // --- 鼠标光晕 ---
             const glow = document.getElementById('cursorGlow');
             let timeoutId;
             document.addEventListener('mousemove', (e) => {
@@ -560,9 +1927,7 @@
                 glow.style.opacity = '0';
             });
 
-            // ============================================================
-            // 11. FAQ 折叠（原样）
-            // ============================================================
+            // --- FAQ ---
             document.querySelectorAll('.faq-question').forEach(btn => {
                 btn.addEventListener('click', function() {
                     const item = this.parentElement;
@@ -571,13 +1936,6 @@
                     if (!isOpen) item.classList.add('open');
                 });
             });
-
-            // ============================================================
-            // 12. “在线体验”链接占位 → 您可替换为实际 Worker 域名
-            // ============================================================
-            const demoLink = document.getElementById('demoLink');
-            // demoLink.href = 'https://your-worker-name.your-subdomain.workers.dev';
-            // 目前保留 #，您可自行取消注释并替换
         })();
     </script>
 </body>
