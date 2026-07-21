@@ -50,11 +50,20 @@ function isRateLimited(ip, maxRequests = 60, windowMs = 60000) {
   recent.push(now);
   rateLimit.set(ip, recent);
   
-  if (rateLimit.size > 0 && Math.random() < 0.01) {
+  if (rateLimit.size > 10000 || (rateLimit.size > 0 && Math.random() < 0.05)) {
     cleanupRateLimit();
   }
   
   return false;
+}
+
+function fillRandom(data) {
+  const CHUNK = 65536;
+  for (let offset = 0; offset < data.length; offset += CHUNK) {
+    const slice = data.subarray(offset, Math.min(offset + CHUNK, data.length));
+    crypto.getRandomValues(slice);
+  }
+  return data;
 }
 
 function escapeForJS(str) {
@@ -65,7 +74,10 @@ function escapeForJS(str) {
     .replace(/"/g, '\\"')
     .replace(/\n/g, '\\n')
     .replace(/\r/g, '\\r')
-    .replace(/\t/g, '\\t');
+    .replace(/\t/g, '\\t')
+    .replace(/</g, '\\x3c')
+    .replace(/>/g, '\\x3e')
+    .replace(/&/g, '\\x26');
 }
 
 function pLimit(concurrency) {
@@ -232,11 +244,30 @@ async function handleRequest(event) {
   // ==================== 速度测试端点 ====================
   if (url.pathname === '/speedtest') {
     const size = Math.min(parseInt(url.searchParams.get('size')) || 102400, 5242880);
-    const data = new Uint8Array(size);
-    crypto.getRandomValues(data);
+    const data = fillRandom(new Uint8Array(size));
     return new Response(data, {
       headers: {
         'content-type': 'application/octet-stream',
+        ...CORS_HEADERS,
+        ...SECURITY_HEADERS
+      }
+    });
+  }
+  
+  // ==================== 上传速度测试端点 ====================
+  if (url.pathname === '/upload-test' && request.method === 'POST') {
+    const start = Date.now();
+    const body = await request.arrayBuffer();
+    const duration = Date.now() - start;
+    const bytes = body.byteLength;
+    const speedMbps = duration > 0 ? ((bytes * 8) / (duration / 1000)) / 1000000 : 0;
+    return new Response(JSON.stringify({
+      bytes: bytes,
+      duration: duration,
+      speedMbps: Math.round(speedMbps * 100) / 100
+    }), {
+      headers: {
+        'content-type': 'application/json',
         ...CORS_HEADERS,
         ...SECURITY_HEADERS
       }
@@ -263,13 +294,13 @@ async function handleRequest(event) {
     cpulimit.count++;
     cpuRateLimit.set(clientIP, cpulimit);
 
-    const iterations = Math.min(parseInt(url.searchParams.get('n')) || 500000, 2000000);
-    const start = Date.now();
+    const iterations = Math.min(parseInt(url.searchParams.get('n')) || 500000, 500000);
+    const start = performance.now();
     let result = 0;
     for (let i = 0; i < iterations; i++) {
       result += Math.sqrt(i) * Math.sin(i);
     }
-    const duration = Date.now() - start;
+    const duration = Math.round((performance.now() - start) * 100) / 100;
     return new Response(JSON.stringify({
       duration: duration,
       iterations: iterations,
@@ -398,6 +429,8 @@ async function handleRequest(event) {
               echoTime: data.timestamp
             }));
           }
+        } else if (data.type === 'pong') {
+          isAlive = true;
         } else if (data.type === 'close') {
           server.close(1000, 'Client requested close');
           cleanup();
@@ -467,8 +500,7 @@ async function handleRequest(event) {
       promises.push(
         limit(async () => {
           const start = Date.now();
-          const data = new Uint8Array(size);
-          crypto.getRandomValues(data);
+          const data = fillRandom(new Uint8Array(size));
           await new Promise(resolve => setTimeout(resolve, 0));
           return {
             index: i,
@@ -510,8 +542,7 @@ async function handleRequest(event) {
           
           const remaining = size - sent;
           const currentChunk = Math.min(remaining, chunkSize);
-          const chunk = new Uint8Array(currentChunk);
-          crypto.getRandomValues(chunk);
+          const chunk = fillRandom(new Uint8Array(currentChunk));
           
           try {
             controller.enqueue(chunk);
@@ -700,11 +731,13 @@ async function handleRequest(event) {
     tlsClientHelloLength: cf.tlsClientHelloLength || 0,
     httpVersion: request.cf?.httpProtocol || 'N/A',
     tlsClientAuth: cf.tlsClientAuth?.certPresent ? 'YES' : 'NO',
-    requestPriority: request.headers.get('priority') || 'N/A'
+    requestPriority: request.headers.get('priority') || 'N/A',
+    tlsClientJa3: escapeForJS(cf.tlsClientJa3 || 'N/A'),
+    tlsClientJa4: escapeForJS(cf.tlsClientJa4 || 'N/A')
   };
   
   const acceptLang = request.headers.get('accept-language') || '';
-  let defaultLang = 'zh-CN';
+  let defaultLang = 'en';
   if (acceptLang.match(/zh-(CN|SG|MY)/i)) defaultLang = 'zh-CN';
   else if (acceptLang.match(/zh/i)) defaultLang = 'zh-TW';
   else if (acceptLang.match(/en/i)) defaultLang = 'en';
@@ -715,11 +748,24 @@ async function handleRequest(event) {
   let realGeoData = null;
   if (clientIp && clientIp !== 'unknown') {
     try {
-      const geoRes = await fetch(`http://ip-api.com/json/${clientIp}?fields=city,regionName,country,countryCode,lat,lon,org,query`, {
-        headers: { 'User-Agent': 'Cloudflare-Worker/1.0' }
+      const geoRes = await fetch(`https://ipapi.co/${clientIp}/json/`, {
+        headers: { 'User-Agent': 'Cloudflare-Worker/1.0' },
+        signal: AbortSignal.timeout(4000)
       });
       if (geoRes.ok) {
-        realGeoData = await geoRes.json();
+        const geoJson = await geoRes.json();
+        if (!geoJson.error) {
+          realGeoData = {
+            city: geoJson.city,
+            regionName: geoJson.region,
+            country: geoJson.country_name,
+            countryCode: geoJson.country_code,
+            lat: geoJson.latitude,
+            lon: geoJson.longitude,
+            org: geoJson.org,
+            query: geoJson.ip || clientIp
+          };
+        }
       }
     } catch (e) {
       // 静默失败
@@ -766,73 +812,57 @@ async function handleRequest(event) {
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        /* ==================== 全局重置 & 变量 ==================== */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap');
         * { margin: 0; padding: 0; box-sizing: border-box; }
         :root {
-            --bg-primary: #f5f5f7;
-            --bg-card: rgba(255,255,255,0.72);
-            --bg-card-hover: rgba(255,255,255,0.88);
-            --bg-glass: rgba(255,255,255,0.64);
+            --bg-primary: #f0f2f5;
+            --bg-mesh: radial-gradient(ellipse at 20% 0%, rgba(120,180,255,0.15) 0%, transparent 50%),
+                       radial-gradient(ellipse at 80% 100%, rgba(180,120,255,0.1) 0%, transparent 50%),
+                       radial-gradient(ellipse at 50% 50%, rgba(255,180,120,0.05) 0%, transparent 60%);
+            --glass-bg: rgba(255,255,255,0.55);
+            --glass-bg-hover: rgba(255,255,255,0.7);
+            --glass-heavy: rgba(255,255,255,0.72);
+            --glass-border: rgba(255,255,255,0.6);
+            --glass-border-outer: rgba(0,0,0,0.06);
+            --glass-highlight: linear-gradient(135deg, rgba(255,255,255,0.8) 0%, rgba(255,255,255,0) 50%);
+            --glass-shadow: 0 8px 32px rgba(0,0,0,0.08), 0 2px 8px rgba(0,0,0,0.04), inset 0 1px 0 rgba(255,255,255,0.6);
+            --glass-shadow-lg: 0 20px 60px rgba(0,0,0,0.1), 0 4px 16px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.7);
             --text-primary: #1d1d1f;
-            --text-secondary: #86868b;
+            --text-secondary: #6e6e73;
             --text-tertiary: #aeaeb2;
             --text-quaternary: #c7c7cc;
             --accent: #007AFF;
             --accent-hover: #0066d6;
             --accent-light: rgba(0,122,255,0.08);
             --accent-glass: rgba(0,122,255,0.06);
-            --success: #34c759;
-            --success-light: rgba(52,199,89,0.1);
+            --success: #30d158;
+            --success-light: rgba(48,209,88,0.1);
             --warning: #ff9f0a;
             --warning-light: rgba(255,159,10,0.1);
             --danger: #ff3b30;
             --danger-light: rgba(255,59,48,0.08);
             --border: rgba(0,0,0,0.06);
-            --border-accent: rgba(0,122,255,0.12);
-            --divider: rgba(0,0,0,0.04);
-            --shadow-xs: 0 1px 2px rgba(0,0,0,0.03);
-            --shadow-sm: 0 2px 8px rgba(0,0,0,0.04);
-            --shadow-md: 0 4px 16px rgba(0,0,0,0.05);
-            --shadow-lg: 0 8px 32px rgba(0,0,0,0.07);
-            --radius-sm: 12px; --radius-md: 16px; --radius-lg: 20px; --radius-xl: 24px;
-            --transition-fast: 0.18s ease; --transition-smooth: 0.25s cubic-bezier(0.25,0.1,0.25,1);
-            --chart-cyan: #06b6d4; --chart-green: #34d399; --chart-teal: #22d3ee;
+            --border-accent: rgba(0,122,255,0.15);
+            --divider: rgba(0,0,0,0.05);
+            --radius-sm: 14px; --radius-md: 18px; --radius-lg: 22px; --radius-xl: 28px;
+            --transition-fast: 0.2s cubic-bezier(0.25,0.1,0.25,1);
+            --transition-smooth: 0.35s cubic-bezier(0.25,0.1,0.25,1);
+            --chart-cyan: #32ade6; --chart-green: #30d158; --chart-teal: #64d2ff;
+            --font: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', system-ui, sans-serif;
         }
-        @media (prefers-color-scheme: dark) {
-            :root {
-                --bg-primary: #1c1c1e;
-                --bg-card: rgba(255,255,255,0.08);
-                --bg-card-hover: rgba(255,255,255,0.12);
-                --bg-glass: rgba(255,255,255,0.06);
-                --text-primary: #f5f5f7;
-                --text-secondary: #a1a1a6;
-                --text-tertiary: #636366;
-                --text-quaternary: #48484a;
-                --accent: #0A84FF;
-                --accent-hover: #409cff;
-                --accent-light: rgba(10,132,255,0.12);
-                --accent-glass: rgba(10,132,255,0.08);
-                --success: #30d158;
-                --success-light: rgba(48,209,88,0.15);
-                --warning: #ff9f0a;
-                --warning-light: rgba(255,159,10,0.15);
-                --danger: #ff453a;
-                --danger-light: rgba(255,69,58,0.12);
-                --border: rgba(255,255,255,0.1);
-                --border-accent: rgba(10,132,255,0.2);
-                --divider: rgba(255,255,255,0.06);
-                --shadow-xs: 0 1px 2px rgba(0,0,0,0.3);
-                --shadow-sm: 0 2px 8px rgba(0,0,0,0.3);
-                --shadow-md: 0 4px 16px rgba(0,0,0,0.3);
-                --shadow-lg: 0 8px 32px rgba(0,0,0,0.3);
-                --chart-cyan: #22d3ee; --chart-green: #34d399; --chart-teal: #2dd4bf;
-            }
-        }
-        [data-theme="dark"] {
-            --bg-primary: #1c1c1e;
-            --bg-card: rgba(255,255,255,0.08);
-            --bg-card-hover: rgba(255,255,255,0.12);
-            --bg-glass: rgba(255,255,255,0.06);
+        [data-theme="auto"] {
+            --bg-primary: #000000;
+            --bg-mesh: radial-gradient(ellipse at 20% 0%, rgba(60,100,180,0.12) 0%, transparent 50%),
+                       radial-gradient(ellipse at 80% 100%, rgba(100,60,180,0.08) 0%, transparent 50%),
+                       radial-gradient(ellipse at 50% 50%, rgba(180,100,60,0.04) 0%, transparent 60%);
+            --glass-bg: rgba(44,44,46,0.55);
+            --glass-bg-hover: rgba(58,58,60,0.65);
+            --glass-heavy: rgba(44,44,46,0.72);
+            --glass-border: rgba(255,255,255,0.12);
+            --glass-border-outer: rgba(255,255,255,0.06);
+            --glass-highlight: linear-gradient(135deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0) 50%);
+            --glass-shadow: 0 8px 32px rgba(0,0,0,0.3), 0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.08);
+            --glass-shadow-lg: 0 20px 60px rgba(0,0,0,0.4), 0 4px 16px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.1);
             --text-primary: #f5f5f7;
             --text-secondary: #a1a1a6;
             --text-tertiary: #636366;
@@ -847,121 +877,103 @@ async function handleRequest(event) {
             --warning-light: rgba(255,159,10,0.15);
             --danger: #ff453a;
             --danger-light: rgba(255,69,58,0.12);
-            --border: rgba(255,255,255,0.1);
+            --border: rgba(255,255,255,0.08);
             --border-accent: rgba(10,132,255,0.2);
             --divider: rgba(255,255,255,0.06);
-            --shadow-xs: 0 1px 2px rgba(0,0,0,0.3);
-            --shadow-sm: 0 2px 8px rgba(0,0,0,0.3);
-            --shadow-md: 0 4px 16px rgba(0,0,0,0.3);
-            --shadow-lg: 0 8px 32px rgba(0,0,0,0.3);
-            --chart-cyan: #22d3ee; --chart-green: #34d399; --chart-teal: #2dd4bf;
-        }
-        [data-theme="light"] {
-            --bg-primary: #f5f5f7;
-            --bg-card: rgba(255,255,255,0.72);
-            --bg-card-hover: rgba(255,255,255,0.88);
-            --bg-glass: rgba(255,255,255,0.64);
-            --text-primary: #1d1d1f;
-            --text-secondary: #86868b;
-            --text-tertiary: #aeaeb2;
-            --text-quaternary: #c7c7cc;
-            --accent: #007AFF;
-            --accent-hover: #0066d6;
-            --accent-light: rgba(0,122,255,0.08);
-            --accent-glass: rgba(0,122,255,0.06);
-            --success: #34c759;
-            --success-light: rgba(52,199,89,0.1);
-            --warning: #ff9f0a;
-            --warning-light: rgba(255,159,10,0.1);
-            --danger: #ff3b30;
-            --danger-light: rgba(255,59,48,0.08);
-            --border: rgba(0,0,0,0.06);
-            --border-accent: rgba(0,122,255,0.12);
-            --divider: rgba(0,0,0,0.04);
-            --shadow-xs: 0 1px 2px rgba(0,0,0,0.03);
-            --shadow-sm: 0 2px 8px rgba(0,0,0,0.04);
-            --shadow-md: 0 4px 16px rgba(0,0,0,0.05);
-            --shadow-lg: 0 8px 32px rgba(0,0,0,0.07);
-            --chart-cyan: #06b6d4; --chart-green: #34d399; --chart-teal: #22d3ee;
+            --chart-cyan: #64d2ff; --chart-green: #30d158; --chart-teal: #6ac4dc;
         }
         html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
         body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
+            font-family: var(--font);
             background: var(--bg-primary);
             min-height: 100vh;
             padding: 28px;
             color: var(--text-primary);
             position: relative;
-            transition: background 0.3s ease, color 0.3s ease;
+            transition: background 0.4s ease, color 0.4s ease;
         }
         body::before {
             content: '';
             position: fixed;
             top: 0; left: 0; right: 0; bottom: 0;
-            background: radial-gradient(ellipse at 30% 20%, rgba(0,122,255,0.03) 0%, transparent 50%),
-                        radial-gradient(ellipse at 70% 60%, rgba(0,122,255,0.02) 0%, transparent 45%),
-                        radial-gradient(ellipse at 50% 90%, rgba(100,100,110,0.02) 0%, transparent 40%);
+            background: var(--bg-mesh);
             pointer-events: none; z-index: 0;
         }
-        .container { max-width: 1200px; margin: 0 auto; position: relative; z-index: 1; }
+        .container { max-width: 960px; margin: 0 auto; position: relative; z-index: 1; }
 
-        /* 头部、卡片、按钮等样式（与之前美化版一致，仅补充国际化） */
         .header {
             display: flex; justify-content: space-between; align-items: center;
-            padding: 16px 28px; margin-bottom: 28px; flex-wrap: wrap; gap: 16px;
-            background: var(--bg-glass); backdrop-filter: blur(24px) saturate(180%);
-            -webkit-backdrop-filter: blur(24px) saturate(180%);
-            border-radius: var(--radius-xl); border: 1px solid var(--border); box-shadow: var(--shadow-sm);
+            padding: 18px 28px; margin-bottom: 24px; flex-wrap: wrap; gap: 16px;
+            background: var(--glass-heavy);
+            backdrop-filter: blur(40px) saturate(180%);
+            -webkit-backdrop-filter: blur(40px) saturate(180%);
+            border-radius: var(--radius-xl);
+            border: 1px solid var(--glass-border);
+            box-shadow: var(--glass-shadow);
+            position: relative; overflow: hidden;
         }
-        .logo { display: flex; align-items: center; gap: 14px; }
+        .header::before {
+            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 50%;
+            background: var(--glass-highlight); pointer-events: none; border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+        }
+        .logo { display: flex; align-items: center; gap: 14px; position: relative; }
         .logo-icon {
-            width: 48px; height: 48px; background: var(--accent); border-radius: var(--radius-md);
+            width: 48px; height: 48px;
+            background: linear-gradient(135deg, var(--accent), #5856d6);
+            border-radius: 14px;
             display: flex; align-items: center; justify-content: center; font-size: 22px; color: #fff;
-            box-shadow: 0 4px 14px rgba(0,122,255,0.2);
+            box-shadow: 0 4px 14px rgba(0,122,255,0.3), inset 0 1px 0 rgba(255,255,255,0.3);
         }
-        .logo h1 { font-size: 24px; font-weight: 700; color: var(--text-primary); letter-spacing: -0.3px; }
+        .logo h1 { font-size: 22px; font-weight: 700; color: var(--text-primary); letter-spacing: -0.5px; }
         .logo p { font-size: 12px; color: var(--text-secondary); margin-top: 2px; letter-spacing: 0.2px; }
-        .header-right { display: flex; align-items: center; gap: 12px; }
+        .header-right { display: flex; align-items: center; gap: 12px; position: relative; }
         .theme-toggle {
-            background: var(--bg-card); border: 1px solid var(--border); border-radius: 30px;
-            padding: 6px 12px; cursor: pointer; font-size: 18px; line-height: 1;
+            background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 50px;
+            padding: 8px 14px; cursor: pointer; font-size: 16px; line-height: 1;
             color: var(--text-secondary); transition: all var(--transition-fast);
             display: flex; align-items: center; gap: 6px;
+            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.4);
         }
-        .theme-toggle:hover { background: var(--bg-card-hover); border-color: var(--border-accent); }
-        .theme-toggle i { font-size: 16px; }
+        .theme-toggle:hover { background: var(--glass-bg-hover); box-shadow: 0 4px 12px rgba(0,0,0,0.1), inset 0 1px 0 rgba(255,255,255,0.5); transform: scale(1.02); }
         .lang-switcher {
-            display: flex; gap: 3px; background: rgba(0,0,0,0.04); padding: 4px;
-            border-radius: 10px; border: 1px solid var(--border);
+            display: flex; gap: 2px; background: var(--glass-bg); padding: 4px;
+            border-radius: 12px; border: 1px solid var(--glass-border);
+            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.06);
         }
         .lang-btn {
             background: transparent; border: none; color: var(--text-secondary);
-            padding: 7px 16px; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 500;
-            transition: all var(--transition-fast);
+            padding: 6px 14px; border-radius: 9px; cursor: pointer; font-size: 12px; font-weight: 500;
+            font-family: var(--font); transition: all var(--transition-fast);
         }
-        .lang-btn.active { background: #fff; color: var(--accent); box-shadow: var(--shadow-xs); font-weight: 600; }
-        .lang-btn:hover:not(.active) { color: var(--text-primary); background: rgba(0,0,0,0.04); }
+        .lang-btn.active { background: #fff; color: var(--accent); box-shadow: 0 2px 8px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.8); font-weight: 600; }
+        [data-theme="auto"] .lang-btn.active { background: rgba(255,255,255,0.12); }
+        .lang-btn:hover:not(.active) { color: var(--text-primary); background: rgba(0,0,0,0.03); }
 
         .hero-card {
-            background: var(--bg-card); backdrop-filter: blur(24px) saturate(180%);
-            -webkit-backdrop-filter: blur(24px) saturate(180%);
-            border-radius: var(--radius-xl); padding: 28px 32px; margin-bottom: 28px;
-            border: 1px solid var(--border); box-shadow: var(--shadow-md); position: relative; overflow: hidden;
+            background: var(--glass-heavy);
+            backdrop-filter: blur(40px) saturate(180%);
+            -webkit-backdrop-filter: blur(40px) saturate(180%);
+            border-radius: var(--radius-xl); padding: 28px 32px; margin-bottom: 24px;
+            border: 1px solid var(--glass-border); box-shadow: var(--glass-shadow-lg);
+            position: relative; overflow: hidden;
         }
         .hero-card::before {
-            content: ''; position: absolute; top: -30%; left: -10%; width: 60%; height: 160%;
-            background: radial-gradient(ellipse, rgba(0,122,255,0.04), transparent 70%);
-            pointer-events: none; border-radius: 50%;
+            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 45%;
+            background: var(--glass-highlight); pointer-events: none; border-radius: var(--radius-xl) var(--radius-xl) 0 0;
         }
-        .ip-row { display: flex; align-items: baseline; flex-wrap: wrap; gap: 16px; margin-bottom: 14px; }
-        .ip-label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px; color: var(--accent); min-width: 50px; }
-        .ip-val { font-size: 28px; font-weight: 700; font-family: 'SF Mono','Monaco','Courier New',monospace; color: var(--text-primary); word-break: break-all; letter-spacing: -0.5px; }
+        .ip-row { display: flex; align-items: baseline; flex-wrap: wrap; gap: 16px; margin-bottom: 14px; position: relative; }
+        .ip-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px; color: var(--accent); min-width: 50px; }
+        .ip-val { font-size: 28px; font-weight: 700; font-family: 'SF Mono', ui-monospace, monospace; color: var(--text-primary); word-break: break-all; letter-spacing: -0.5px; }
         .ip-val-small { font-size: 18px; color: var(--text-secondary); }
-        .stats-row { display: flex; gap: 14px; margin-top: 20px; flex-wrap: wrap; }
+        .stats-row { display: flex; gap: 12px; margin-top: 20px; flex-wrap: wrap; position: relative; }
         .stat-item {
             display: flex; align-items: center; gap: 8px; font-size: 12px;
-            padding: 7px 16px; background: rgba(0,0,0,0.03); border-radius: 20px;
-            border: 1px solid rgba(0,0,0,0.05); color: var(--text-secondary);
+            padding: 7px 16px; background: var(--glass-bg); border-radius: 50px;
+            border: 1px solid var(--glass-border); color: var(--text-secondary);
+            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+            box-shadow: 0 2px 6px rgba(0,0,0,0.04), inset 0 1px 0 rgba(255,255,255,0.4);
         }
         .stat-item strong { color: var(--text-primary); font-weight: 600; }
         .stat-item i { color: var(--accent); font-size: 13px; }
@@ -969,135 +981,149 @@ async function handleRequest(event) {
             display: inline-block; width: 7px; height: 7px; border-radius: 50%;
             background: var(--success); animation: pulse 2s ease-in-out infinite; margin-right: 6px;
         }
-        @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.45;transform:scale(1.25)} }
+        @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(1.2)} }
 
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px,1fr)); gap: 20px; margin-bottom: 28px; }
-        .rtt-card { grid-column: 1 / -1; min-height: 560px; display: flex; flex-direction: column; background: var(--bg-card); border: 1px solid var(--border-accent); box-shadow: var(--shadow-md); }
-        .rtt-card .card-body { flex: 1; display: flex; flex-direction: column; padding: 24px 28px; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; margin-bottom: 24px; }
+        .rtt-card { grid-column: 1 / -1; min-height: 540px; display: flex; flex-direction: column; background: var(--glass-heavy); backdrop-filter: blur(40px) saturate(180%); -webkit-backdrop-filter: blur(40px) saturate(180%); border: 1px solid var(--glass-border); box-shadow: var(--glass-shadow-lg); position: relative; overflow: hidden; }
+        .rtt-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 40%; background: var(--glass-highlight); pointer-events: none; border-radius: var(--radius-xl) var(--radius-xl) 0 0; }
+        .rtt-card .card-body { flex: 1; display: flex; flex-direction: column; padding: 24px 28px; position: relative; }
         .card {
-            background: var(--bg-card); backdrop-filter: blur(24px) saturate(180%);
-            -webkit-backdrop-filter: blur(24px) saturate(180%);
-            border-radius: var(--radius-lg); border: 1px solid var(--border); overflow: hidden;
-            transition: all var(--transition-smooth); box-shadow: var(--shadow-xs);
+            background: var(--glass-bg);
+            backdrop-filter: blur(40px) saturate(180%);
+            -webkit-backdrop-filter: blur(40px) saturate(180%);
+            border-radius: var(--radius-lg); border: 1px solid var(--glass-border); overflow: hidden;
+            transition: all var(--transition-smooth); box-shadow: var(--glass-shadow);
+            position: relative;
         }
-        .card:hover { box-shadow: var(--shadow-md); border-color: var(--border-accent); }
+        .card::before {
+            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 40%;
+            background: var(--glass-highlight); pointer-events: none; border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+        }
+        .card:hover { box-shadow: var(--glass-shadow-lg); border-color: var(--border-accent); transform: translateY(-2px); }
         .card-header {
-            padding: 18px 24px; background: rgba(0,0,0,0.015); border-bottom: 1px solid var(--divider);
-            display: flex; align-items: center; gap: 14px;
+            padding: 18px 24px; border-bottom: 1px solid var(--divider);
+            display: flex; align-items: center; gap: 14px; position: relative;
         }
-        .card-header i { font-size: 24px; color: var(--accent); opacity: 1; transition: transform 0.3s ease; }
-        .card:hover .card-header i { transform: rotate(5deg) scale(1.05); }
-        .card-header h3 { font-size: 16px; font-weight: 600; color: var(--text-primary); letter-spacing: -0.2px; }
+        .card-header i { font-size: 22px; color: var(--accent); transition: transform 0.3s ease; }
+        .card:hover .card-header i { transform: scale(1.08); }
+        .card-header h3 { font-size: 15px; font-weight: 600; color: var(--text-primary); letter-spacing: -0.2px; }
         .card-header p { font-size: 11px; color: var(--text-tertiary); margin-top: 2px; }
-        .card-body { padding: 20px 24px; }
+        .card-body { padding: 20px 24px; position: relative; }
         .info-row {
             display: flex; justify-content: space-between; align-items: center;
-            padding: 12px 0; border-bottom: 1px solid var(--divider);
+            padding: 11px 0; border-bottom: 1px solid var(--divider);
         }
         .info-row:last-child { border-bottom: none; }
-        .info-label {
-            font-size: 13px; color: var(--text-secondary);
-            display: flex; align-items: center; gap: 10px;
-        }
-        .info-label i { font-size: 16px; width: 18px; color: var(--accent); opacity: 1; }
-        .info-value { font-size: 13px; font-weight: 500; font-family: 'SF Mono','Monaco','Courier New',monospace; color: var(--text-primary); }
+        .info-label { font-size: 13px; color: var(--text-secondary); display: flex; align-items: center; gap: 10px; }
+        .info-label i { font-size: 15px; width: 18px; color: var(--accent); opacity: 0.8; }
+        .info-value { font-size: 13px; font-weight: 500; font-family: 'SF Mono', ui-monospace, monospace; color: var(--text-primary); }
         .badge {
-            padding: 4px 12px; border-radius: 14px; font-size: 11px; font-weight: 600;
+            padding: 4px 12px; border-radius: 50px; font-size: 11px; font-weight: 600;
             display: inline-flex; align-items: center; gap: 5px;
         }
-        .badge-success { background: var(--success-light); color: var(--success); border: 1px solid rgba(52,199,89,0.2); }
-        .badge-warning { background: var(--warning-light); color: #cc7a00; border: 1px solid rgba(255,159,10,0.2); }
+        .badge-success { background: var(--success-light); color: var(--success); border: 1px solid rgba(48,209,88,0.2); }
+        .badge-warning { background: var(--warning-light); color: #b36b00; border: 1px solid rgba(255,159,10,0.2); }
+        [data-theme="auto"] .badge-warning { color: var(--warning); }
         .badge-danger { background: var(--danger-light); color: var(--danger); border: 1px solid rgba(255,59,48,0.2); }
-        .badge-info { background: var(--accent-light); color: var(--accent); border: 1px solid rgba(0,122,255,0.18); }
-        .badge-purple { background: rgba(175,82,222,0.08); color: #8944ab; border: 1px solid rgba(175,82,222,0.18); }
+        .badge-info { background: var(--accent-light); color: var(--accent); border: 1px solid rgba(0,122,255,0.15); }
+        .badge-purple { background: rgba(175,82,222,0.08); color: #8944ab; border: 1px solid rgba(175,82,222,0.15); }
+        [data-theme="auto"] .badge-purple { color: #bf5af2; }
 
-        .rtt-display {
-            display: grid; grid-template-columns: repeat(4,1fr); gap: 18px; margin-bottom: 24px;
-        }
+        .rtt-display { display: grid; grid-template-columns: repeat(4,1fr); gap: 16px; margin-bottom: 22px; }
         .rtt-box {
-            background: rgba(0,0,0,0.02); border-radius: var(--radius-lg); padding: 24px 18px;
-            text-align: center; border: 1px solid var(--border); transition: all var(--transition-smooth);
+            background: var(--glass-bg); border-radius: var(--radius-md); padding: 22px 16px;
+            text-align: center; border: 1px solid var(--glass-border); transition: all var(--transition-smooth);
+            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04), inset 0 1px 0 rgba(255,255,255,0.4);
         }
-        .rtt-box:hover { background: rgba(0,122,255,0.03); border-color: var(--border-accent); }
-        .rtt-value { font-size: 52px; font-weight: 700; color: var(--text-primary); line-height: 1.15; letter-spacing: -1.5px; }
+        .rtt-box:hover { background: var(--glass-bg-hover); box-shadow: 0 4px 16px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.5); transform: translateY(-1px); }
+        .rtt-value { font-size: 48px; font-weight: 700; color: var(--text-primary); line-height: 1.1; letter-spacing: -2px; }
         .rtt-label { font-size: 12px; color: var(--text-secondary); margin-top: 10px; letter-spacing: 0.2px; }
         .rtt-label i { margin-right: 4px; color: var(--accent); opacity: 0.7; }
         .chart-container {
-            background: rgba(0,0,0,0.015); border-radius: var(--radius-md); padding: 20px; margin: 20px 0;
-            border: 1px solid var(--border);
+            background: var(--glass-bg); border-radius: var(--radius-md); padding: 20px; margin: 18px 0;
+            border: 1px solid var(--glass-border);
+            box-shadow: inset 0 2px 6px rgba(0,0,0,0.04);
         }
         canvas { width: 100%; height: 180px; }
         .quality-grid {
-            display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin-top: 20px;
-            padding-top: 18px; border-top: 1px solid var(--divider);
+            display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin-top: 18px;
+            padding-top: 16px; border-top: 1px solid var(--divider);
         }
         .quality-card {
-            background: rgba(0,0,0,0.02); border-radius: var(--radius-md); padding: 14px 16px;
+            background: var(--glass-bg); border-radius: var(--radius-sm); padding: 13px 15px;
             display: flex; align-items: center; justify-content: space-between;
             transition: all var(--transition-fast); border: 1px solid transparent;
         }
-        .quality-card:hover { background: rgba(0,0,0,0.04); border-color: var(--border); }
+        .quality-card:hover { background: var(--glass-bg-hover); border-color: var(--glass-border); }
         .quality-label { font-size: 12px; color: var(--text-secondary); display: flex; align-items: center; gap: 7px; }
         .quality-label i { font-size: 13px; color: var(--accent); opacity: 0.7; }
-        .quality-value { font-size: 15px; font-weight: 600; }
+        .quality-value { font-size: 14px; font-weight: 600; }
 
-        .button-group { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
+        .button-group { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 18px; }
         .btn {
-            padding: 10px 22px; border-radius: 20px; font-size: 13px; font-weight: 500;
+            padding: 10px 20px; border-radius: 50px; font-size: 13px; font-weight: 500;
             border: none; cursor: pointer; transition: all var(--transition-fast);
-            display: inline-flex; align-items: center; gap: 8px; font-family: inherit; letter-spacing: -0.1px;
+            display: inline-flex; align-items: center; gap: 8px; font-family: var(--font); letter-spacing: -0.1px;
         }
         .btn i { transition: transform 0.2s ease; }
-        .btn:hover i { transform: scale(1.15); }
-        .btn-primary { background: var(--accent); color: #fff; box-shadow: 0 2px 8px rgba(0,122,255,0.25); }
-        .btn-primary:hover { background: var(--accent-hover); box-shadow: 0 4px 14px rgba(0,122,255,0.35); transform: translateY(-1px); }
-        .btn-outline { background: rgba(0,0,0,0.03); border: 1px solid var(--border); color: var(--text-primary); }
-        .btn-outline:hover { background: rgba(0,0,0,0.06); border-color: rgba(0,0,0,0.12); }
-        .btn-cyan { background: #007AFF; color: #fff; box-shadow: 0 2px 8px rgba(0,122,255,0.2); }
-        .btn-cyan:hover { background: #0066d6; box-shadow: 0 4px 14px rgba(0,122,255,0.3); transform: translateY(-1px); }
-        .btn-purple { background: #5856d6; color: #fff; box-shadow: 0 2px 8px rgba(88,86,214,0.2); }
-        .btn-purple:hover { background: #4b49c4; box-shadow: 0 4px 14px rgba(88,86,214,0.3); transform: translateY(-1px); }
+        .btn:hover i { transform: scale(1.12); }
+        .btn:active { transform: scale(0.97); }
+        .btn-primary { background: var(--accent); color: #fff; box-shadow: 0 4px 14px rgba(0,122,255,0.3), inset 0 1px 0 rgba(255,255,255,0.2); }
+        .btn-primary:hover { background: var(--accent-hover); box-shadow: 0 6px 20px rgba(0,122,255,0.4), inset 0 1px 0 rgba(255,255,255,0.2); transform: translateY(-1px); }
+        .btn-outline { background: var(--glass-bg); border: 1px solid var(--glass-border); color: var(--text-primary); backdrop-filter: blur(10px); box-shadow: 0 2px 6px rgba(0,0,0,0.04), inset 0 1px 0 rgba(255,255,255,0.4); }
+        .btn-outline:hover { background: var(--glass-bg-hover); box-shadow: 0 4px 12px rgba(0,0,0,0.08); transform: translateY(-1px); }
+        .btn-cyan { background: linear-gradient(135deg, #007AFF, #5856d6); color: #fff; box-shadow: 0 4px 14px rgba(0,122,255,0.25), inset 0 1px 0 rgba(255,255,255,0.2); }
+        .btn-cyan:hover { box-shadow: 0 6px 20px rgba(0,122,255,0.35); transform: translateY(-1px); }
+        .btn-purple { background: linear-gradient(135deg, #5856d6, #af52de); color: #fff; box-shadow: 0 4px 14px rgba(88,86,214,0.25), inset 0 1px 0 rgba(255,255,255,0.2); }
+        .btn-purple:hover { box-shadow: 0 6px 20px rgba(88,86,214,0.35); transform: translateY(-1px); }
 
         .result-area {
-            margin-top: 16px; padding: 14px 18px; background: rgba(0,0,0,0.02);
+            margin-top: 14px; padding: 16px 20px; background: var(--glass-bg);
             border-radius: var(--radius-sm); font-size: 12px; border-left: 3px solid var(--accent);
             transition: all var(--transition-fast); color: var(--text-secondary);
+            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
         }
         .speed-result { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
         .speed-item {
-            background: var(--accent-glass); border-radius: var(--radius-sm); padding: 8px 14px;
-            font-size: 12px; border-left: 2px solid var(--accent); color: var(--text-primary);
+            background: var(--accent-glass); border-radius: 10px; padding: 8px 14px;
+            font-size: 12px; border: 1px solid var(--border-accent); color: var(--text-primary);
         }
         .hw-grid { display: flex; flex-wrap: wrap; gap: 10px; }
         .hw-chip {
-            background: rgba(0,0,0,0.03); border-radius: 20px; padding: 7px 14px;
+            background: var(--glass-bg); border-radius: 50px; padding: 7px 14px;
             font-size: 12px; display: inline-flex; align-items: center; gap: 7px;
-            border: 1px solid var(--border); color: var(--text-secondary);
+            border: 1px solid var(--glass-border); color: var(--text-secondary);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.03), inset 0 1px 0 rgba(255,255,255,0.3);
         }
         .hw-chip i { color: var(--accent); opacity: 0.7; font-size: 11px; }
 
         .footer {
-            margin-top: 28px; padding: 18px 28px; text-align: center; font-size: 12px;
+            margin-top: 24px; padding: 18px 28px; text-align: center; font-size: 12px;
             color: var(--text-tertiary); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 14px;
-            background: var(--bg-glass); backdrop-filter: blur(24px) saturate(180%);
-            -webkit-backdrop-filter: blur(24px) saturate(180%);
-            border-radius: var(--radius-lg); border: 1px solid var(--border);
+            background: var(--glass-heavy);
+            backdrop-filter: blur(40px) saturate(180%);
+            -webkit-backdrop-filter: blur(40px) saturate(180%);
+            border-radius: var(--radius-lg); border: 1px solid var(--glass-border);
+            box-shadow: var(--glass-shadow); position: relative; overflow: hidden;
         }
+        .footer::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 50%; background: var(--glass-highlight); pointer-events: none; }
         .copy-btn {
-            background: var(--accent-light); padding: 6px 16px; border-radius: 16px; font-size: 12px;
+            background: var(--accent-light); padding: 6px 16px; border-radius: 50px; font-size: 12px;
             cursor: pointer; transition: all var(--transition-fast);
-            border: 1px solid rgba(0,122,255,0.15); color: var(--accent); font-weight: 500;
+            border: 1px solid var(--border-accent); color: var(--accent); font-weight: 500;
         }
-        .copy-btn:hover { background: rgba(0,122,255,0.14); border-color: rgba(0,122,255,0.3); }
+        .copy-btn:hover { background: rgba(0,122,255,0.14); box-shadow: 0 2px 8px rgba(0,122,255,0.15); }
 
         .driver-badge {
             width: 100%; text-align: center; padding: 10px 20px; margin-top: 14px;
-            background: rgba(0,0,0,0.02); border-radius: 20px; border: 1px solid var(--border);
+            background: var(--glass-bg); border-radius: 50px; border: 1px solid var(--glass-border);
             font-size: 11px; color: var(--text-quaternary); letter-spacing: 0.2px;
             display: flex; align-items: center; justify-content: center; gap: 6px;
         }
-        .driver-badge a { color: var(--accent); text-decoration: none; font-weight: 500; transition: color var(--transition-fast); opacity: 0.7; }
-        .driver-badge a:hover { color: var(--accent-hover); opacity: 1; }
+        .driver-badge a { color: var(--accent); text-decoration: none; font-weight: 500; transition: opacity var(--transition-fast); opacity: 0.7; }
+        .driver-badge a:hover { opacity: 1; }
         .driver-badge i { color: var(--accent); font-size: 10px; opacity: 0.4; }
 
         @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
@@ -1108,21 +1134,23 @@ async function handleRequest(event) {
             margin-right: 8px; vertical-align: middle;
         }
 
-        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px,1fr)); gap: 20px; margin-bottom: 24px; }
+        .stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-bottom: 24px; }
         .stats-card {
-            background: var(--bg-card); backdrop-filter: blur(24px) saturate(180%);
-            -webkit-backdrop-filter: blur(24px) saturate(180%);
-            border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 22px;
-            overflow: hidden; box-shadow: var(--shadow-xs);
+            background: var(--glass-bg);
+            backdrop-filter: blur(40px) saturate(180%);
+            -webkit-backdrop-filter: blur(40px) saturate(180%);
+            border: 1px solid var(--glass-border); border-radius: var(--radius-lg); padding: 22px;
+            overflow: hidden; box-shadow: var(--glass-shadow); position: relative;
         }
+        .stats-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 40%; background: var(--glass-highlight); pointer-events: none; border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
         .stats-card .card-header {
             display: flex; align-items: center; gap: 10px; margin-bottom: 14px;
-            border-bottom: 1px solid var(--divider); padding-bottom: 12px; background: transparent;
+            border-bottom: 1px solid var(--divider); padding-bottom: 12px; background: transparent; position: relative;
         }
         .stats-card .card-header i { font-size: 18px; color: var(--accent); opacity: 0.8; }
         .stats-card .card-header h3 { font-size: 14px; font-weight: 600; color: var(--text-primary); }
         .stats-card .card-header p { font-size: 11px; color: var(--text-tertiary); }
-        .stats-card .card-body { padding: 0; }
+        .stats-card .card-body { padding: 0; position: relative; }
 
         .speed-history-table { width: 100%; border-collapse: collapse; font-size: 12px; }
         .speed-history-table th { text-align: left; padding: 8px 10px; color: var(--text-tertiary); font-weight: 500; border-bottom: 1px solid var(--divider); font-size: 11px; }
@@ -1131,77 +1159,83 @@ async function handleRequest(event) {
         .speed-history-table .speed-good { color: var(--success); font-weight: 600; }
         .speed-history-table .speed-mid { color: var(--warning); font-weight: 600; }
         .speed-history-table .speed-low { color: var(--danger); font-weight: 600; }
-        .speed-bar {
-            display: inline-block; height: 5px; border-radius: 3px; margin-right: 6px;
-            vertical-align: middle; background: var(--accent); opacity: 0.5;
-        }
+        .speed-bar { display: inline-block; height: 5px; border-radius: 3px; margin-right: 6px; vertical-align: middle; background: var(--accent); opacity: 0.5; }
 
         .usage-row { display: flex; justify-content: space-between; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--divider); font-size: 12px; }
-        .usage-row .ep { color: var(--text-secondary); font-family: 'SF Mono','Monaco','Courier New',monospace; font-size: 11px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .usage-row .ep { color: var(--text-secondary); font-family: 'SF Mono', ui-monospace, monospace; font-size: 11px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .usage-row .count { color: var(--accent); font-weight: 600; }
         .usage-total { text-align: center; padding: 14px; font-size: 26px; font-weight: 700; color: var(--text-primary); letter-spacing: -0.5px; }
         .usage-total-label { text-align: center; font-size: 11px; color: var(--text-tertiary); margin-top: 2px; }
         .no-data { text-align: center; padding: 28px; color: var(--text-quaternary); font-size: 13px; }
 
         .node-table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 13px; }
-        .node-table th { text-align: left; padding: 8px 12px; background: rgba(0,0,0,0.02); border-bottom: 2px solid var(--border); color: var(--text-secondary); font-weight: 600; }
+        .node-table th { text-align: left; padding: 8px 12px; background: var(--glass-bg); border-bottom: 1px solid var(--border); color: var(--text-secondary); font-weight: 600; }
         .node-table td { padding: 8px 12px; border-bottom: 1px solid var(--divider); color: var(--text-primary); }
         .node-table .good { color: var(--success); font-weight: 600; }
         .node-table .mid { color: var(--warning); font-weight: 600; }
         .node-table .bad { color: var(--danger); font-weight: 600; }
 
         .modal-overlay {
-            position: fixed; top:0; left:0; right:0; bottom:0; background: rgba(0,0,0,0.5);
-            backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center;
-            z-index: 1000; opacity: 0; visibility: hidden; transition: all 0.2s ease;
+            position: fixed; top:0; left:0; right:0; bottom:0; background: rgba(0,0,0,0.4);
+            backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+            display: flex; align-items: center; justify-content: center;
+            z-index: 1000; opacity: 0; visibility: hidden; transition: all 0.25s ease;
         }
         .modal-overlay.active { opacity: 1; visibility: visible; }
         .modal-box {
-            background: var(--bg-card); backdrop-filter: blur(24px); border-radius: var(--radius-lg);
-            padding: 28px 32px; max-width: 560px; width: 90%; box-shadow: var(--shadow-lg);
-            border: 1px solid var(--border);
+            background: var(--glass-heavy);
+            backdrop-filter: blur(40px) saturate(180%);
+            -webkit-backdrop-filter: blur(40px) saturate(180%);
+            border-radius: var(--radius-xl);
+            padding: 28px 32px; max-width: 560px; width: 90%; box-shadow: var(--glass-shadow-lg);
+            border: 1px solid var(--glass-border); position: relative; overflow: hidden;
         }
-        .modal-box h3 { margin-bottom: 16px; font-weight: 600; color: var(--text-primary); }
-        .modal-box p { color: var(--text-secondary); font-size: 13px; margin-bottom: 12px; }
+        .modal-box::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 40%; background: var(--glass-highlight); pointer-events: none; }
+        .modal-box h3 { margin-bottom: 16px; font-weight: 600; color: var(--text-primary); position: relative; }
+        .modal-box p { color: var(--text-secondary); font-size: 13px; margin-bottom: 12px; position: relative; }
         .modal-box textarea {
             width: 100%; padding: 12px; border-radius: var(--radius-sm);
-            border: 1px solid var(--border); background: var(--bg-primary); color: var(--text-primary);
-            font-family: inherit; font-size: 14px; resize: vertical; min-height: 80px;
+            border: 1px solid var(--glass-border); background: var(--glass-bg); color: var(--text-primary);
+            font-family: var(--font); font-size: 14px; resize: vertical; min-height: 80px;
+            position: relative;
         }
-        .modal-box .btn-group { display: flex; gap: 10px; margin-top: 16px; justify-content: flex-end; }
+        .modal-box textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(0,122,255,0.15); }
+        .modal-box .btn-group { display: flex; gap: 10px; margin-top: 16px; justify-content: flex-end; position: relative; }
 
-        ::-webkit-scrollbar { width:5px; height:5px; }
-        ::-webkit-scrollbar-track { background:transparent; border-radius:10px; }
-        ::-webkit-scrollbar-thumb { background:rgba(0,0,0,0.15); border-radius:10px; }
+        ::-webkit-scrollbar { width:6px; height:6px; }
+        ::-webkit-scrollbar-track { background:transparent; }
+        ::-webkit-scrollbar-thumb { background:rgba(0,0,0,0.15); border-radius:6px; }
         ::-webkit-scrollbar-thumb:hover { background:rgba(0,0,0,0.25); }
+        [data-theme="auto"] ::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.15); }
 
         @media (max-width:1024px) { .rtt-display { grid-template-columns: repeat(2,1fr); } .quality-grid { grid-template-columns: repeat(2,1fr); } }
         @media (max-width:768px) {
             body { padding:14px; } .container { max-width:100%; } .grid { grid-template-columns:1fr; gap:14px; }
             .ip-val { font-size:18px; } .ip-val-small { font-size:15px; }
-            .header { flex-direction:column; text-align:center; padding:14px 20px; border-radius:var(--radius-lg); }
+            .header { flex-direction:column; text-align:center; padding:16px 20px; border-radius:var(--radius-lg); }
             .logo { flex-direction:column; gap:8px; }
-            .logo-icon { width:44px; height:44px; font-size:20px; border-radius:var(--radius-sm); }
-            .logo h1 { font-size:22px; }
-            .button-group { justify-content:center; } .btn { padding:9px 18px; font-size:12px; }
+            .logo-icon { width:44px; height:44px; font-size:20px; border-radius:12px; }
+            .logo h1 { font-size:20px; }
+            .button-group { justify-content:center; } .btn { padding:9px 16px; font-size:12px; }
             .rtt-value { font-size:36px; } .rtt-display { grid-template-columns:1fr; gap:12px; }
             .rtt-box { padding:18px 14px; } .stats-row { justify-content:center; }
-            .footer { flex-direction:column; text-align:center; padding:14px 20px; border-radius:var(--radius-md); }
+            .footer { flex-direction:column; text-align:center; padding:16px 20px; }
             .quality-grid { grid-template-columns:1fr; gap:10px; }
-            .hero-card { padding:20px; border-radius:var(--radius-lg); }
+            .hero-card { padding:22px; border-radius:var(--radius-lg); }
             .rtt-card { min-height:auto; } .rtt-card .card-body { padding:16px; }
             .card-header { padding:14px 18px; } .card-body { padding:14px 18px; }
             .stats-grid { grid-template-columns:1fr; gap:14px; }
             .header-right { flex-wrap:wrap; justify-content:center; }
         }
-    </style>
+
+            </style>
 </head>
 <body>
     <div class="container">
         <!-- ==================== 头部 ==================== -->
         <div class="header">
             <div class="logo">
-                <div class="logo-icon"><i class="fas fa-chart-network"></i></div>
+                <div class="logo-icon"><i class="fas fa-network-wired"></i></div>
                 <div>
                     <h1>NetSight Pro</h1>
                     <p><i class="fas fa-bolt"></i> <span id="t-subtitle">极光诊断 · 实时网络分析</span></p>
@@ -1237,7 +1271,7 @@ async function handleRequest(event) {
         <!-- ==================== RTT 监控卡片 ==================== -->
         <div class="card rtt-card">
             <div class="card-header">
-                <i class="fas fa-waveform"></i>
+                <i class="fas fa-wave-square"></i>
                 <div>
                     <h3 id="t-rtt">实时延迟监控</h3>
                     <p><span id="t-rtt-sub">RTT · 抖动 · 实时图表 · 网络质量评估</span></p>
@@ -1289,7 +1323,7 @@ async function handleRequest(event) {
             <!-- 安全与协议 -->
             <div class="card">
                 <div class="card-header">
-                    <i class="fas fa-shield-haltered"></i>
+                    <i class="fas fa-shield-halved"></i>
                     <div>
                         <h3 id="t-sec">安全与协议</h3>
                         <p><span id="t-sec-sub">TLS · 加密 · 身份验证</span></p>
@@ -1335,6 +1369,14 @@ async function handleRequest(event) {
                     <div class="info-row">
                         <span class="info-label"><i class="fas fa-robot"></i> <span id="t-bot-label">机器人评分</span></span>
                         <span class="info-value" id="bot-score-val">${data.botScore}</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label"><i class="fas fa-fingerprint"></i> JA3</span>
+                        <span class="info-value" style="font-size:10px;word-break:break-all;">${data.tlsClientJa3}</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label"><i class="fas fa-fingerprint"></i> JA4</span>
+                        <span class="info-value" style="font-size:10px;word-break:break-all;">${data.tlsClientJa4}</span>
                     </div>
                 </div>
             </div>
@@ -1382,6 +1424,20 @@ async function handleRequest(event) {
             </div>
         </div>
 
+        <!-- ==================== 硬件信息 ==================== -->
+        <div class="card">
+            <div class="card-header">
+                <i class="fas fa-desktop"></i>
+                <div>
+                    <h3 id="t-hw">硬件信息</h3>
+                    <p><span id="t-hw-sub">客户端环境</span></p>
+                </div>
+            </div>
+            <div class="card-body">
+                <div id="hw-info" class="hw-grid">加载中...</div>
+            </div>
+        </div>
+
         <!-- ==================== 诊断工具集 ==================== -->
         <div class="card" style="margin-bottom:28px;">
             <div class="card-header">
@@ -1402,6 +1458,9 @@ async function handleRequest(event) {
                     <button class="btn btn-outline" id="btn-stream-test"><i class="fas fa-stream"></i> <span id="t-stream-btn">流式传输</span></button>
                     <button class="btn btn-outline" id="btn-media-unlock"><i class="fas fa-play-circle"></i> <span id="t-media-btn">流媒体连通性</span></button>
                     <button class="btn btn-outline" id="btn-multi-node"><i class="fas fa-globe-asia"></i> <span id="t-multi-btn">多节点对比</span></button>
+                    <button class="btn btn-outline" id="btn-webrtc-test"><i class="fas fa-user-shield"></i> <span id="t-webrtc-btn">WebRTC 泄漏</span></button>
+                    <button class="btn btn-outline" id="btn-ttfb-test"><i class="fas fa-stopwatch"></i> <span id="t-ttfb-btn">TTFB 分析</span></button>
+                    <button class="btn btn-cyan" id="btn-upload-test"><i class="fas fa-upload"></i> <span id="t-upload-btn">上传测速</span></button>
                 </div>
                 <div id="loss-result" class="result-area" style="display:none;"></div>
                 <div id="speed-result" style="display:none;"></div>
@@ -1412,20 +1471,9 @@ async function handleRequest(event) {
                 <div id="stream-result" class="result-area" style="display:none;"></div>
                 <div id="media-result" class="result-area" style="display:none;"></div>
                 <div id="multi-node-result" class="result-area" style="display:none;"></div>
-            </div>
-        </div>
-
-        <!-- ==================== 硬件信息 ==================== -->
-        <div class="card">
-            <div class="card-header">
-                <i class="fas fa-desktop"></i>
-                <div>
-                    <h3 id="t-hw">硬件信息</h3>
-                    <p><span id="t-hw-sub">客户端环境</span></p>
-                </div>
-            </div>
-            <div class="card-body">
-                <div id="hw-info" class="hw-grid">加载中...</div>
+                <div id="webrtc-result" class="result-area" style="display:none;"></div>
+                <div id="ttfb-result" class="result-area" style="display:none;"></div>
+                <div id="upload-result" class="result-area" style="display:none;"></div>
             </div>
         </div>
 
@@ -1460,7 +1508,7 @@ async function handleRequest(event) {
         <!-- ==================== 底部 ==================== -->
         <div class="footer">
             <span><i class="fas fa-fingerprint"></i> RAY ID: <span style="font-family:monospace;">${data.rayId}</span></span>
-            <span><i class="fas fa-ip"></i> <span id="t-client-label">客户端</span>: ${data.clientIp}</span>
+            <span><i class="fas fa-ethernet"></i> <span id="t-client-label">客户端</span>: ${data.clientIp}</span>
             <span class="copy-btn" id="copy-report"><i class="fas fa-copy"></i> <span id="t-copy">复制报告</span></span>
         </div>
 
@@ -1601,7 +1649,26 @@ async function handleRequest(event) {
                     echDisabled: 'Disabled',
                     http2Enabled: 'HTTP/2 Enabled',
                     http2Disabled: 'HTTP/1.1',
-                    earlyHints: 'Early Hints'
+                    earlyHints: 'Early Hints',
+                    webrtcBtn: 'WebRTC Leak',
+                    ttfbBtn: 'TTFB Analysis',
+                    uploadBtn: 'Upload Speed',
+                    webrtcTesting: 'Detecting WebRTC leak...',
+                    webrtcSafe: 'No leak detected',
+                    webrtcLeak: 'Leak detected',
+                    webrtcLocal: 'Local IP',
+                    webrtcPublic: 'Public IP',
+                    webrtcNone: 'No WebRTC candidates found (safe)',
+                    ttfbTesting: 'Analyzing TTFB...',
+                    ttfbDns: 'DNS Lookup',
+                    ttfbTcp: 'TCP Connect',
+                    ttfbTls: 'TLS Handshake',
+                    ttfbWait: 'Waiting (TTFB)',
+                    ttfbDownload: 'Download',
+                    ttfbTotal: 'Total',
+                    uploadTesting: 'Testing upload speed...',
+                    uploadResult: 'Upload Speed',
+                    uploadFailed: 'Upload test failed'
                 },
                 'zh-CN': {
                     subtitle: '极光诊断 · 实时网络分析',
@@ -1700,7 +1767,26 @@ async function handleRequest(event) {
                     echDisabled: '未启用',
                     http2Enabled: 'HTTP/2 已启用',
                     http2Disabled: 'HTTP/1.1',
-                    earlyHints: 'Early Hints'
+                    earlyHints: 'Early Hints',
+                    webrtcBtn: 'WebRTC 泄漏',
+                    ttfbBtn: 'TTFB 分析',
+                    uploadBtn: '上传测速',
+                    webrtcTesting: '正在检测 WebRTC 泄漏...',
+                    webrtcSafe: '未检测到泄漏',
+                    webrtcLeak: '检测到泄漏',
+                    webrtcLocal: '内网 IP',
+                    webrtcPublic: '公网 IP',
+                    webrtcNone: '未发现 WebRTC 候选地址（安全）',
+                    ttfbTesting: '正在分析 TTFB...',
+                    ttfbDns: 'DNS 解析',
+                    ttfbTcp: 'TCP 连接',
+                    ttfbTls: 'TLS 握手',
+                    ttfbWait: '等待响应 (TTFB)',
+                    ttfbDownload: '内容下载',
+                    ttfbTotal: '总计',
+                    uploadTesting: '正在测试上传速度...',
+                    uploadResult: '上传速度',
+                    uploadFailed: '上传测试失败'
                 },
                 'zh-TW': {
                     subtitle: '極光診斷 · 即時網路分析',
@@ -1799,7 +1885,26 @@ async function handleRequest(event) {
                     echDisabled: '未啟用',
                     http2Enabled: 'HTTP/2 已啟用',
                     http2Disabled: 'HTTP/1.1',
-                    earlyHints: 'Early Hints'
+                    earlyHints: 'Early Hints',
+                    webrtcBtn: 'WebRTC 洩漏',
+                    ttfbBtn: 'TTFB 分析',
+                    uploadBtn: '上傳測速',
+                    webrtcTesting: '正在檢測 WebRTC 洩漏...',
+                    webrtcSafe: '未檢測到洩漏',
+                    webrtcLeak: '檢測到洩漏',
+                    webrtcLocal: '內網 IP',
+                    webrtcPublic: '公網 IP',
+                    webrtcNone: '未發現 WebRTC 候選位址（安全）',
+                    ttfbTesting: '正在分析 TTFB...',
+                    ttfbDns: 'DNS 解析',
+                    ttfbTcp: 'TCP 連線',
+                    ttfbTls: 'TLS 握手',
+                    ttfbWait: '等待回應 (TTFB)',
+                    ttfbDownload: '內容下載',
+                    ttfbTotal: '總計',
+                    uploadTesting: '正在測試上傳速度...',
+                    uploadResult: '上傳速度',
+                    uploadFailed: '上傳測試失敗'
                 }
             };
 
@@ -1816,7 +1921,8 @@ async function handleRequest(event) {
                 realGeoCity: "${realGeoJS.city}", realGeoRegion: "${realGeoJS.region}",
                 realGeoCountry: "${realGeoJS.country}", realGeoCountryCode: "${realGeoJS.countryCode}",
                 realGeoLat: ${realGeoJS.lat}, realGeoLon: ${realGeoJS.lon},
-                realGeoOrg: "${realGeoJS.org}", realGeoIp: "${realGeoJS.ip}"
+                realGeoOrg: "${realGeoJS.org}", realGeoIp: "${realGeoJS.ip}",
+                tlsClientJa3: "${data.tlsClientJa3}", tlsClientJa4: "${data.tlsClientJa4}"
             };
 
             // ==================== DOM 引用 ====================
@@ -1838,10 +1944,25 @@ async function handleRequest(event) {
                 concurrentResult: document.getElementById('concurrent-result'), streamBtn: document.getElementById('btn-stream-test'),
                 streamResult: document.getElementById('stream-result'),
                 mediaBtn: document.getElementById('btn-media-unlock'), mediaResult: document.getElementById('media-result'),
-                multiBtn: document.getElementById('btn-multi-node'), multiResult: document.getElementById('multi-node-result')
+                multiBtn: document.getElementById('btn-multi-node'), multiResult: document.getElementById('multi-node-result'),
+                webrtcBtn: document.getElementById('btn-webrtc-test'), webrtcResult: document.getElementById('webrtc-result'),
+                ttfbBtn: document.getElementById('btn-ttfb-test'), ttfbResult: document.getElementById('ttfb-result'),
+                uploadBtn: document.getElementById('btn-upload-test'), uploadResult: document.getElementById('upload-result')
             };
 
-            let currentLang = localStorage.getItem('pref-lang') || '${defaultLang}';
+            function detectLang() {
+                const saved = localStorage.getItem('pref-lang');
+                if (saved && i18n[saved]) return saved;
+                const langs = navigator.languages || [navigator.language || ''];
+                for (const l of langs) {
+                    const lower = l.toLowerCase();
+                    if (lower.match(/^zh-(cn|sg|my)/)) return 'zh-CN';
+                    if (lower.match(/^zh/)) return 'zh-TW';
+                    if (lower.match(/^en/)) return 'en';
+                }
+                return '${defaultLang}';
+            }
+            let currentLang = detectLang();
             const rttData = [];
             const MAX_RTT_POINTS = 40;
             const jitterHistory = [];
@@ -1849,6 +1970,7 @@ async function handleRequest(event) {
             let geoRetryCount = 0;
             const MAX_GEO_RETRY = 5;
             let consecutiveLoss = 0;
+            let totalLoss = 0;
             let sampleCount = 0;
             let minRtt = Infinity;
             let maxRtt = 0;
@@ -1884,17 +2006,7 @@ async function handleRequest(event) {
                     element.innerHTML = html;
                     element.style.background = isError ? 'rgba(239,68,68,0.08)' : 'rgba(0,0,0,0.3)';
                     element.style.borderLeftColor = isError ? '#ef4444' : '#06b6d4';
-                    setTimeout(() => {
-                        if (element.innerHTML === html && element.style.display === 'block') {
-                            element.style.opacity = '0.5';
-                            setTimeout(() => {
-                                if (element.innerHTML === html) {
-                                    element.style.display = 'none';
-                                    element.style.opacity = '1';
-                                }
-                            }, 3000);
-                        }
-                    }, 5000);
+                    element.style.opacity = '1';
                 }
             }
 
@@ -1935,6 +2047,9 @@ async function handleRequest(event) {
                     't-stream-btn': t.streamBtn,
                     't-media-btn': t.mediaBtn,
                     't-multi-btn': t.multiBtn,
+                    't-webrtc-btn': t.webrtcBtn,
+                    't-ttfb-btn': t.ttfbBtn,
+                    't-upload-btn': t.uploadBtn,
                     't-dc-label': t.dcLabel,
                     't-risk': t.risk,
                     't-asn': t.asn,
@@ -2165,7 +2280,7 @@ async function handleRequest(event) {
             function updateLossRate() {
                 const lossRateEl = document.getElementById('loss-rate');
                 if (lossRateEl) {
-                    const rate = sampleCount > 0 ? Math.round((consecutiveLoss / Math.min(sampleCount, 10)) * 100) : 0;
+                    const rate = sampleCount > 0 ? Math.round((totalLoss / sampleCount) * 100) : 0;
                     lossRateEl.textContent = rate + '%';
                     lossRateEl.style.color = rate === 0 ? '#34d399' : (rate < 5 ? '#fbbf24' : '#f87171');
                 }
@@ -2216,6 +2331,7 @@ async function handleRequest(event) {
                     drawChart();
                 } catch (e) {
                     consecutiveLoss++;
+                    totalLoss++;
                     updateLossRate();
                     if (elements.rttNum) elements.rttNum.textContent = 'ERR';
                     updateQuality(999);
@@ -2326,7 +2442,7 @@ async function handleRequest(event) {
                             <span class="info-value">\${BACKEND_DATA.realGeoOrg}</span>
                         </div>
                         <div class="info-row">
-                            <span class="info-label"><i class="fas fa-ip"></i> \${t.userIp}</span>
+                            <span class="info-label"><i class="fas fa-ethernet"></i> \${t.userIp}</span>
                             <span class="info-value"><code>\${BACKEND_DATA.realGeoIp}</code></span>
                         </div>
                     \`;
@@ -2368,7 +2484,7 @@ async function handleRequest(event) {
                             <span class="info-value">\${geoData.org}</span>
                         </div>
                         <div class="info-row">
-                            <span class="info-label"><i class="fas fa-ip"></i> \${t.userIp}</span>
+                            <span class="info-label"><i class="fas fa-ethernet"></i> \${t.userIp}</span>
                             <span class="info-value"><code>\${ip}</code></span>
                         </div>
                     \`;
@@ -2783,6 +2899,160 @@ async function handleRequest(event) {
                 showResult(elements.multiResult, html);
             }
 
+            // ==================== WebRTC 泄漏检测 ====================
+            let webrtcTestRunning = false;
+            async function runWebRtcTest() {
+                if (webrtcTestRunning) return;
+                webrtcTestRunning = true;
+                const t = i18n[currentLang];
+                showResult(elements.webrtcResult, '<span class="loading"></span> ' + t.webrtcTesting);
+
+                try {
+                    const ips = await new Promise((resolve) => {
+                        const found = new Set();
+                        const timeout = setTimeout(() => resolve(found), 5000);
+                        try {
+                            const pc = new RTCPeerConnection({ iceServers: [] });
+                            pc.createDataChannel('');
+                            pc.onicecandidate = (e) => {
+                                if (!e.candidate) {
+                                    clearTimeout(timeout);
+                                    pc.close();
+                                    resolve(found);
+                                    return;
+                                }
+                                const match = e.candidate.candidate.match(/(\d{1,3}\.){3}\d{1,3}/);
+                                if (match) found.add(match[0]);
+                            };
+                            pc.createOffer().then(offer => pc.setLocalDescription(offer)).catch(() => {
+                                clearTimeout(timeout);
+                                resolve(found);
+                            });
+                        } catch (e) {
+                            clearTimeout(timeout);
+                            resolve(found);
+                        }
+                    });
+
+                    if (ips.size === 0) {
+                        showResult(elements.webrtcResult, '<i class="fas fa-check-circle" style="color:#34d399;"></i> ' + t.webrtcNone);
+                    } else {
+                        const ipList = [...ips];
+                        const localIps = ipList.filter(ip => /^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(ip));
+                        const publicIps = ipList.filter(ip => !/^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(ip));
+                        let html = '<i class="fas fa-user-shield"></i> WebRTC: ';
+                        if (publicIps.length > 0 || localIps.length > 0) {
+                            html += '<span class="badge badge-warning">' + t.webrtcLeak + '</span><br><div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">';
+                            localIps.forEach(ip => { html += '<span class="badge badge-info">' + t.webrtcLocal + ': ' + ip + '</span>'; });
+                            publicIps.forEach(ip => { html += '<span class="badge badge-danger">' + t.webrtcPublic + ': ' + ip + '</span>'; });
+                            html += '</div>';
+                        } else {
+                            html += '<span class="badge badge-success">' + t.webrtcSafe + '</span>';
+                        }
+                        showResult(elements.webrtcResult, html);
+                    }
+                } catch (e) {
+                    showResult(elements.webrtcResult, '<i class="fas fa-check-circle" style="color:#34d399;"></i> WebRTC ' + t.webrtcSafe, false);
+                }
+                webrtcTestRunning = false;
+            }
+
+            // ==================== TTFB 分阶段分析 ====================
+            let ttfbTestRunning = false;
+            async function runTtfbTest() {
+                if (ttfbTestRunning) return;
+                ttfbTestRunning = true;
+                const t = i18n[currentLang];
+                showResult(elements.ttfbResult, '<span class="loading"></span> ' + t.ttfbTesting);
+
+                try {
+                    const testUrl = window.location.origin + '/health?_ttfb=' + Date.now();
+                    const entry = await new Promise((resolve, reject) => {
+                        const timeout = setTimeout(() => { observer.disconnect(); reject(new Error('timeout')); }, 5000);
+                        const observer = new PerformanceObserver((list) => {
+                            const entries = list.getEntriesByName(testUrl);
+                            if (entries.length > 0) {
+                                clearTimeout(timeout);
+                                observer.disconnect();
+                                resolve(entries[0]);
+                            }
+                        });
+                        observer.observe({ type: 'resource', buffered: false });
+                        fetch(testUrl, { cache: 'no-store' }).catch(() => {
+                            clearTimeout(timeout);
+                            observer.disconnect();
+                            reject(new Error('fetch failed'));
+                        });
+                    });
+                    
+                    const dns = Math.round(entry.domainLookupEnd - entry.domainLookupStart);
+                    const tcp = Math.round(entry.connectEnd - entry.connectStart);
+                    const tls = Math.round(entry.secureConnectionStart > 0 ? entry.connectEnd - entry.secureConnectionStart : 0);
+                    const wait = Math.round(entry.responseStart - entry.requestStart);
+                    const download = Math.round(entry.responseEnd - entry.responseStart);
+                    const total = Math.round(entry.responseEnd - entry.startTime);
+                    const maxVal = Math.max(dns, tcp, tls, wait, download, 1);
+
+                    const bar = (label, val, color) => {
+                        const pct = Math.max((val / maxVal) * 100, 2);
+                        return '<div style="display:flex;align-items:center;gap:8px;margin:4px 0;"><span style="min-width:110px;font-size:11px;color:var(--text-secondary);">' + label + '</span><div style="flex:1;height:14px;background:rgba(0,0,0,0.06);border-radius:7px;overflow:hidden;"><div style="width:' + pct + '%;height:100%;background:' + color + ';border-radius:7px;transition:width 0.3s;"></div></div><span style="min-width:45px;font-size:11px;font-weight:600;color:var(--text-primary);text-align:right;">' + val + 'ms</span></div>';
+                    };
+
+                    let html = '<i class="fas fa-stopwatch"></i> TTFB ' + t.ttfbTotal + ': <strong>' + total + 'ms</strong><div style="margin-top:10px;">';
+                    html += bar(t.ttfbDns, dns, '#06b6d4');
+                    html += bar(t.ttfbTcp, tcp, '#3b82f6');
+                    html += bar(t.ttfbTls, tls, '#8b5cf6');
+                    html += bar(t.ttfbWait, wait, '#f59e0b');
+                    html += bar(t.ttfbDownload, download, '#34d399');
+                    html += '</div>';
+                    showResult(elements.ttfbResult, html);
+                } catch (e) {
+                    showResult(elements.ttfbResult, '<i class="fas fa-exclamation-triangle"></i> TTFB 分析失败', true);
+                }
+                ttfbTestRunning = false;
+            }
+
+            // ==================== 上传速度测试 ====================
+            let uploadTestRunning = false;
+            async function runUploadTest() {
+                if (uploadTestRunning) return;
+                uploadTestRunning = true;
+                const t = i18n[currentLang];
+                showResult(elements.uploadResult, '<span class="loading"></span> ' + t.uploadTesting);
+
+                try {
+                    const sizes = [262144, 1048576, 2097152];
+                    const results = [];
+                    for (const size of sizes) {
+                        const payload = new Uint8Array(size);
+                        fillRandomLocal(payload);
+                        const start = performance.now();
+                        const res = await fetch('/upload-test', { method: 'POST', body: payload });
+                        const clientDuration = performance.now() - start;
+                        const data = await res.json();
+                        const speedMbps = ((size * 8) / (clientDuration / 1000)) / 1000000;
+                        results.push({ sizeKB: Math.round(size / 1024), speed: speedMbps.toFixed(2) });
+                    }
+                    const validResults = results.filter(r => parseFloat(r.speed) > 0);
+                    const avgSpeed = validResults.length > 0 ? validResults.reduce((s, r) => s + parseFloat(r.speed), 0) / validResults.length : 0;
+                    let avgBadge = avgSpeed > 20 ? 'badge-success' : (avgSpeed > 5 ? 'badge-warning' : 'badge-danger');
+                    let html = '<i class="fas fa-upload"></i> ' + t.uploadResult + ':<br><div class="speed-result">';
+                    html += results.map(r => '<div class="speed-item">' + r.sizeKB + ' KB: ' + r.speed + ' Mbps</div>').join('');
+                    html += '</div><div style="margin-top:8px;"><span class="badge ' + avgBadge + '">' + t.uploadResult + ': ' + avgSpeed.toFixed(2) + ' Mbps</span></div>';
+                    showResult(elements.uploadResult, html);
+                } catch (e) {
+                    showResult(elements.uploadResult, '<i class="fas fa-exclamation-triangle"></i> ' + t.uploadFailed, true);
+                }
+                uploadTestRunning = false;
+            }
+
+            function fillRandomLocal(arr) {
+                const CHUNK = 65536;
+                for (let i = 0; i < arr.length; i += CHUNK) {
+                    crypto.getRandomValues(arr.subarray(i, Math.min(i + CHUNK, arr.length)));
+                }
+            }
+
             // ==================== 报告生成 ====================
             function generateReportText() {
                 const t = i18n[currentLang];
@@ -2948,6 +3218,7 @@ async function handleRequest(event) {
                 maxRtt = 0;
                 sampleCount = 0;
                 consecutiveLoss = 0;
+                totalLoss = 0;
                 
                 updateUI();
                 updateHardwareInfo();
@@ -2971,6 +3242,9 @@ async function handleRequest(event) {
                 if (elements.concurrentBtn) elements.concurrentBtn.addEventListener('click', runConcurrentTest);
                 if (elements.streamBtn) elements.streamBtn.addEventListener('click', runStreamTest);
                 if (elements.mediaBtn) elements.mediaBtn.addEventListener('click', runClientMediaTest);
+                if (elements.webrtcBtn) elements.webrtcBtn.addEventListener('click', runWebRtcTest);
+                if (elements.ttfbBtn) elements.ttfbBtn.addEventListener('click', runTtfbTest);
+                if (elements.uploadBtn) elements.uploadBtn.addEventListener('click', runUploadTest);
                 // 多节点按钮已绑定
                 
                 loadSpeedHistory();
@@ -2983,6 +3257,7 @@ async function handleRequest(event) {
                         setLang(this.getAttribute('data-lang'));
                     });
                 });
+
             }
             
             init();
