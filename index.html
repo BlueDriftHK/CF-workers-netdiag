@@ -3,12 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="description" content="NetSight Pro - 基于 Cloudflare Workers 的开源网络诊断工具。实时 RTT 监控、带宽测速、WebRTC 泄漏检测、TLS 指纹分析等 12 项诊断功能，免费部署，毫秒级响应。">
+    <meta property="og:title" content="NetSight Pro · 极光网络诊断">
+    <meta property="og:description" content="Cloudflare Workers 边缘诊断工具 — 12 项一键测试，实时 RTT、带宽测速、JA3/JA4 指纹、流媒体解锁检测，免费开源。">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://github.com/BlueDriftHK/CF-workers-netdiag">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="NetSight Pro · 极光网络诊断">
+    <meta name="twitter:description" content="Cloudflare Workers 边缘诊断工具 — 12 项一键测试，免费开源。">
     <title>NetSight Pro · 极光网络诊断</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700;14..32,800;14..32,900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
     <style>
         /* ============================================================
            全局重置 & 变量
@@ -784,6 +791,7 @@
         }
         .code-block pre code {
             font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            color: #a9dc76;
         }
 
         /* ============================================================
@@ -1353,7 +1361,7 @@
                 <button class="theme-toggle" id="themeToggle" title="切换主题">
                     <i class="fas fa-moon"></i>
                 </button>
-                <a href="#" class="github-btn" target="_blank">
+                <a href="https://github.com/BlueDriftHK/CF-workers-netdiag" class="github-btn" target="_blank">
                     <i class="fas fa-rocket"></i> 在线体验
                 </a>
                 <a href="https://github.com/BlueDriftHK/CF-workers-netdiag" target="_blank" class="github-btn">
@@ -1379,35 +1387,35 @@
         <!-- ===== 项目统计看板 ===== -->
         <div class="stats-banner reveal">
             <div class="stat-block">
-                <div class="num" id="starsCount">0</div>
+                <div class="num" id="starsCount">--</div>
                 <div class="label"><i class="fab fa-github"></i> GitHub Stars</div>
-                <div class="sub">来自全球开发者的认可</div>
+                <div class="sub">来自开发者的认可</div>
             </div>
             <div class="stat-block">
-                <div class="num" id="forksCount">0</div>
+                <div class="num" id="forksCount">--</div>
                 <div class="label"><i class="fas fa-code-branch"></i> Forks</div>
                 <div class="sub">社区贡献与衍生</div>
             </div>
             <div class="stat-block">
-                <div class="num" id="deploysCount">0</div>
-                <div class="label"><i class="fas fa-cloud-upload-alt"></i> 已部署实例</div>
-                <div class="sub">全球边缘节点</div>
+                <div class="num" id="toolsCount">0</div>
+                <div class="label"><i class="fas fa-flask"></i> 诊断工具</div>
+                <div class="sub">一键测试全覆盖</div>
             </div>
             <div class="stat-block">
-                <div class="num" id="contributorsCount">0</div>
-                <div class="label"><i class="fas fa-users"></i> 贡献者</div>
-                <div class="sub">一起让项目更好</div>
+                <div class="num" id="langsCount">0</div>
+                <div class="label"><i class="fas fa-language"></i> 界面语言</div>
+                <div class="sub">自动识别设备语言</div>
             </div>
         </div>
 
         <!-- ===== 核心功能 ===== -->
         <div class="reveal">
             <h2 class="section-title"><i class="fas fa-star"></i> 核心功能</h2>
-            <p class="section-desc">从延迟监控到流媒体连通性，一站式诊断工具集，所有测试均在边缘执行，毫秒级响应。</p>
+            <p class="section-desc">从延迟监控到 TLS 指纹分析，12 项一站式诊断工具，所有测试均在边缘执行，毫秒级响应。</p>
         </div>
         <div class="grid-2">
             <div class="card reveal reveal-delay-1">
-                <i class="fas fa-waveform"></i>
+                <i class="fas fa-wave-square"></i>
                 <h3>实时 RTT 监控</h3>
                 <p>每 2 秒自动探测延迟，绘制动态曲线图，同时计算抖动、丢包率，并提供网络质量评级。</p>
                 <span class="tag">Canvas 图表</span>
@@ -1415,13 +1423,13 @@
             <div class="card reveal reveal-delay-2">
                 <i class="fas fa-lock"></i>
                 <h3>安全与协议检测</h3>
-                <p>显示 TLS 版本、加密套件、ECH 状态、HTTP/2/3 支持、压缩算法以及机器人评分。</p>
-                <span class="tag">TLS · HTTP/2</span>
+                <p>显示 TLS 版本、加密套件、ECH 状态、HTTP/2/3 支持、压缩算法、机器人评分以及 JA3/JA4 TLS 客户端指纹。</p>
+                <span class="tag">TLS · JA3/JA4</span>
             </div>
             <div class="card reveal reveal-delay-3">
                 <i class="fas fa-map-pin"></i>
                 <h3>边缘 & 客户端定位</h3>
-                <p>展示 Cloudflare 边缘节点位置，同时通过 ip-api.com 获取客户端真实地理位置并计算距离。</p>
+                <p>展示 Cloudflare 边缘节点位置，同时通过 ipapi.co 获取客户端真实地理位置并计算距离。</p>
                 <span class="tag">地理位置</span>
             </div>
             <div class="card reveal reveal-delay-4">
@@ -1433,8 +1441,8 @@
             <div class="card reveal reveal-delay-1">
                 <i class="fas fa-flask"></i>
                 <h3>一键诊断工具集</h3>
-                <p>包含丢包率、带宽测速、DNS 解析、CPU 性能、WebSocket 延迟、并发请求、流式吞吐量、流媒体连通性等 8 项测试。</p>
-                <span class="tag">8 合 1</span>
+                <p>包含丢包率、带宽测速、上传测速、DNS 解析、CPU 性能、WebSocket 延迟、并发请求、流式吞吐量、流媒体连通性、WebRTC 泄漏检测、TTFB 分析、TLS 指纹（JA3/JA4）等 12 项测试。</p>
+                <span class="tag">12 合 1</span>
             </div>
             <div class="card reveal reveal-delay-2">
                 <i class="fas fa-globe-asia"></i>
@@ -1451,8 +1459,8 @@
             <div class="card reveal reveal-delay-4">
                 <i class="fas fa-palette"></i>
                 <h3>深色 / 浅色 / 自动</h3>
-                <p>主题跟随系统或手动切换，适配不同光线环境。国际化支持 3 种语言（英文、简体、繁体）。</p>
-                <span class="tag">i18n · 主题</span>
+                <p>主题跟随系统或手动切换，适配不同光线环境。自动识别设备语言（英文、简体、繁体），无需手动选择。</p>
+                <span class="tag">i18n · 语言自动检测</span>
             </div>
         </div>
 
@@ -1547,7 +1555,7 @@
                 <span><i class="fas fa-css3-alt"></i> CSS 变量</span>
                 <span><i class="fas fa-chart-simple"></i> Canvas</span>
                 <span><i class="fas fa-plug"></i> WebSocket</span>
-                <span><i class="fas fa-google-font"></i> Inter 字体</span>
+                <span><i class="fas fa-font"></i> Inter 字体</span>
                 <span><i class="fab fa-font-awesome"></i> Font Awesome</span>
                 <span><i class="fas fa-shield-alt"></i> CSP · HSTS</span>
             </div>
@@ -1599,6 +1607,11 @@
                 <div class="path">/api/log-speed</div>
                 <div class="desc">记录测速结果到 KV 存储</div>
             </div>
+            <div class="api-item">
+                <span class="method post">POST</span>
+                <div class="path">/upload-test</div>
+                <div class="desc">上传测速，接收数据并返回接收字节数与耗时</div>
+            </div>
         </div>
 
         <!-- ===== 架构流程 ===== -->
@@ -1626,34 +1639,29 @@
                 <span><i class="fas fa-code"></i> 核心路由示例 (Worker 端)</span>
                 <span style="font-size: 12px; background: var(--accent-light); padding: 2px 12px; border-radius: 20px;">_workers.js</span>
             </div>
-            <pre><code class="language-javascript">// 实时 RTT 监控端点
-if (url.pathname === '/rtt') {
+            <pre><code>// 上传测速端点
+if (url.pathname === '/upload-test' && request.method === 'POST') {
     const start = Date.now();
-    await fetch('https://example.com', { method: 'HEAD' });
-    const rtt = Date.now() - start;
-    return new Response(JSON.stringify({ rtt }), {
-        headers: { 'Content-Type': 'application/json' }
-    });
+    const body = await request.arrayBuffer();
+    const duration = Date.now() - start;
+    return json({ received: body.byteLength, duration });
 }
 
-// IP 欺诈评分 (调用 Scamalytics)
-async function getIpFraudScore(ip) {
-    const resp = await fetch(`https://scamalytics.com/api/ip/${ip}`);
-    const data = await resp.json();
-    return {
-        score: data.score,
-        isProxy: data.is_proxy,
-        isVpn: data.is_vpn,
-        riskLevel: data.score >= 80 ? 'high' : 'low'
-    };
-}
+// TLS 指纹 (JA3/JA4) — 直接从 request.cf 读取
+const data = {
+    tlsClientJa3: cf.tlsClientJa3 || 'N/A',
+    tlsClientJa4: cf.tlsClientJa4 || 'N/A',
+    tlsVersion: cf.tlsVersion,
+    botScore: cf.botManagement?.score
+};
 
-// WebSocket 延迟测试
-const webSocketPair = new WebSocketPair();
-const [client, server] = Object.values(webSocketPair);
+// WebSocket 延迟测试 (ping/pong)
+const [client, server] = Object.values(new WebSocketPair());
 server.accept();
 server.addEventListener('message', event => {
-    server.send(JSON.stringify({ type: 'pong', echo: event.data }));
+    const msg = JSON.parse(event.data);
+    if (msg.type === 'ping')
+        server.send(JSON.stringify({ type: 'pong', t: msg.t }));
 });
 return new Response(null, { status: 101, webSocket: client });</code></pre>
         </div>
@@ -1677,39 +1685,19 @@ return new Response(null, { status: 101, webSocket: client });</code></pre>
             </div>
         </div>
 
-        <!-- ===== 用户评价 ===== -->
-        <div class="reveal">
-            <h2 class="section-title"><i class="fas fa-comment-dots"></i> 社区声音</h2>
-            <p class="section-desc">来自全球开发者和运维人员的真实反馈。</p>
+        <!-- ===== 社区反馈 ===== -->
+        <div class=”reveal”>
+            <h2 class=”section-title”><i class=”fas fa-comment-dots”></i> 社区反馈</h2>
+            <p class=”section-desc”>遇到问题或有建议？欢迎在 GitHub 上与我们交流。</p>
         </div>
-        <div class="testimonials reveal">
-            <div class="testimonial">
-                <div class="quote">“NetSight Pro 已经成为我日常调试的必备工具，界面清爽，响应极快！”</div>
-                <div class="author">
-                    <div class="avatar">J</div>
+        <div class=”testimonials reveal”>
+            <div class=”testimonial”>
+                <div class=”quote”>”部署只需 5 分钟，免费额度完全够个人使用。RTT 监控和流媒体检测是我最常用的功能。”</div>
+                <div class=”author”>
+                    <div class=”avatar”><i class=”fab fa-github”></i></div>
                     <div>
-                        <div class="name">John Doe</div>
-                        <div class="role">全栈工程师 · 新加坡</div>
-                    </div>
-                </div>
-            </div>
-            <div class="testimonial">
-                <div class="quote">“多节点对比功能太棒了！让我在几分钟内就评估了全球多个数据中心的延迟。” </div>
-                <div class="author">
-                    <div class="avatar">M</div>
-                    <div>
-                        <div class="name">Maria Chen</div>
-                        <div class="role">DevOps 工程师 · 硅谷</div>
-                    </div>
-                </div>
-            </div>
-            <div class="testimonial">
-                <div class="quote">“开源社区的宝藏项目，部署简单，代码质量高，强烈推荐给所有 Cloudflare 用户。”</div>
-                <div class="author">
-                    <div class="avatar">A</div>
-                    <div>
-                        <div class="name">Alex Rivera</div>
-                        <div class="role">云架构师 · 伦敦</div>
+                        <div class=”name”>来自 GitHub 用户</div>
+                        <div class=”role”><a href=”https://github.com/BlueDriftHK/CF-workers-netdiag/issues” target=”_blank” style=”color:var(--accent);”>查看更多反馈 →</a></div>
                     </div>
                 </div>
             </div>
@@ -1754,6 +1742,11 @@ return new Response(null, { status: 101, webSocket: client });</code></pre>
         </div>
         <div class="timeline reveal">
             <div class="timeline-item">
+                <span class="version">v4.1</span>
+                <span class="date">2026-07-21</span>
+                <p>全新 Apple Liquid Glass UI；新增 WebRTC 泄漏检测、TTFB 分析、JA3/JA4 TLS 指纹、上传测速；设备语言自动识别；响应式布局适配移动端与桌面端。</p>
+            </div>
+            <div class="timeline-item">
                 <span class="version">v4.0</span>
                 <span class="date">2026-07-01</span>
                 <p>新增多节点对比、流媒体连通性检测；优化 UI 与深色模式；支持 KV 存储历史记录。</p>
@@ -1791,7 +1784,7 @@ return new Response(null, { status: 101, webSocket: client });</code></pre>
                 <a href="https://github.com/BlueDriftHK/CF-workers-netdiag/issues" target="_blank">
                     <i class="fas fa-bug"></i> 报告问题
                 </a>
-                <a href="#" target="_blank">
+                <a href="https://github.com/BlueDriftHK/CF-workers-netdiag" target="_blank">
                     <i class="fas fa-star"></i> 给个 Star
                 </a>
                 <a href="https://github.com/BlueDriftHK/CF-workers-netdiag/blob/main/LICENSE" target="_blank">
@@ -1806,9 +1799,7 @@ return new Response(null, { status: 101, webSocket: client });</code></pre>
                 <i class="far fa-copyright"></i> 2026 NetSight Pro · 由 <a href="https://github.com/BlueDriftHK" target="_blank">BlueDriftHK</a> 维护
             </span>
             <span class="social">
-                <a href="#" title="Twitter"><i class="fab fa-twitter"></i></a>
-                <a href="#" title="GitHub"><i class="fab fa-github"></i></a>
-                <a href="#" title="Discord"><i class="fab fa-discord"></i></a>
+                <a href="https://github.com/BlueDriftHK" target="_blank" title="GitHub"><i class="fab fa-github"></i></a>
                 <span class="heart">❤️</span> 开源协议 <a href="https://github.com/BlueDriftHK/CF-workers-netdiag/blob/main/LICENSE" target="_blank" style="font-weight:600;">AGPL-3.0</a>
             </span>
             <span>
@@ -1816,12 +1807,6 @@ return new Response(null, { status: 101, webSocket: client });</code></pre>
             </span>
         </footer>
     </div>
-
-    <!-- ===== Prism.js ===== -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js">
-    </script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-javascript.min.js">
-    </script>
 
     <script>
         (function() {
@@ -1878,10 +1863,18 @@ return new Response(null, { status: 101, webSocket: client });</code></pre>
             }
 
             setTimeout(() => {
-                animateStat(document.getElementById('starsCount'), 328);
-                animateStat(document.getElementById('forksCount'), 86);
-                animateStat(document.getElementById('deploysCount'), 1427);
-                animateStat(document.getElementById('contributorsCount'), 21);
+                animateStat(document.getElementById('toolsCount'), 12);
+                animateStat(document.getElementById('langsCount'), 3);
+                fetch('https://api.github.com/repos/BlueDriftHK/CF-workers-netdiag')
+                    .then(r => r.json())
+                    .then(data => {
+                        animateStat(document.getElementById('starsCount'), data.stargazers_count || 0);
+                        animateStat(document.getElementById('forksCount'), data.forks_count || 0);
+                    })
+                    .catch(() => {
+                        document.getElementById('starsCount').textContent = '★';
+                        document.getElementById('forksCount').textContent = '⑂';
+                    });
             }, 400);
 
             // --- 预览区动态变化 ---
