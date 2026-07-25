@@ -16,12 +16,11 @@ const CORS_HEADERS = {
 const SECURITY_HEADERS = {
   'x-content-type-options': 'nosniff',
   'x-frame-options': 'DENY',
-  'x-xss-protection': '1; mode=block',
   'referrer-policy': 'strict-origin-when-cross-origin',
   'strict-transport-security': 'max-age=31536000; includeSubDomains; preload'
 };
 
-// 简单的限流实现
+// 简单的限流实现（注意：Map 为 per-isolate 内存，非全局共享；高并发场景如需全局限流应使用 KV 或 Durable Object）
 const rateLimit = new Map();
 const cpuRateLimit = new Map();
 
@@ -35,6 +34,13 @@ function cleanupRateLimit() {
       cleanedCount++;
     } else {
       rateLimit.set(ip, valid);
+    }
+  }
+  // 同步清理 cpuRateLimit 中过期的条目，防止内存泄漏
+  for (const [ip, limit] of cpuRateLimit.entries()) {
+    if (now > limit.resetTime) {
+      cpuRateLimit.delete(ip);
+      cleanedCount++;
     }
   }
   return cleanedCount;
@@ -72,6 +78,8 @@ function escapeForJS(str) {
     .replace(/\\/g, '\\\\')
     .replace(/'/g, "\\'")
     .replace(/"/g, '\\"')
+    .replace(/`/g, '\\`')
+    .replace(/\$\{/g, '\\${')
     .replace(/\n/g, '\\n')
     .replace(/\r/g, '\\r')
     .replace(/\t/g, '\\t')
@@ -200,7 +208,7 @@ async function handleRequest(event) {
       status: 'ok',
       timestamp: Date.now(),
       version: '4.1',
-      uptime: performance.timeOrigin ? Date.now() - performance.timeOrigin : 'unknown'
+      note: 'Cloudflare Workers are stateless; per-request context only'
     }), {
       headers: {
         'content-type': 'application/json',
@@ -256,6 +264,13 @@ async function handleRequest(event) {
   
   // ==================== 上传速度测试端点 ====================
   if (url.pathname === '/upload-test' && request.method === 'POST') {
+    const contentLength = parseInt(request.headers.get('content-length') || '0', 10);
+    if (contentLength > 10485760) {
+      return new Response(JSON.stringify({ error: 'Payload too large', max: '10MB' }), {
+        status: 413,
+        headers: { 'content-type': 'application/json', ...CORS_HEADERS, ...SECURITY_HEADERS }
+      });
+    }
     const start = Date.now();
     const body = await request.arrayBuffer();
     const duration = Date.now() - start;
@@ -344,7 +359,7 @@ async function handleRequest(event) {
     const start = Date.now();
     let status = null;
     try {
-      const res = await fetch(targetUrl, { method: 'HEAD', signal: AbortSignal.timeout(5000) });
+      const res = await fetch(targetUrl, { method: 'HEAD', redirect: 'manual', signal: AbortSignal.timeout(5000) });
       status = res.status;
     } catch (e) {
       const time = Date.now() - start;
@@ -525,61 +540,18 @@ async function handleRequest(event) {
   if (url.pathname === '/stream-test') {
     const size = Math.min(parseInt(url.searchParams.get('size')) || 1048576, 10485760);
     const chunkSize = 65536;
-    
-    let controllerRef;
-    let cancelled = false;
+    let sent = 0;
     
     const stream = new ReadableStream({
-      start(controller) {
-        controllerRef = controller;
-        let sent = 0;
-        
-        const pushChunk = () => {
-          if (cancelled || sent >= size) {
-            if (!cancelled) controller.close();
-            return;
-          }
-          
-          const remaining = size - sent;
-          const currentChunk = Math.min(remaining, chunkSize);
-          const chunk = fillRandom(new Uint8Array(currentChunk));
-          
-          try {
-            controller.enqueue(chunk);
-            sent += currentChunk;
-            
-            if (sent < size) {
-              if (controller.desiredSize > 0) {
-                queueMicrotask(pushChunk);
-              } else {
-                const waitForDrain = () => {
-                  if (cancelled) return;
-                  if (controller.desiredSize > 0) {
-                    pushChunk();
-                  } else {
-                    setTimeout(waitForDrain, 10);
-                  }
-                };
-                waitForDrain();
-              }
-            } else {
-              controller.close();
-            }
-          } catch (e) {
-            if (!cancelled) controller.error(e);
-          }
-        };
-        
-        pushChunk();
-      },
-      
-      cancel() {
-        cancelled = true;
-        if (controllerRef) {
-          try {
-            controllerRef.close();
-          } catch (e) {}
+      pull(controller) {
+        if (sent >= size) {
+          controller.close();
+          return;
         }
+        const remaining = size - sent;
+        const currentChunk = Math.min(remaining, chunkSize);
+        controller.enqueue(fillRandom(new Uint8Array(currentChunk)));
+        sent += currentChunk;
       }
     });
     
@@ -630,7 +602,7 @@ async function handleRequest(event) {
   
   // ==================== 测速历史查询 (GET) ====================
   if (url.pathname === '/api/speed-history') {
-    const limit = Math.min(parseInt(url.searchParams.get('limit')) || 20, 100);
+    const limit = Math.min(parseInt(url.searchParams.get('limit')) || 10, 20);
     const records = [];
     
     if (typeof SPEED_HISTORY !== 'undefined' && SPEED_HISTORY) {
@@ -685,6 +657,7 @@ async function handleRequest(event) {
   }
   
   // 自动用量记录（非主页面和静态资源的请求）
+  // 注意：read-modify-write 在并发下存在竞态，计数可能少量丢失；如需精确计数应使用 Durable Object
   event.waitUntil((async () => {
     if (typeof SPEED_HISTORY !== 'undefined' && SPEED_HISTORY && url.pathname !== '/' && !url.pathname.startsWith('/static/')) {
       try {
@@ -801,7 +774,7 @@ async function handleRequest(event) {
   // 开始 HTML 模板（全界面国际化 + 美化）
   // ============================================================
   const html = `<!DOCTYPE html>
-<html lang="zh-CN" data-theme="auto">
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
@@ -810,347 +783,468 @@ async function handleRequest(event) {
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="preconnect" href="https://cdnjs.cloudflare.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap');
         * { margin: 0; padding: 0; box-sizing: border-box; }
+
         :root {
-            --bg-primary: #f0f2f5;
-            --bg-mesh: radial-gradient(ellipse at 20% 0%, rgba(120,180,255,0.15) 0%, transparent 50%),
-                       radial-gradient(ellipse at 80% 100%, rgba(180,120,255,0.1) 0%, transparent 50%),
-                       radial-gradient(ellipse at 50% 50%, rgba(255,180,120,0.05) 0%, transparent 60%);
-            --glass-bg: rgba(255,255,255,0.55);
-            --glass-bg-hover: rgba(255,255,255,0.7);
-            --glass-heavy: rgba(255,255,255,0.72);
-            --glass-border: rgba(255,255,255,0.6);
-            --glass-border-outer: rgba(0,0,0,0.06);
-            --glass-highlight: linear-gradient(135deg, rgba(255,255,255,0.8) 0%, rgba(255,255,255,0) 50%);
-            --glass-shadow: 0 8px 32px rgba(0,0,0,0.08), 0 2px 8px rgba(0,0,0,0.04), inset 0 1px 0 rgba(255,255,255,0.6);
-            --glass-shadow-lg: 0 20px 60px rgba(0,0,0,0.1), 0 4px 16px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.7);
-            --text-primary: #1d1d1f;
-            --text-secondary: #6e6e73;
-            --text-tertiary: #aeaeb2;
-            --text-quaternary: #c7c7cc;
-            --accent: #007AFF;
-            --accent-hover: #0066d6;
-            --accent-light: rgba(0,122,255,0.08);
-            --accent-glass: rgba(0,122,255,0.06);
-            --success: #30d158;
-            --success-light: rgba(48,209,88,0.1);
-            --warning: #ff9f0a;
-            --warning-light: rgba(255,159,10,0.1);
-            --danger: #ff3b30;
-            --danger-light: rgba(255,59,48,0.08);
-            --border: rgba(0,0,0,0.06);
-            --border-accent: rgba(0,122,255,0.15);
-            --divider: rgba(0,0,0,0.05);
-            --radius-sm: 14px; --radius-md: 18px; --radius-lg: 22px; --radius-xl: 28px;
-            --transition-fast: 0.2s cubic-bezier(0.25,0.1,0.25,1);
-            --transition-smooth: 0.35s cubic-bezier(0.25,0.1,0.25,1);
-            --chart-cyan: #32ade6; --chart-green: #30d158; --chart-teal: #64d2ff;
-            --font: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', system-ui, sans-serif;
+            --bg-primary: #050510;
+            --bg-orb-1: rgba(52, 211, 153, 0.18);
+            --bg-orb-2: rgba(129, 140, 248, 0.16);
+            --bg-orb-3: rgba(168, 85, 247, 0.14);
+            --bg-orb-4: rgba(34, 211, 238, 0.12);
+
+            --glass-bg: rgba(255, 255, 255, 0.04);
+            --glass-bg-hover: rgba(255, 255, 255, 0.07);
+            --glass-heavy: rgba(255, 255, 255, 0.06);
+            --glass-border: rgba(255, 255, 255, 0.08);
+            --glass-border-hover: rgba(255, 255, 255, 0.15);
+            --glass-highlight: inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
+            --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            --glass-shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.4);
+            --glass-blur: blur(24px) saturate(150%);
+
+            --text-primary: #f0f0f5;
+            --text-secondary: #9898b0;
+            --text-tertiary: #5a5a72;
+            --text-quaternary: #3a3a50;
+
+            --accent: #818cf8;
+            --accent-hover: #a5b4fc;
+            --accent-light: rgba(129, 140, 248, 0.10);
+            --accent-glass: rgba(129, 140, 248, 0.06);
+            --accent-glow: 0 0 20px rgba(129, 140, 248, 0.15);
+
+            --success: #34d399;
+            --success-light: rgba(52, 211, 153, 0.10);
+            --warning: #fbbf24;
+            --warning-light: rgba(251, 191, 36, 0.10);
+            --danger: #f87171;
+            --danger-light: rgba(248, 113, 113, 0.10);
+
+            --border: rgba(255, 255, 255, 0.06);
+            --border-accent: rgba(129, 140, 248, 0.2);
+            --divider: rgba(255, 255, 255, 0.05);
+
+            --radius-sm: 12px;
+            --radius-md: 16px;
+            --radius-lg: 20px;
+            --radius-xl: 24px;
+
+            --transition-fast: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            --transition-smooth: 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+
+            --chart-cyan: #22d3ee;
+            --chart-green: #34d399;
+            --chart-teal: #2dd4bf;
+
+            --font: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
+            --font-mono: 'SF Mono', 'JetBrains Mono', ui-monospace, monospace;
         }
-        [data-theme="auto"] {
-            --bg-primary: #000000;
-            --bg-mesh: radial-gradient(ellipse at 20% 0%, rgba(60,100,180,0.12) 0%, transparent 50%),
-                       radial-gradient(ellipse at 80% 100%, rgba(100,60,180,0.08) 0%, transparent 50%),
-                       radial-gradient(ellipse at 50% 50%, rgba(180,100,60,0.04) 0%, transparent 60%);
-            --glass-bg: rgba(44,44,46,0.55);
-            --glass-bg-hover: rgba(58,58,60,0.65);
-            --glass-heavy: rgba(44,44,46,0.72);
-            --glass-border: rgba(255,255,255,0.12);
-            --glass-border-outer: rgba(255,255,255,0.06);
-            --glass-highlight: linear-gradient(135deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0) 50%);
-            --glass-shadow: 0 8px 32px rgba(0,0,0,0.3), 0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.08);
-            --glass-shadow-lg: 0 20px 60px rgba(0,0,0,0.4), 0 4px 16px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.1);
-            --text-primary: #f5f5f7;
-            --text-secondary: #a1a1a6;
-            --text-tertiary: #636366;
-            --text-quaternary: #48484a;
-            --accent: #0A84FF;
-            --accent-hover: #409cff;
-            --accent-light: rgba(10,132,255,0.12);
-            --accent-glass: rgba(10,132,255,0.08);
-            --success: #30d158;
-            --success-light: rgba(48,209,88,0.15);
-            --warning: #ff9f0a;
-            --warning-light: rgba(255,159,10,0.15);
-            --danger: #ff453a;
-            --danger-light: rgba(255,69,58,0.12);
-            --border: rgba(255,255,255,0.08);
-            --border-accent: rgba(10,132,255,0.2);
-            --divider: rgba(255,255,255,0.06);
-            --chart-cyan: #64d2ff; --chart-green: #30d158; --chart-teal: #6ac4dc;
+
+        [data-theme="light"] {
+            --bg-primary: #f0f4ff;
+            --bg-orb-1: rgba(52, 211, 153, 0.12);
+            --bg-orb-2: rgba(99, 102, 241, 0.10);
+            --bg-orb-3: rgba(168, 85, 247, 0.08);
+            --bg-orb-4: rgba(34, 211, 238, 0.08);
+
+            --glass-bg: rgba(255, 255, 255, 0.55);
+            --glass-bg-hover: rgba(255, 255, 255, 0.7);
+            --glass-heavy: rgba(255, 255, 255, 0.65);
+            --glass-border: rgba(255, 255, 255, 0.7);
+            --glass-border-hover: rgba(255, 255, 255, 0.9);
+            --glass-highlight: inset 0 1px 0 0 rgba(255, 255, 255, 0.8);
+            --glass-shadow: 0 8px 32px rgba(99, 102, 241, 0.08), 0 2px 8px rgba(0, 0, 0, 0.04);
+            --glass-shadow-lg: 0 16px 48px rgba(99, 102, 241, 0.12), 0 4px 16px rgba(0, 0, 0, 0.06);
+
+            --text-primary: #1e1b4b;
+            --text-secondary: #64648b;
+            --text-tertiary: #9898b0;
+            --text-quaternary: #c0c0d4;
+
+            --accent: #6366f1;
+            --accent-hover: #4f46e5;
+            --accent-light: rgba(99, 102, 241, 0.08);
+            --accent-glass: rgba(99, 102, 241, 0.05);
+            --accent-glow: 0 0 20px rgba(99, 102, 241, 0.1);
+
+            --success: #10b981;
+            --success-light: rgba(16, 185, 129, 0.08);
+            --warning: #d97706;
+            --warning-light: rgba(217, 119, 6, 0.08);
+            --danger: #ef4444;
+            --danger-light: rgba(239, 68, 68, 0.08);
+
+            --border: rgba(0, 0, 0, 0.06);
+            --border-accent: rgba(99, 102, 241, 0.15);
+            --divider: rgba(0, 0, 0, 0.05);
+
+            --chart-cyan: #0891b2;
+            --chart-green: #059669;
+            --chart-teal: #0d9488;
         }
+
         html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+
         body {
             font-family: var(--font);
             background: var(--bg-primary);
             min-height: 100vh;
-            padding: 28px;
+            padding: 32px 24px;
             color: var(--text-primary);
             position: relative;
-            transition: background 0.4s ease, color 0.4s ease;
+            overflow-x: hidden;
+            transition: background 0.5s ease, color 0.4s ease;
         }
+
+        /* Aurora background */
         body::before {
             content: '';
-            position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: var(--bg-mesh);
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background:
+                linear-gradient(180deg, transparent 0%, var(--bg-orb-1) 20%, transparent 40%),
+                linear-gradient(160deg, transparent 30%, var(--bg-orb-3) 50%, transparent 70%),
+                linear-gradient(200deg, transparent 50%, var(--bg-orb-2) 70%, transparent 90%);
+            animation: auroraShift 12s ease-in-out infinite alternate;
             pointer-events: none; z-index: 0;
+            filter: blur(60px);
         }
-        .container { max-width: 960px; margin: 0 auto; position: relative; z-index: 1; }
+        body::after {
+            content: '';
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background:
+                linear-gradient(170deg, transparent 10%, var(--bg-orb-4) 35%, transparent 55%),
+                linear-gradient(190deg, transparent 40%, var(--bg-orb-1) 60%, transparent 80%);
+            animation: auroraShift2 16s ease-in-out infinite alternate;
+            pointer-events: none; z-index: 0;
+            filter: blur(80px);
+            opacity: 0.7;
+        }
+        @keyframes auroraShift {
+            0% { transform: translateY(-5%) skewX(-2deg) scaleY(1); opacity: 0.8; }
+            50% { transform: translateY(3%) skewX(1deg) scaleY(1.1); opacity: 1; }
+            100% { transform: translateY(-2%) skewX(-1deg) scaleY(0.95); opacity: 0.7; }
+        }
+        @keyframes auroraShift2 {
+            0% { transform: translateY(4%) skewX(2deg); opacity: 0.6; }
+            50% { transform: translateY(-3%) skewX(-1deg); opacity: 0.9; }
+            100% { transform: translateY(2%) skewX(1deg); opacity: 0.5; }
+        }
+
+        .bg-orbs { display: none; }
+
+        .container { max-width: 1000px; margin: 0 auto; position: relative; z-index: 1; }
 
         .header {
             display: flex; justify-content: space-between; align-items: center;
-            padding: 18px 28px; margin-bottom: 24px; flex-wrap: wrap; gap: 16px;
+            padding: 20px 28px; margin-bottom: 28px; flex-wrap: wrap; gap: 16px;
             background: var(--glass-heavy);
-            backdrop-filter: blur(40px) saturate(180%);
-            -webkit-backdrop-filter: blur(40px) saturate(180%);
+            backdrop-filter: var(--glass-blur);
+            -webkit-backdrop-filter: var(--glass-blur);
             border-radius: var(--radius-xl);
             border: 1px solid var(--glass-border);
-            box-shadow: var(--glass-shadow);
-            position: relative; overflow: hidden;
+            box-shadow: var(--glass-shadow), var(--glass-highlight);
+            transition: all var(--transition-smooth);
         }
-        .header::before {
-            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 50%;
-            background: var(--glass-highlight); pointer-events: none; border-radius: var(--radius-xl) var(--radius-xl) 0 0;
-        }
-        .logo { display: flex; align-items: center; gap: 14px; position: relative; }
+        .header:hover { border-color: var(--glass-border-hover); }
+
+        .logo { display: flex; align-items: center; gap: 14px; }
         .logo-icon {
-            width: 48px; height: 48px;
-            background: linear-gradient(135deg, var(--accent), #5856d6);
-            border-radius: 14px;
-            display: flex; align-items: center; justify-content: center; font-size: 22px; color: #fff;
-            box-shadow: 0 4px 14px rgba(0,122,255,0.3), inset 0 1px 0 rgba(255,255,255,0.3);
+            width: 44px; height: 44px;
+            background: linear-gradient(135deg, var(--accent), #a855f7);
+            border-radius: 12px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 20px; color: #fff;
+            box-shadow: 0 4px 16px rgba(129, 140, 248, 0.3);
         }
-        .logo h1 { font-size: 22px; font-weight: 700; color: var(--text-primary); letter-spacing: -0.5px; }
-        .logo p { font-size: 12px; color: var(--text-secondary); margin-top: 2px; letter-spacing: 0.2px; }
-        .header-right { display: flex; align-items: center; gap: 12px; position: relative; }
+        .logo h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.5px; }
+        .logo p { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+
+        .header-right { display: flex; align-items: center; gap: 12px; }
         .theme-toggle {
-            background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 50px;
-            padding: 8px 14px; cursor: pointer; font-size: 16px; line-height: 1;
-            color: var(--text-secondary); transition: all var(--transition-fast);
-            display: flex; align-items: center; gap: 6px;
-            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-            box-shadow: 0 2px 8px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.4);
+            background: var(--glass-bg); border: 1px solid var(--glass-border);
+            border-radius: 50px; padding: 8px 14px; cursor: pointer;
+            font-size: 15px; color: var(--text-secondary);
+            transition: all var(--transition-fast);
+            display: flex; align-items: center;
+            backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
         }
-        .theme-toggle:hover { background: var(--glass-bg-hover); box-shadow: 0 4px 12px rgba(0,0,0,0.1), inset 0 1px 0 rgba(255,255,255,0.5); transform: scale(1.02); }
+        .theme-toggle:hover {
+            background: var(--glass-bg-hover); color: var(--text-primary);
+            border-color: var(--glass-border-hover);
+            box-shadow: var(--accent-glow);
+        }
+
         .lang-switcher {
             display: flex; gap: 2px; background: var(--glass-bg); padding: 4px;
-            border-radius: 12px; border: 1px solid var(--glass-border);
-            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-            box-shadow: inset 0 1px 3px rgba(0,0,0,0.06);
+            border-radius: 10px; border: 1px solid var(--glass-border);
+            backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
         }
         .lang-btn {
-            background: transparent; border: none; color: var(--text-secondary);
-            padding: 6px 14px; border-radius: 9px; cursor: pointer; font-size: 12px; font-weight: 500;
-            font-family: var(--font); transition: all var(--transition-fast);
+            background: transparent; border: none; color: var(--text-tertiary);
+            padding: 6px 14px; border-radius: 7px; cursor: pointer;
+            font-size: 12px; font-weight: 500; font-family: var(--font);
+            transition: all var(--transition-fast);
         }
-        .lang-btn.active { background: #fff; color: var(--accent); box-shadow: 0 2px 8px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.8); font-weight: 600; }
-        [data-theme="auto"] .lang-btn.active { background: rgba(255,255,255,0.12); }
-        .lang-btn:hover:not(.active) { color: var(--text-primary); background: rgba(0,0,0,0.03); }
+        .lang-btn.active {
+            background: var(--accent-light); color: var(--accent);
+            font-weight: 600; box-shadow: var(--accent-glow);
+        }
+        .lang-btn:hover:not(.active) { color: var(--text-primary); background: var(--glass-bg-hover); }
 
         .hero-card {
             background: var(--glass-heavy);
-            backdrop-filter: blur(40px) saturate(180%);
-            -webkit-backdrop-filter: blur(40px) saturate(180%);
-            border-radius: var(--radius-xl); padding: 28px 32px; margin-bottom: 24px;
-            border: 1px solid var(--glass-border); box-shadow: var(--glass-shadow-lg);
-            position: relative; overflow: hidden;
+            backdrop-filter: var(--glass-blur);
+            -webkit-backdrop-filter: var(--glass-blur);
+            border-radius: var(--radius-xl); padding: 32px;
+            margin-bottom: 28px;
+            border: 1px solid var(--glass-border);
+            box-shadow: var(--glass-shadow-lg), var(--glass-highlight);
+            transition: all var(--transition-smooth);
         }
-        .hero-card::before {
-            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 45%;
-            background: var(--glass-highlight); pointer-events: none; border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+        .hero-card:hover { border-color: var(--glass-border-hover); }
+
+        .ip-row { display: flex; align-items: baseline; flex-wrap: wrap; gap: 16px; margin-bottom: 14px; }
+        .ip-label {
+            font-size: 11px; font-weight: 600; text-transform: uppercase;
+            letter-spacing: 1.5px; color: var(--accent); min-width: 50px;
         }
-        .ip-row { display: flex; align-items: baseline; flex-wrap: wrap; gap: 16px; margin-bottom: 14px; position: relative; }
-        .ip-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px; color: var(--accent); min-width: 50px; }
-        .ip-val { font-size: 28px; font-weight: 700; font-family: 'SF Mono', ui-monospace, monospace; color: var(--text-primary); word-break: break-all; letter-spacing: -0.5px; }
-        .ip-val-small { font-size: 18px; color: var(--text-secondary); }
-        .stats-row { display: flex; gap: 12px; margin-top: 20px; flex-wrap: wrap; position: relative; }
+        .ip-val {
+            font-size: 26px; font-weight: 700; font-family: var(--font-mono);
+            color: var(--text-primary); word-break: break-all; letter-spacing: -0.5px;
+        }
+        .ip-val-small { font-size: 16px; color: var(--text-secondary); }
+
+        .stats-row { display: flex; gap: 10px; margin-top: 22px; flex-wrap: wrap; }
         .stat-item {
             display: flex; align-items: center; gap: 8px; font-size: 12px;
             padding: 7px 16px; background: var(--glass-bg); border-radius: 50px;
             border: 1px solid var(--glass-border); color: var(--text-secondary);
-            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-            box-shadow: 0 2px 6px rgba(0,0,0,0.04), inset 0 1px 0 rgba(255,255,255,0.4);
+            backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+            transition: all var(--transition-fast);
         }
+        .stat-item:hover { background: var(--glass-bg-hover); border-color: var(--glass-border-hover); }
         .stat-item strong { color: var(--text-primary); font-weight: 600; }
-        .stat-item i { color: var(--accent); font-size: 13px; }
+        .stat-item i { color: var(--accent); font-size: 12px; }
         .live-dot {
             display: inline-block; width: 7px; height: 7px; border-radius: 50%;
-            background: var(--success); animation: pulse 2s ease-in-out infinite; margin-right: 6px;
+            background: var(--success); animation: pulse 2s ease-in-out infinite; margin-right: 4px;
         }
-        @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(1.2)} }
+        @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(1.3)} }
 
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; margin-bottom: 24px; }
-        .rtt-card { grid-column: 1 / -1; min-height: 540px; display: flex; flex-direction: column; background: var(--glass-heavy); backdrop-filter: blur(40px) saturate(180%); -webkit-backdrop-filter: blur(40px) saturate(180%); border: 1px solid var(--glass-border); box-shadow: var(--glass-shadow-lg); position: relative; overflow: hidden; }
-        .rtt-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 40%; background: var(--glass-highlight); pointer-events: none; border-radius: var(--radius-xl) var(--radius-xl) 0 0; }
-        .rtt-card .card-body { flex: 1; display: flex; flex-direction: column; padding: 24px 28px; position: relative; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-bottom: 28px; }
+        .grid-2col { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-bottom: 28px; }
+        .info-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0 32px; }
+
         .card {
             background: var(--glass-bg);
-            backdrop-filter: blur(40px) saturate(180%);
-            -webkit-backdrop-filter: blur(40px) saturate(180%);
-            border-radius: var(--radius-lg); border: 1px solid var(--glass-border); overflow: hidden;
-            transition: all var(--transition-smooth); box-shadow: var(--glass-shadow);
-            position: relative;
+            backdrop-filter: var(--glass-blur);
+            -webkit-backdrop-filter: var(--glass-blur);
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--glass-border);
+            overflow: hidden;
+            transition: all var(--transition-smooth);
+            box-shadow: var(--glass-shadow), var(--glass-highlight);
         }
-        .card::before {
-            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 40%;
-            background: var(--glass-highlight); pointer-events: none; border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+        .card:hover {
+            border-color: var(--glass-border-hover);
+            box-shadow: var(--glass-shadow-lg), var(--glass-highlight);
+            transform: translateY(-2px);
         }
-        .card:hover { box-shadow: var(--glass-shadow-lg); border-color: var(--border-accent); transform: translateY(-2px); }
+
+        .rtt-card {
+            grid-column: 1 / -1; min-height: 520px;
+            display: flex; flex-direction: column;
+            background: var(--glass-heavy);
+        }
+        .rtt-card .card-body { flex: 1; display: flex; flex-direction: column; padding: 24px 28px; }
+
         .card-header {
-            padding: 18px 24px; border-bottom: 1px solid var(--divider);
-            display: flex; align-items: center; gap: 14px; position: relative;
+            padding: 20px 24px; border-bottom: 1px solid var(--divider);
+            display: flex; align-items: center; gap: 14px;
         }
-        .card-header i { font-size: 22px; color: var(--accent); transition: transform 0.3s ease; }
-        .card:hover .card-header i { transform: scale(1.08); }
-        .card-header h3 { font-size: 15px; font-weight: 600; color: var(--text-primary); letter-spacing: -0.2px; }
+        .card-header i { font-size: 20px; color: var(--accent); opacity: 0.9; }
+        .card-header h3 { font-size: 15px; font-weight: 600; letter-spacing: -0.2px; }
         .card-header p { font-size: 11px; color: var(--text-tertiary); margin-top: 2px; }
-        .card-body { padding: 20px 24px; position: relative; }
+        .card-body { padding: 20px 24px; }
+
         .info-row {
             display: flex; justify-content: space-between; align-items: center;
             padding: 11px 0; border-bottom: 1px solid var(--divider);
         }
         .info-row:last-child { border-bottom: none; }
         .info-label { font-size: 13px; color: var(--text-secondary); display: flex; align-items: center; gap: 10px; }
-        .info-label i { font-size: 15px; width: 18px; color: var(--accent); opacity: 0.8; }
-        .info-value { font-size: 13px; font-weight: 500; font-family: 'SF Mono', ui-monospace, monospace; color: var(--text-primary); }
+        .info-label i { font-size: 14px; width: 18px; color: var(--accent); opacity: 0.7; }
+        .info-value { font-size: 13px; font-weight: 500; font-family: var(--font-mono); color: var(--text-primary); }
+
         .badge {
             padding: 4px 12px; border-radius: 50px; font-size: 11px; font-weight: 600;
             display: inline-flex; align-items: center; gap: 5px;
         }
-        .badge-success { background: var(--success-light); color: var(--success); border: 1px solid rgba(48,209,88,0.2); }
-        .badge-warning { background: var(--warning-light); color: #b36b00; border: 1px solid rgba(255,159,10,0.2); }
-        [data-theme="auto"] .badge-warning { color: var(--warning); }
-        .badge-danger { background: var(--danger-light); color: var(--danger); border: 1px solid rgba(255,59,48,0.2); }
-        .badge-info { background: var(--accent-light); color: var(--accent); border: 1px solid rgba(0,122,255,0.15); }
-        .badge-purple { background: rgba(175,82,222,0.08); color: #8944ab; border: 1px solid rgba(175,82,222,0.15); }
-        [data-theme="auto"] .badge-purple { color: #bf5af2; }
+        .badge-success { background: var(--success-light); color: var(--success); border: 1px solid rgba(52, 211, 153, 0.15); }
+        .badge-warning { background: var(--warning-light); color: var(--warning); border: 1px solid rgba(251, 191, 36, 0.15); }
+        .badge-danger { background: var(--danger-light); color: var(--danger); border: 1px solid rgba(248, 113, 113, 0.15); }
+        .badge-info { background: var(--accent-light); color: var(--accent); border: 1px solid rgba(129, 140, 248, 0.15); }
+        .badge-purple { background: rgba(168, 85, 247, 0.08); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.15); }
 
-        .rtt-display { display: grid; grid-template-columns: repeat(4,1fr); gap: 16px; margin-bottom: 22px; }
+        .rtt-display { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 20px; }
         .rtt-box {
-            background: var(--glass-bg); border-radius: var(--radius-md); padding: 22px 16px;
-            text-align: center; border: 1px solid var(--glass-border); transition: all var(--transition-smooth);
-            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-            box-shadow: 0 2px 8px rgba(0,0,0,0.04), inset 0 1px 0 rgba(255,255,255,0.4);
+            background: var(--glass-bg); border-radius: var(--radius-md); padding: 22px 14px;
+            text-align: center; border: 1px solid var(--glass-border);
+            transition: all var(--transition-smooth);
         }
-        .rtt-box:hover { background: var(--glass-bg-hover); box-shadow: 0 4px 16px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.5); transform: translateY(-1px); }
-        .rtt-value { font-size: 48px; font-weight: 700; color: var(--text-primary); line-height: 1.1; letter-spacing: -2px; }
-        .rtt-label { font-size: 12px; color: var(--text-secondary); margin-top: 10px; letter-spacing: 0.2px; }
-        .rtt-label i { margin-right: 4px; color: var(--accent); opacity: 0.7; }
+        .rtt-box:hover { background: var(--glass-bg-hover); border-color: var(--glass-border-hover); transform: translateY(-2px); }
+        .rtt-value { font-size: 42px; font-weight: 700; color: var(--text-primary); line-height: 1.1; letter-spacing: -2px; font-family: var(--font-mono); }
+        .rtt-label { font-size: 11px; color: var(--text-secondary); margin-top: 10px; letter-spacing: 0.3px; }
+        .rtt-label i { margin-right: 4px; color: var(--accent); opacity: 0.6; }
+
         .chart-container {
-            background: var(--glass-bg); border-radius: var(--radius-md); padding: 20px; margin: 18px 0;
-            border: 1px solid var(--glass-border);
-            box-shadow: inset 0 2px 6px rgba(0,0,0,0.04);
+            background: var(--glass-bg); border-radius: var(--radius-md); padding: 20px;
+            margin: 16px 0; border: 1px solid var(--glass-border);
         }
         canvas { width: 100%; height: 180px; }
+
         .quality-grid {
-            display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin-top: 18px;
-            padding-top: 16px; border-top: 1px solid var(--divider);
+            display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;
+            margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--divider);
         }
         .quality-card {
-            background: var(--glass-bg); border-radius: var(--radius-sm); padding: 13px 15px;
+            background: var(--glass-bg); border-radius: var(--radius-sm); padding: 12px 14px;
             display: flex; align-items: center; justify-content: space-between;
             transition: all var(--transition-fast); border: 1px solid transparent;
         }
         .quality-card:hover { background: var(--glass-bg-hover); border-color: var(--glass-border); }
         .quality-label { font-size: 12px; color: var(--text-secondary); display: flex; align-items: center; gap: 7px; }
-        .quality-label i { font-size: 13px; color: var(--accent); opacity: 0.7; }
-        .quality-value { font-size: 14px; font-weight: 600; }
+        .quality-label i { font-size: 12px; color: var(--accent); opacity: 0.6; }
+        .quality-value { font-size: 13px; font-weight: 600; }
 
         .button-group { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 18px; }
         .btn {
             padding: 10px 20px; border-radius: 50px; font-size: 13px; font-weight: 500;
-            border: none; cursor: pointer; transition: all var(--transition-fast);
-            display: inline-flex; align-items: center; gap: 8px; font-family: var(--font); letter-spacing: -0.1px;
+            border: 1px solid var(--glass-border); cursor: pointer;
+            transition: all var(--transition-fast);
+            display: inline-flex; align-items: center; gap: 8px;
+            font-family: var(--font); letter-spacing: -0.1px;
+            background: var(--glass-bg); color: var(--text-primary);
+            backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
         }
         .btn i { transition: transform 0.2s ease; }
-        .btn:hover i { transform: scale(1.12); }
-        .btn:active { transform: scale(0.97); }
-        .btn-primary { background: var(--accent); color: #fff; box-shadow: 0 4px 14px rgba(0,122,255,0.3), inset 0 1px 0 rgba(255,255,255,0.2); }
-        .btn-primary:hover { background: var(--accent-hover); box-shadow: 0 6px 20px rgba(0,122,255,0.4), inset 0 1px 0 rgba(255,255,255,0.2); transform: translateY(-1px); }
-        .btn-outline { background: var(--glass-bg); border: 1px solid var(--glass-border); color: var(--text-primary); backdrop-filter: blur(10px); box-shadow: 0 2px 6px rgba(0,0,0,0.04), inset 0 1px 0 rgba(255,255,255,0.4); }
-        .btn-outline:hover { background: var(--glass-bg-hover); box-shadow: 0 4px 12px rgba(0,0,0,0.08); transform: translateY(-1px); }
-        .btn-cyan { background: linear-gradient(135deg, #007AFF, #5856d6); color: #fff; box-shadow: 0 4px 14px rgba(0,122,255,0.25), inset 0 1px 0 rgba(255,255,255,0.2); }
-        .btn-cyan:hover { box-shadow: 0 6px 20px rgba(0,122,255,0.35); transform: translateY(-1px); }
-        .btn-purple { background: linear-gradient(135deg, #5856d6, #af52de); color: #fff; box-shadow: 0 4px 14px rgba(88,86,214,0.25), inset 0 1px 0 rgba(255,255,255,0.2); }
-        .btn-purple:hover { box-shadow: 0 6px 20px rgba(88,86,214,0.35); transform: translateY(-1px); }
+        .btn:hover i { transform: scale(1.1); }
+        .btn:active { transform: scale(0.96); }
+        .btn:hover { background: var(--glass-bg-hover); border-color: var(--glass-border-hover); transform: translateY(-1px); }
+
+        .btn-primary {
+            background: var(--accent); color: #fff; border-color: transparent;
+            box-shadow: 0 4px 16px rgba(129, 140, 248, 0.25);
+        }
+        .btn-primary:hover { background: var(--accent-hover); box-shadow: 0 6px 24px rgba(129, 140, 248, 0.35); }
+
+        .btn-outline { background: var(--glass-bg); border: 1px solid var(--glass-border); color: var(--text-primary); }
+        .btn-outline:hover { background: var(--glass-bg-hover); border-color: var(--glass-border-hover); }
+
+        .btn-cyan {
+            background: linear-gradient(135deg, rgba(34, 211, 238, 0.15), rgba(99, 102, 241, 0.15));
+            border: 1px solid rgba(34, 211, 238, 0.2); color: var(--chart-cyan);
+        }
+        .btn-cyan:hover { background: linear-gradient(135deg, rgba(34, 211, 238, 0.25), rgba(99, 102, 241, 0.25)); box-shadow: 0 4px 16px rgba(34, 211, 238, 0.15); }
+
+        .btn-purple {
+            background: linear-gradient(135deg, rgba(168, 85, 247, 0.15), rgba(99, 102, 241, 0.15));
+            border: 1px solid rgba(168, 85, 247, 0.2); color: #c084fc;
+        }
+        .btn-purple:hover { background: linear-gradient(135deg, rgba(168, 85, 247, 0.25), rgba(99, 102, 241, 0.25)); box-shadow: 0 4px 16px rgba(168, 85, 247, 0.15); }
 
         .result-area {
             margin-top: 14px; padding: 16px 20px; background: var(--glass-bg);
-            border-radius: var(--radius-sm); font-size: 12px; border-left: 3px solid var(--accent);
-            transition: all var(--transition-fast); color: var(--text-secondary);
-            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+            border-radius: var(--radius-sm); font-size: 12px;
+            border-left: 3px solid var(--accent); color: var(--text-secondary);
+            border-top: 1px solid var(--glass-border);
+            border-right: 1px solid var(--glass-border);
+            border-bottom: 1px solid var(--glass-border);
+            transition: all var(--transition-fast);
         }
         .speed-result { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
         .speed-item {
             background: var(--accent-glass); border-radius: 10px; padding: 8px 14px;
             font-size: 12px; border: 1px solid var(--border-accent); color: var(--text-primary);
         }
+
+        .hw-strip {
+            display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+            background: var(--glass-bg); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+            border: 1px solid var(--glass-border); border-radius: var(--radius-lg);
+            padding: 14px 24px; margin-bottom: 28px;
+            box-shadow: var(--glass-shadow), var(--glass-highlight);
+            transition: all var(--transition-smooth);
+        }
+        .hw-strip:hover { border-color: var(--glass-border-hover); }
+        .hw-strip-label { font-size: 13px; font-weight: 600; color: var(--text-secondary); display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+        .hw-strip-label i { color: var(--accent); opacity: 0.8; }
         .hw-grid { display: flex; flex-wrap: wrap; gap: 10px; }
         .hw-chip {
             background: var(--glass-bg); border-radius: 50px; padding: 7px 14px;
             font-size: 12px; display: inline-flex; align-items: center; gap: 7px;
             border: 1px solid var(--glass-border); color: var(--text-secondary);
-            box-shadow: 0 2px 4px rgba(0,0,0,0.03), inset 0 1px 0 rgba(255,255,255,0.3);
+            transition: all var(--transition-fast);
         }
+        .hw-chip:hover { background: var(--glass-bg-hover); border-color: var(--glass-border-hover); }
         .hw-chip i { color: var(--accent); opacity: 0.7; font-size: 11px; }
 
         .footer {
-            margin-top: 24px; padding: 18px 28px; text-align: center; font-size: 12px;
-            color: var(--text-tertiary); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 14px;
+            margin-top: 28px; padding: 18px 28px; text-align: center; font-size: 12px;
+            color: var(--text-tertiary); display: flex; justify-content: space-between;
+            flex-wrap: wrap; gap: 14px;
             background: var(--glass-heavy);
-            backdrop-filter: blur(40px) saturate(180%);
-            -webkit-backdrop-filter: blur(40px) saturate(180%);
+            backdrop-filter: var(--glass-blur);
+            -webkit-backdrop-filter: var(--glass-blur);
             border-radius: var(--radius-lg); border: 1px solid var(--glass-border);
-            box-shadow: var(--glass-shadow); position: relative; overflow: hidden;
+            box-shadow: var(--glass-shadow), var(--glass-highlight);
         }
-        .footer::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 50%; background: var(--glass-highlight); pointer-events: none; }
         .copy-btn {
-            background: var(--accent-light); padding: 6px 16px; border-radius: 50px; font-size: 12px;
-            cursor: pointer; transition: all var(--transition-fast);
+            background: var(--accent-light); padding: 6px 16px; border-radius: 50px;
+            font-size: 12px; cursor: pointer; transition: all var(--transition-fast);
             border: 1px solid var(--border-accent); color: var(--accent); font-weight: 500;
         }
-        .copy-btn:hover { background: rgba(0,122,255,0.14); box-shadow: 0 2px 8px rgba(0,122,255,0.15); }
+        .copy-btn:hover { background: rgba(129, 140, 248, 0.15); box-shadow: var(--accent-glow); }
 
         .driver-badge {
-            width: 100%; text-align: center; padding: 10px 20px; margin-top: 14px;
+            width: 100%; text-align: center; padding: 12px 20px; margin-top: 16px;
             background: var(--glass-bg); border-radius: 50px; border: 1px solid var(--glass-border);
             font-size: 11px; color: var(--text-quaternary); letter-spacing: 0.2px;
             display: flex; align-items: center; justify-content: center; gap: 6px;
         }
-        .driver-badge a { color: var(--accent); text-decoration: none; font-weight: 500; transition: opacity var(--transition-fast); opacity: 0.7; }
+        .driver-badge a { color: var(--accent); text-decoration: none; font-weight: 500; opacity: 0.8; transition: opacity var(--transition-fast); }
         .driver-badge a:hover { opacity: 1; }
         .driver-badge i { color: var(--accent); font-size: 10px; opacity: 0.4; }
 
         @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
         .loading {
             display: inline-block; width: 14px; height: 14px;
-            border: 2px solid rgba(0,122,255,0.2); border-top-color: var(--accent);
+            border: 2px solid rgba(129, 140, 248, 0.2); border-top-color: var(--accent);
             border-radius: 50%; animation: spin 0.7s linear infinite;
             margin-right: 8px; vertical-align: middle;
         }
 
-        .stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-bottom: 24px; }
+        .stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-bottom: 28px; }
         .stats-card {
             background: var(--glass-bg);
-            backdrop-filter: blur(40px) saturate(180%);
-            -webkit-backdrop-filter: blur(40px) saturate(180%);
-            border: 1px solid var(--glass-border); border-radius: var(--radius-lg); padding: 22px;
-            overflow: hidden; box-shadow: var(--glass-shadow); position: relative;
+            backdrop-filter: var(--glass-blur);
+            -webkit-backdrop-filter: var(--glass-blur);
+            border: 1px solid var(--glass-border); border-radius: var(--radius-lg);
+            padding: 22px; overflow: hidden;
+            box-shadow: var(--glass-shadow), var(--glass-highlight);
+            transition: all var(--transition-smooth);
         }
-        .stats-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 40%; background: var(--glass-highlight); pointer-events: none; border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
+        .stats-card:hover { border-color: var(--glass-border-hover); transform: translateY(-2px); }
         .stats-card .card-header {
             display: flex; align-items: center; gap: 10px; margin-bottom: 14px;
-            border-bottom: 1px solid var(--divider); padding-bottom: 12px; background: transparent; position: relative;
+            border-bottom: 1px solid var(--divider); padding-bottom: 12px; padding-left: 0; padding-right: 0;
         }
-        .stats-card .card-header i { font-size: 18px; color: var(--accent); opacity: 0.8; }
-        .stats-card .card-header h3 { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+        .stats-card .card-header i { font-size: 17px; color: var(--accent); opacity: 0.8; }
+        .stats-card .card-header h3 { font-size: 14px; font-weight: 600; }
         .stats-card .card-header p { font-size: 11px; color: var(--text-tertiary); }
-        .stats-card .card-body { padding: 0; position: relative; }
+        .stats-card .card-body { padding: 0; }
 
         .speed-history-table { width: 100%; border-collapse: collapse; font-size: 12px; }
         .speed-history-table th { text-align: left; padding: 8px 10px; color: var(--text-tertiary); font-weight: 500; border-bottom: 1px solid var(--divider); font-size: 11px; }
@@ -1159,12 +1253,12 @@ async function handleRequest(event) {
         .speed-history-table .speed-good { color: var(--success); font-weight: 600; }
         .speed-history-table .speed-mid { color: var(--warning); font-weight: 600; }
         .speed-history-table .speed-low { color: var(--danger); font-weight: 600; }
-        .speed-bar { display: inline-block; height: 5px; border-radius: 3px; margin-right: 6px; vertical-align: middle; background: var(--accent); opacity: 0.5; }
+        .speed-bar { display: inline-block; height: 4px; border-radius: 2px; margin-right: 6px; vertical-align: middle; background: var(--accent); opacity: 0.6; }
 
         .usage-row { display: flex; justify-content: space-between; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--divider); font-size: 12px; }
-        .usage-row .ep { color: var(--text-secondary); font-family: 'SF Mono', ui-monospace, monospace; font-size: 11px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .usage-row .ep { color: var(--text-secondary); font-family: var(--font-mono); font-size: 11px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .usage-row .count { color: var(--accent); font-weight: 600; }
-        .usage-total { text-align: center; padding: 14px; font-size: 26px; font-weight: 700; color: var(--text-primary); letter-spacing: -0.5px; }
+        .usage-total { text-align: center; padding: 14px; font-size: 28px; font-weight: 700; color: var(--text-primary); letter-spacing: -1px; font-family: var(--font-mono); }
         .usage-total-label { text-align: center; font-size: 11px; color: var(--text-tertiary); margin-top: 2px; }
         .no-data { text-align: center; padding: 28px; color: var(--text-quaternary); font-size: 13px; }
 
@@ -1176,61 +1270,101 @@ async function handleRequest(event) {
         .node-table .bad { color: var(--danger); font-weight: 600; }
 
         .modal-overlay {
-            position: fixed; top:0; left:0; right:0; bottom:0; background: rgba(0,0,0,0.4);
-            backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
             display: flex; align-items: center; justify-content: center;
-            z-index: 1000; opacity: 0; visibility: hidden; transition: all 0.25s ease;
+            z-index: 1000; opacity: 0; visibility: hidden; transition: all 0.3s ease;
         }
         .modal-overlay.active { opacity: 1; visibility: visible; }
         .modal-box {
             background: var(--glass-heavy);
-            backdrop-filter: blur(40px) saturate(180%);
-            -webkit-backdrop-filter: blur(40px) saturate(180%);
+            backdrop-filter: var(--glass-blur);
+            -webkit-backdrop-filter: var(--glass-blur);
             border-radius: var(--radius-xl);
-            padding: 28px 32px; max-width: 560px; width: 90%; box-shadow: var(--glass-shadow-lg);
-            border: 1px solid var(--glass-border); position: relative; overflow: hidden;
+            padding: 28px 32px; max-width: 560px; width: 90%;
+            box-shadow: var(--glass-shadow-lg), var(--glass-highlight);
+            border: 1px solid var(--glass-border);
         }
-        .modal-box::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 40%; background: var(--glass-highlight); pointer-events: none; }
-        .modal-box h3 { margin-bottom: 16px; font-weight: 600; color: var(--text-primary); position: relative; }
-        .modal-box p { color: var(--text-secondary); font-size: 13px; margin-bottom: 12px; position: relative; }
+        .modal-box h3 { margin-bottom: 16px; font-weight: 600; }
+        .modal-box p { color: var(--text-secondary); font-size: 13px; margin-bottom: 12px; }
         .modal-box textarea {
             width: 100%; padding: 12px; border-radius: var(--radius-sm);
-            border: 1px solid var(--glass-border); background: var(--glass-bg); color: var(--text-primary);
-            font-family: var(--font); font-size: 14px; resize: vertical; min-height: 80px;
-            position: relative;
+            border: 1px solid var(--glass-border); background: var(--glass-bg);
+            color: var(--text-primary); font-family: var(--font); font-size: 14px;
+            resize: vertical; min-height: 80px; transition: all var(--transition-fast);
         }
-        .modal-box textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(0,122,255,0.15); }
-        .modal-box .btn-group { display: flex; gap: 10px; margin-top: 16px; justify-content: flex-end; position: relative; }
+        .modal-box textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.1); }
+        .modal-box .btn-group { display: flex; gap: 10px; margin-top: 16px; justify-content: flex-end; }
 
-        ::-webkit-scrollbar { width:6px; height:6px; }
-        ::-webkit-scrollbar-track { background:transparent; }
-        ::-webkit-scrollbar-thumb { background:rgba(0,0,0,0.15); border-radius:6px; }
-        ::-webkit-scrollbar-thumb:hover { background:rgba(0,0,0,0.25); }
-        [data-theme="auto"] ::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.15); }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 6px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
+        [data-theme="light"] ::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.1); }
+        [data-theme="light"] ::-webkit-scrollbar-thumb:hover { background: rgba(0, 0, 0, 0.2); }
 
-        @media (max-width:1024px) { .rtt-display { grid-template-columns: repeat(2,1fr); } .quality-grid { grid-template-columns: repeat(2,1fr); } }
-        @media (max-width:768px) {
-            body { padding:14px; } .container { max-width:100%; } .grid { grid-template-columns:1fr; gap:14px; }
-            .ip-val { font-size:18px; } .ip-val-small { font-size:15px; }
-            .header { flex-direction:column; text-align:center; padding:16px 20px; border-radius:var(--radius-lg); }
-            .logo { flex-direction:column; gap:8px; }
-            .logo-icon { width:44px; height:44px; font-size:20px; border-radius:12px; }
-            .logo h1 { font-size:20px; }
-            .button-group { justify-content:center; } .btn { padding:9px 16px; font-size:12px; }
-            .rtt-value { font-size:36px; } .rtt-display { grid-template-columns:1fr; gap:12px; }
-            .rtt-box { padding:18px 14px; } .stats-row { justify-content:center; }
-            .footer { flex-direction:column; text-align:center; padding:16px 20px; }
-            .quality-grid { grid-template-columns:1fr; gap:10px; }
-            .hero-card { padding:22px; border-radius:var(--radius-lg); }
-            .rtt-card { min-height:auto; } .rtt-card .card-body { padding:16px; }
-            .card-header { padding:14px 18px; } .card-body { padding:14px 18px; }
-            .stats-grid { grid-template-columns:1fr; gap:14px; }
-            .header-right { flex-wrap:wrap; justify-content:center; }
+        /* === Tablet landscape === */
+        @media (max-width: 1024px) {
+            .container { max-width: 720px; }
+            .rtt-display { grid-template-columns: repeat(2, 1fr); }
+            .quality-grid { grid-template-columns: repeat(2, 1fr); }
+            .grid-2col { grid-template-columns: 1fr; }
+            .stats-grid { grid-template-columns: 1fr; }
         }
-
-            </style>
+        /* === Tablet portrait / small laptop === */
+        @media (max-width: 768px) {
+            body { padding: 16px 12px; }
+            .container { max-width: 100%; }
+            .grid { grid-template-columns: 1fr; gap: 14px; }
+            .grid-2col { grid-template-columns: 1fr; gap: 14px; }
+            .info-grid { grid-template-columns: 1fr; }
+            .ip-val { font-size: 18px; }
+            .ip-val-small { font-size: 14px; }
+            .header { flex-direction: column; text-align: center; padding: 18px 20px; border-radius: var(--radius-lg); }
+            .logo { flex-direction: column; gap: 8px; }
+            .logo-icon { width: 40px; height: 40px; font-size: 18px; border-radius: 10px; }
+            .logo h1 { font-size: 18px; }
+            .button-group { justify-content: center; }
+            .btn { padding: 10px 18px; font-size: 12px; }
+            .rtt-value { font-size: 32px; }
+            .rtt-display { grid-template-columns: 1fr 1fr; gap: 10px; }
+            .rtt-box { padding: 16px 12px; }
+            .stats-row { justify-content: center; }
+            .footer { flex-direction: column; text-align: center; padding: 16px 20px; }
+            .quality-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+            .hero-card { padding: 24px 20px; border-radius: var(--radius-lg); }
+            .rtt-card { min-height: auto; }
+            .rtt-card .card-body { padding: 16px; }
+            .card-header { padding: 16px 18px; }
+            .card-body { padding: 16px 18px; }
+            .stats-grid { grid-template-columns: 1fr; gap: 14px; }
+            .header-right { flex-wrap: wrap; justify-content: center; }
+            .hw-strip { padding: 12px 16px; gap: 12px; }
+        }
+        /* === Phone === */
+        @media (max-width: 480px) {
+            body { padding: 12px 8px; }
+            .rtt-display { grid-template-columns: 1fr 1fr; gap: 8px; }
+            .rtt-value { font-size: 26px; letter-spacing: -1px; }
+            .rtt-box { padding: 14px 10px; }
+            .quality-grid { grid-template-columns: 1fr; }
+            .ip-val { font-size: 15px; }
+            .ip-val-small { font-size: 12px; }
+            .btn { padding: 9px 14px; font-size: 11px; gap: 6px; }
+            .hero-card { padding: 20px 16px; }
+            .card-header { padding: 14px 16px; }
+            .card-body { padding: 14px 16px; }
+            .hw-strip { flex-direction: column; align-items: flex-start; }
+            .stat-item { font-size: 11px; padding: 6px 12px; }
+            .info-row { padding: 9px 0; }
+            .info-label { font-size: 12px; }
+            .info-value { font-size: 12px; }
+        }
+</style>
 </head>
 <body>
+    <div class="bg-orbs"></div>
     <div class="container">
         <!-- ==================== 头部 ==================== -->
         <div class="header">
@@ -1318,18 +1452,17 @@ async function handleRequest(event) {
             </div>
         </div>
 
-        <!-- ==================== 三栏信息卡片 ==================== -->
-        <div class="grid">
-            <!-- 安全与协议 -->
-            <div class="card">
-                <div class="card-header">
-                    <i class="fas fa-shield-halved"></i>
-                    <div>
-                        <h3 id="t-sec">安全与协议</h3>
-                        <p><span id="t-sec-sub">TLS · 加密 · 身份验证</span></p>
-                    </div>
+        <!-- ==================== 安全与协议（全宽双列） ==================== -->
+        <div class="card" style="margin-bottom:20px;">
+            <div class="card-header">
+                <i class="fas fa-shield-halved"></i>
+                <div>
+                    <h3 id="t-sec">安全与协议</h3>
+                    <p><span id="t-sec-sub">TLS · 加密 · 身份验证</span></p>
                 </div>
-                <div class="card-body">
+            </div>
+            <div class="card-body">
+                <div class="info-grid">
                     <div class="info-row">
                         <span class="info-label"><i class="fas fa-server"></i> <span id="t-dc-label">数据中心代理</span></span>
                         <span class="info-value" id="s-dc">---</span>
@@ -1352,7 +1485,7 @@ async function handleRequest(event) {
                     </div>
                     <div class="info-row">
                         <span class="info-label"><i class="fas fa-key"></i> <span id="t-cipher">加密套件</span></span>
-                        <span class="info-value" style="font-size:11px;font-family:monospace;">${data.tlsCipher}</span>
+                        <span class="info-value" style="font-size:11px;font-family:var(--font-mono);">${data.tlsCipher}</span>
                     </div>
                     <div class="info-row">
                         <span class="info-label"><i class="fas fa-eye"></i> ECH</span>
@@ -1380,7 +1513,10 @@ async function handleRequest(event) {
                     </div>
                 </div>
             </div>
+        </div>
 
+        <!-- ==================== 位置信息（并排双栏） ==================== -->
+        <div class="grid-2col">
             <!-- 边缘节点位置 -->
             <div class="card">
                 <div class="card-header">
@@ -1391,9 +1527,6 @@ async function handleRequest(event) {
                     </div>
                 </div>
                 <div class="card-body">
-                    <div style="text-align:center;margin-bottom:20px;">
-                        <i class="fas fa-globe-asia" style="font-size:48px;color:var(--chart-cyan);opacity:0.7;"></i>
-                    </div>
                     <div class="info-row">
                         <span class="info-label"><i class="fas fa-location-dot"></i> <span id="t-geo-location">位置</span></span>
                         <span class="info-value">${data.city}, ${data.region}, ${data.country}</span>
@@ -1424,18 +1557,10 @@ async function handleRequest(event) {
             </div>
         </div>
 
-        <!-- ==================== 硬件信息 ==================== -->
-        <div class="card">
-            <div class="card-header">
-                <i class="fas fa-desktop"></i>
-                <div>
-                    <h3 id="t-hw">硬件信息</h3>
-                    <p><span id="t-hw-sub">客户端环境</span></p>
-                </div>
-            </div>
-            <div class="card-body">
-                <div id="hw-info" class="hw-grid">加载中...</div>
-            </div>
+        <!-- ==================== 硬件信息（紧凑横条） ==================== -->
+        <div class="hw-strip">
+            <span class="hw-strip-label"><i class="fas fa-desktop"></i> <span id="t-hw">硬件信息</span></span>
+            <div id="hw-info" class="hw-grid">加载中...</div>
         </div>
 
         <!-- ==================== 诊断工具集 ==================== -->
@@ -1668,7 +1793,48 @@ async function handleRequest(event) {
                     ttfbTotal: 'Total',
                     uploadTesting: 'Testing upload speed...',
                     uploadResult: 'Upload Speed',
-                    uploadFailed: 'Upload test failed'
+                    uploadFailed: 'Upload test failed',
+                    // 测试结果 & 动态 UI 补充
+                    geoQueryFailed: 'Geolocation query failed',
+                    cores: 'cores',
+                    cpuPerf: 'CPU Performance',
+                    cpuFailed: 'CPU test failed',
+                    wsLatency: 'WebSocket Latency',
+                    wsMin: 'Min',
+                    wsMax: 'Max',
+                    wsConnFailed: 'WebSocket connection failed',
+                    wsTestFailed: 'WebSocket test failed',
+                    concurrentResultTitle: 'Concurrent Test Results',
+                    concurrentRequests: 'requests',
+                    concurrentFailed: 'Concurrent test failed',
+                    streamThroughput: 'Stream Throughput',
+                    lossPacketsLost: 'lost',
+                    speedResultTitle: 'Bandwidth Results',
+                    speedAvg: 'Average',
+                    dnsResultTitle: 'DNS Resolution Results',
+                    dnsTimeout: 'Timeout',
+                    mediaResultTitle: 'IP Connectivity Results',
+                    mediaBlocked: 'Blocked / Timeout',
+                    mediaAvailable: 'Accessible',
+                    mediaConnFailed: 'Connection failed',
+                    km: 'km',
+                    ttfbFailed: 'TTFB analysis failed',
+                    historyAvgSpeed: 'Avg Speed',
+                    historyNode: 'Node',
+                    loadFailed: 'Load failed',
+                    totalRequests: 'Total Requests',
+                    waitingFirstReq: 'Waiting for first request...',
+                    enterNodeUrlAlert: 'Please enter at least one node URL',
+                    // 报告模板
+                    reportTitle: 'NetSight Pro Network Diagnostic Report',
+                    reportGenTime: 'Generated',
+                    reportNetMetrics: 'Network Metrics',
+                    reportSecProto: 'Security & Protocol',
+                    reportLocation: 'Location Info',
+                    reportIpRisk: 'IP Risk Info',
+                    reportCompressNone: 'None',
+                    reportUnknown: 'Unknown',
+                    reportFooter: 'Report auto-generated by NetSight Pro · Powered by CF-workers-netdiag'
                 },
                 'zh-CN': {
                     subtitle: '极光诊断 · 实时网络分析',
@@ -1786,7 +1952,46 @@ async function handleRequest(event) {
                     ttfbTotal: '总计',
                     uploadTesting: '正在测试上传速度...',
                     uploadResult: '上传速度',
-                    uploadFailed: '上传测试失败'
+                    uploadFailed: '上传测试失败',
+                    geoQueryFailed: '地理位置查询失败',
+                    cores: '核心',
+                    cpuPerf: 'CPU 性能',
+                    cpuFailed: 'CPU 测试失败',
+                    wsLatency: 'WebSocket 延迟',
+                    wsMin: '最小',
+                    wsMax: '最大',
+                    wsConnFailed: 'WebSocket 连接失败',
+                    wsTestFailed: 'WebSocket 测试失败',
+                    concurrentResultTitle: '并发测试结果',
+                    concurrentRequests: '请求',
+                    concurrentFailed: '并发测试失败',
+                    streamThroughput: '流式吞吐量',
+                    lossPacketsLost: '丢失',
+                    speedResultTitle: '带宽测速结果',
+                    speedAvg: '平均',
+                    dnsResultTitle: 'DNS 解析结果',
+                    dnsTimeout: '超时',
+                    mediaResultTitle: 'IP 连通性检测结果',
+                    mediaBlocked: '超时或被阻',
+                    mediaAvailable: '可访问',
+                    mediaConnFailed: '连接失败',
+                    km: '公里',
+                    ttfbFailed: 'TTFB 分析失败',
+                    historyAvgSpeed: '平均速度',
+                    historyNode: '节点',
+                    loadFailed: '加载失败',
+                    totalRequests: '总请求数',
+                    waitingFirstReq: '等待首次请求...',
+                    enterNodeUrlAlert: '请至少输入一个节点 URL',
+                    reportTitle: 'NetSight Pro 网络诊断报告',
+                    reportGenTime: '生成时间',
+                    reportNetMetrics: '网络指标',
+                    reportSecProto: '安全与协议',
+                    reportLocation: '位置信息',
+                    reportIpRisk: 'IP 风险信息',
+                    reportCompressNone: '无',
+                    reportUnknown: '未知',
+                    reportFooter: '报告由 NetSight Pro 自动生成 · 由 CF-workers-netdiag 强力驱动'
                 },
                 'zh-TW': {
                     subtitle: '極光診斷 · 即時網路分析',
@@ -1904,7 +2109,46 @@ async function handleRequest(event) {
                     ttfbTotal: '總計',
                     uploadTesting: '正在測試上傳速度...',
                     uploadResult: '上傳速度',
-                    uploadFailed: '上傳測試失敗'
+                    uploadFailed: '上傳測試失敗',
+                    geoQueryFailed: '地理位置查詢失敗',
+                    cores: '核心',
+                    cpuPerf: 'CPU 性能',
+                    cpuFailed: 'CPU 測試失敗',
+                    wsLatency: 'WebSocket 延遲',
+                    wsMin: '最小',
+                    wsMax: '最大',
+                    wsConnFailed: 'WebSocket 連線失敗',
+                    wsTestFailed: 'WebSocket 測試失敗',
+                    concurrentResultTitle: '併發測試結果',
+                    concurrentRequests: '請求',
+                    concurrentFailed: '併發測試失敗',
+                    streamThroughput: '串流吞吐量',
+                    lossPacketsLost: '丟失',
+                    speedResultTitle: '頻寬測速結果',
+                    speedAvg: '平均',
+                    dnsResultTitle: 'DNS 解析結果',
+                    dnsTimeout: '逾時',
+                    mediaResultTitle: 'IP 連通性檢測結果',
+                    mediaBlocked: '逾時或被阻',
+                    mediaAvailable: '可存取',
+                    mediaConnFailed: '連線失敗',
+                    km: '公里',
+                    ttfbFailed: 'TTFB 分析失敗',
+                    historyAvgSpeed: '平均速度',
+                    historyNode: '節點',
+                    loadFailed: '載入失敗',
+                    totalRequests: '總請求數',
+                    waitingFirstReq: '等待首次請求...',
+                    enterNodeUrlAlert: '請至少輸入一個節點 URL',
+                    reportTitle: 'NetSight Pro 網路診斷報告',
+                    reportGenTime: '產生時間',
+                    reportNetMetrics: '網路指標',
+                    reportSecProto: '安全與協議',
+                    reportLocation: '位置資訊',
+                    reportIpRisk: 'IP 風險資訊',
+                    reportCompressNone: '無',
+                    reportUnknown: '未知',
+                    reportFooter: '報告由 NetSight Pro 自動產生 · 由 CF-workers-netdiag 強力驅動'
                 }
             };
 
@@ -1951,7 +2195,8 @@ async function handleRequest(event) {
             };
 
             function detectLang() {
-                const saved = localStorage.getItem('pref-lang');
+                let saved = null;
+                try { saved = localStorage.getItem('pref-lang'); } catch(e) {}
                 if (saved && i18n[saved]) return saved;
                 const langs = navigator.languages || [navigator.language || ''];
                 for (const l of langs) {
@@ -2004,8 +2249,8 @@ async function handleRequest(event) {
                 if (element) {
                     element.style.display = 'block';
                     element.innerHTML = html;
-                    element.style.background = isError ? 'rgba(239,68,68,0.08)' : 'rgba(0,0,0,0.3)';
-                    element.style.borderLeftColor = isError ? '#ef4444' : '#06b6d4';
+                    element.style.background = isError ? 'var(--danger-light)' : 'var(--glass-bg)';
+                    element.style.borderLeftColor = isError ? 'var(--danger)' : 'var(--accent)';
                     element.style.opacity = '1';
                 }
             }
@@ -2068,7 +2313,6 @@ async function handleRequest(event) {
                     't-user-org': t.userOrg,
                     't-user-ip': t.userIp,
                     't-hw': t.hw,
-                    't-hw-sub': t.hwSub,
                     't-history-title': t.historyTitle,
                     't-history-sub': t.historySub,
                     't-no-records': t.noRecords,
@@ -2146,7 +2390,7 @@ async function handleRequest(event) {
 
             window.setLang = function(lang) {
                 currentLang = lang;
-                localStorage.setItem('pref-lang', lang);
+                try { localStorage.setItem('pref-lang', lang); } catch(e) {}
                 updateUI();
                 // 重新加载可能已经显示的地理位置欺诈信息（可刷新，但为了简便，不强制刷新）
                 // 用户切语言后欺诈信息会重新加载，但这里暂不处理，因为欺诈信息是动态加载的，其文本会在 loadFraudScore 中使用 t 变量。
@@ -2435,7 +2679,7 @@ async function handleRequest(event) {
                         </div>
                         <div class="info-row">
                             <span class="info-label"><i class="fas fa-ruler"></i> \${t.userDistance}</span>
-                            <span class="info-value"><span class="badge badge-info">\${dist} 公里</span></span>
+                            <span class="info-value"><span class="badge badge-info">\${dist} \${t.km}</span></span>
                         </div>
                         <div class="info-row">
                             <span class="info-label"><i class="fas fa-building"></i> \${t.userOrg}</span>
@@ -2477,7 +2721,7 @@ async function handleRequest(event) {
                         </div>
                         <div class="info-row">
                             <span class="info-label"><i class="fas fa-ruler"></i> \${t.userDistance}</span>
-                            <span class="info-value"><span class="badge badge-info">\${dist} 公里</span></span>
+                            <span class="info-value"><span class="badge badge-info">\${dist} \${t.km}</span></span>
                         </div>
                         <div class="info-row">
                             <span class="info-label"><i class="fas fa-building"></i> \${t.userOrg}</span>
@@ -2490,13 +2734,14 @@ async function handleRequest(event) {
                     \`;
                     loadFraudScore();
                 } catch (e) {
-                    elements.userGeoInfo.innerHTML = '<div style="text-align:center;padding:30px;color:#f87171;"><i class="fas fa-exclamation-triangle"></i> 地理位置查询失败</div>';
+                    elements.userGeoInfo.innerHTML = '<div style="text-align:center;padding:30px;color:var(--danger);"><i class="fas fa-exclamation-triangle"></i> ' + i18n[currentLang].geoQueryFailed + '</div>';
                 }
             }
 
             // ==================== 硬件信息 ====================
             function updateHardwareInfo() {
                 if (!elements.hwInfo) return;
+                const t = i18n[currentLang];
                 const cores = navigator.hardwareConcurrency || 'N/A';
                 const screenInfo = screen.width + 'x' + screen.height;
                 const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -2504,7 +2749,7 @@ async function handleRequest(event) {
                 const platform = navigator.platform;
                 elements.hwInfo.innerHTML = \`
                     <div class="hw-chip"><i class="fas fa-tv"></i> \${screenInfo}</div>
-                    <div class="hw-chip"><i class="fas fa-microchip"></i> \${cores} 核心</div>
+                    <div class="hw-chip"><i class="fas fa-microchip"></i> \${cores} \${t.cores}</div>
                     <div class="hw-chip"><i class="fas fa-clock"></i> \${timezone}</div>
                     <div class="hw-chip"><i class="fas fa-language"></i> \${language}</div>
                     <div class="hw-chip"><i class="fas fa-desktop"></i> \${platform}</div>
@@ -2524,11 +2769,11 @@ async function handleRequest(event) {
                     const data = await res.json();
                     let badgeClass = data.opsMs > 50 ? 'badge-success' : (data.opsMs > 20 ? 'badge-warning' : 'badge-danger');
                     showResult(elements.cpuResult, \`
-                        <i class="fas fa-microchip"></i> CPU 性能: <strong>\${data.opsMs}</strong> 操作/毫秒
+                        <i class="fas fa-microchip"></i> \${t.cpuPerf}: <strong>\${data.opsMs}</strong> ops/ms
                         <span class="badge \${badgeClass}">\${data.duration}ms</span>
                     \`);
                 } catch (e) {
-                    showResult(elements.cpuResult, '<i class="fas fa-exclamation-triangle"></i> CPU 测试失败', true);
+                    showResult(elements.cpuResult, '<i class="fas fa-exclamation-triangle"></i> ' + t.cpuFailed, true);
                 }
                 cpuTestRunning = false;
             }
@@ -2595,14 +2840,14 @@ async function handleRequest(event) {
                     if (result.success) {
                         let badgeClass = result.avg < 50 ? 'badge-success' : (result.avg < 150 ? 'badge-warning' : 'badge-danger');
                         showResult(elements.wsResult, \`
-                            <i class="fas fa-bolt"></i> WebSocket 延迟: <strong>\${result.avg}ms</strong>
-                            <span class="badge \${badgeClass}">最小: \${result.min}ms / 最大: \${result.max}ms</span>
+                            <i class="fas fa-bolt"></i> \${t.wsLatency}: <strong>\${result.avg}ms</strong>
+                            <span class="badge \${badgeClass}">\${t.wsMin}: \${result.min}ms / \${t.wsMax}: \${result.max}ms</span>
                         \`);
                     } else {
-                        showResult(elements.wsResult, '<i class="fas fa-exclamation-triangle"></i> WebSocket 连接失败', true);
+                        showResult(elements.wsResult, '<i class="fas fa-exclamation-triangle"></i> ' + t.wsConnFailed, true);
                     }
                 } catch (e) {
-                    showResult(elements.wsResult, '<i class="fas fa-exclamation-triangle"></i> WebSocket 测试失败', true);
+                    showResult(elements.wsResult, '<i class="fas fa-exclamation-triangle"></i> ' + t.wsTestFailed, true);
                 }
                 wsTestRunning = false;
             }
@@ -2619,16 +2864,16 @@ async function handleRequest(event) {
                         fetchWithTimeout(\`/concurrent-test?count=\${count}&size=2048\`, {}, 8000).then(r => r.json())
                     ));
                     
-                    let html = '<i class="fas fa-layer-group"></i> 并发测试结果:<br><div style="display: flex; gap: 12px; margin-top: 8px; flex-wrap: wrap;">';
+                    let html = '<i class="fas fa-layer-group"></i> ' + t.concurrentResultTitle + ':<br><div style="display: flex; gap: 12px; margin-top: 8px; flex-wrap: wrap;">';
                     results.forEach(r => {
                         const avgDuration = Math.round(r.reduce((sum, item) => sum + (item.duration || 0), 0) / r.length);
                         let badgeClass = avgDuration < 20 ? 'badge-success' : (avgDuration < 50 ? 'badge-warning' : 'badge-danger');
-                        html += \`<span class="badge \${badgeClass}">\${r.length} 请求: \${avgDuration}ms</span>\`;
+                        html += \`<span class="badge \${badgeClass}">\${r.length} \${t.concurrentRequests}: \${avgDuration}ms</span>\`;
                     });
                     html += '</div>';
                     showResult(elements.concurrentResult, html);
                 } catch (e) {
-                    showResult(elements.concurrentResult, '<i class="fas fa-exclamation-triangle"></i> 并发测试失败', true);
+                    showResult(elements.concurrentResult, '<i class="fas fa-exclamation-triangle"></i> ' + t.concurrentFailed, true);
                 }
                 concurrentTestRunning = false;
             }
@@ -2664,7 +2909,7 @@ async function handleRequest(event) {
                     }
                 }
                 
-                let html = '<i class="fas fa-stream"></i> 流式吞吐量:<br><div class="speed-result">';
+                let html = '<i class="fas fa-stream"></i> ' + t.streamThroughput + ':<br><div class="speed-result">';
                 html += results.map(r => \`<div class="speed-item">\${r.sizeKB} KB: \${r.speed} Mbps</div>\`).join('');
                 html += '</div>';
                 showResult(elements.streamResult, html);
@@ -2692,7 +2937,7 @@ async function handleRequest(event) {
                 if (lossPercent === 0) {
                     showResult(elements.lossResult, '<i class="fas fa-check-circle"></i> ' + t.lossNone);
                 } else {
-                    showResult(elements.lossResult, '<i class="fas fa-exclamation-triangle"></i> ' + t.lossResult + ': ' + lossPercent + '% (' + failed + '/' + total + ' 丢失)', true);
+                    showResult(elements.lossResult, '<i class="fas fa-exclamation-triangle"></i> ' + t.lossResult + ': ' + lossPercent + '% (' + failed + '/' + total + ' ' + t.lossPacketsLost + ')', true);
                 }
                 lossTestRunning = false;
             }
@@ -2725,9 +2970,9 @@ async function handleRequest(event) {
                     : 0;
                 let avgBadge = avgSpeed > 50 ? 'badge-success' : (avgSpeed > 10 ? 'badge-warning' : 'badge-danger');
                 
-                let html = '<i class="fas fa-gauge-high"></i> 带宽测速结果:<br><div class="speed-result">';
+                let html = '<i class="fas fa-gauge-high"></i> ' + t.speedResultTitle + ':<br><div class="speed-result">';
                 html += results.map(r => \`<div class="speed-item">\${r.sizeKB} KB: \${r.speed} Mbps</div>\`).join('');
-                html += \`</div><div style="margin-top: 8px;"><span class="badge \${avgBadge}">平均: \${avgSpeed.toFixed(2)} Mbps</span></div>\`;
+                html += \`</div><div style="margin-top: 8px;"><span class="badge \${avgBadge}">\${t.speedAvg}: \${avgSpeed.toFixed(2)} Mbps</span></div>\`;
                 showResult(elements.speedResult, html);
                 logSpeedTest(avgSpeed, results);
                 speedTestRunning = false;
@@ -2767,13 +3012,13 @@ async function handleRequest(event) {
                     }
                 }
                 
-                let html = '<i class="fas fa-server"></i> DNS 解析结果:<br><div style="display: flex; gap: 12px; margin-top: 8px; flex-wrap: wrap;">';
+                let html = '<i class="fas fa-server"></i> ' + t.dnsResultTitle + ':<br><div style="display: flex; gap: 12px; margin-top: 8px; flex-wrap: wrap;">';
                 results.forEach(r => {
                     if (r.time !== null) {
                         let badgeClass = r.time < 50 ? 'badge-success' : (r.time < 150 ? 'badge-warning' : 'badge-danger');
                         html += \`<span class="badge \${badgeClass}">\${r.domain}: \${r.time}ms</span>\`;
                     } else {
-                        html += \`<span class="badge badge-danger">\${r.domain}: 超时</span>\`;
+                        html += \`<span class="badge badge-danger">\${r.domain}: \${t.dnsTimeout}</span>\`;
                     }
                 });
                 html += '</div>';
@@ -2801,15 +3046,15 @@ async function handleRequest(event) {
                         const img = new Image();
                         const timeout = setTimeout(() => {
                             img.src = '';
-                            resolve({ name: service.name, status: 'blocked', icon: '❌', color: '#f87171', detail: '超时或被阻' });
+                            resolve({ name: service.name, status: 'blocked', icon: '❌', color: 'var(--danger)', detail: t.mediaBlocked });
                         }, 5000);
                         img.onload = () => {
                             clearTimeout(timeout);
-                            resolve({ name: service.name, status: 'available', icon: '✅', color: '#34d399', detail: '可访问' });
+                            resolve({ name: service.name, status: 'available', icon: '✅', color: 'var(--success)', detail: t.mediaAvailable });
                         };
                         img.onerror = () => {
                             clearTimeout(timeout);
-                            resolve({ name: service.name, status: 'blocked', icon: '❌', color: '#f87171', detail: '连接失败' });
+                            resolve({ name: service.name, status: 'blocked', icon: '❌', color: 'var(--danger)', detail: t.mediaConnFailed });
                         };
                         img.src = service.url;
                     });
@@ -2817,7 +3062,7 @@ async function handleRequest(event) {
                 
                 const results = await Promise.all(services.map(s => checkService(s)));
                 
-                let html = '<i class="fas fa-play-circle"></i> 您的 IP 连通性检测结果：<br><div class="speed-result" style="flex-wrap: wrap;">';
+                let html = '<i class="fas fa-play-circle"></i> ' + t.mediaResultTitle + ':<br><div class="speed-result" style="flex-wrap: wrap;">';
                 results.forEach(r => {
                     html += \`<div class="speed-item" style="border-left-color: \${r.color};"><strong>\${r.name}</strong> \${r.icon} \${r.detail}</div>\`;
                 });
@@ -2833,7 +3078,8 @@ async function handleRequest(event) {
             const modalStart = document.getElementById('modalStart');
 
             elements.multiBtn.addEventListener('click', () => {
-                const saved = localStorage.getItem('nodeUrls') || '';
+                let saved = '';
+                try { saved = localStorage.getItem('nodeUrls') || ''; } catch(e) {}
                 nodeUrlsInput.value = saved;
                 modal.classList.add('active');
             });
@@ -2845,10 +3091,12 @@ async function handleRequest(event) {
             modalStart.addEventListener('click', async () => {
                 const urls = nodeUrlsInput.value.split('\\n').map(s => s.trim()).filter(s => s);
                 if (urls.length === 0) {
-                    alert('请至少输入一个节点 URL');
+                    nodeUrlsInput.style.borderColor = 'var(--danger)';
+                    nodeUrlsInput.placeholder = i18n[currentLang].enterNodeUrlAlert;
                     return;
                 }
-                localStorage.setItem('nodeUrls', nodeUrlsInput.value);
+                nodeUrlsInput.style.borderColor = '';
+                try { localStorage.setItem('nodeUrls', nodeUrlsInput.value); } catch(e) {}
                 modal.classList.remove('active');
                 await runMultiNodeTest(urls);
             });
@@ -2883,7 +3131,7 @@ async function handleRequest(event) {
                         }
                     } catch (e) {
                         status = 'error';
-                        errorMsg = e.message || '请求失败';
+                        errorMsg = e.message || t.loadFailed;
                     }
                     return { node, latency, status, errorMsg };
                 }));
@@ -3007,7 +3255,7 @@ async function handleRequest(event) {
                     html += '</div>';
                     showResult(elements.ttfbResult, html);
                 } catch (e) {
-                    showResult(elements.ttfbResult, '<i class="fas fa-exclamation-triangle"></i> TTFB 分析失败', true);
+                    showResult(elements.ttfbResult, '<i class="fas fa-exclamation-triangle"></i> ' + t.ttfbFailed, true);
                 }
                 ttfbTestRunning = false;
             }
@@ -3056,7 +3304,8 @@ async function handleRequest(event) {
             // ==================== 报告生成 ====================
             function generateReportText() {
                 const t = i18n[currentLang];
-                const now = new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
+                const localeMap = { 'en': 'en-US', 'zh-CN': 'zh-CN', 'zh-TW': 'zh-TW' };
+                const now = new Date().toLocaleString(localeMap[currentLang] || 'en-US', { timeZone: 'Asia/Shanghai' });
                 const currentRtt = elements.rttNum ? elements.rttNum.textContent : '--';
                 const currentJitter = elements.jitterVal ? elements.jitterVal.textContent : '--';
                 const quality = document.getElementById('quality-badge') ? document.getElementById('quality-badge').textContent : '--';
@@ -3065,7 +3314,7 @@ async function handleRequest(event) {
                 const sampleCountVal = document.getElementById('sample-count') ? document.getElementById('sample-count').textContent : '0';
                 const minRttVal = document.getElementById('min-rtt') ? document.getElementById('min-rtt').textContent : '--';
                 const maxRttVal = document.getElementById('max-rtt') ? document.getElementById('max-rtt').textContent : '--';
-                const clientLocation = BACKEND_DATA.realGeoCity ? BACKEND_DATA.realGeoCity + ', ' + BACKEND_DATA.realGeoCountry : '未知';
+                const clientLocation = BACKEND_DATA.realGeoCity ? BACKEND_DATA.realGeoCity + ', ' + BACKEND_DATA.realGeoCountry : t.reportUnknown;
                 const http2Status = elements.http2Val ? elements.http2Val.textContent.trim() : '--';
 
                 let fraudInfo = '';
@@ -3079,39 +3328,39 @@ async function handleRequest(event) {
                     });
                 }
 
-                return \`# NetSight Pro 网络诊断报告
-**生成时间**: \${now}
-**边缘节点**: \${BACKEND_DATA.colo} (\${BACKEND_DATA.city})
-**客户端 IPv4**: \${elements.v4 ? elements.v4.textContent : 'N/A'}
+                return \`# \${t.reportTitle}
+**\${t.reportGenTime}**: \${now}
+**\${t.edgeLabel}**: \${BACKEND_DATA.colo} (\${BACKEND_DATA.city})
+**\${t.clientLabel} IPv4**: \${elements.v4 ? elements.v4.textContent : 'N/A'}
 **RAY ID**: \${BACKEND_DATA.rayId}
 
-## 📡 网络指标
-- **当前 RTT**: \${currentRtt} ms
-- **网络抖动**: \${currentJitter} ms
-- **最低 RTT**: \${minRttVal} ms
-- **最高 RTT**: \${maxRttVal} ms
-- **连接质量**: \${quality}
-- **网络稳定性**: \${stability}
-- **丢包率**: \${lossRate}
-- **样本数量**: \${sampleCountVal}
+## 📡 \${t.reportNetMetrics}
+- **\${t.rttCurrent}**: \${currentRtt} ms
+- **\${t.jitter}**: \${currentJitter} ms
+- **\${t.rttMin}**: \${minRttVal} ms
+- **\${t.rttMax}**: \${maxRttVal} ms
+- **\${t.quality}**: \${quality}
+- **\${t.stability}**: \${stability}
+- **\${t.loss}**: \${lossRate}
+- **\${t.samples}**: \${sampleCountVal}
 
-## 🔒 安全与协议
-- **协议**: \${BACKEND_DATA.httpProtocolRaw}
-- **TLS 版本**: \${BACKEND_DATA.tlsVersion}
-- **加密套件**: \${BACKEND_DATA.tlsCipher}
-- **ECH**: \${BACKEND_DATA.tlsClientHelloLength > 0 ? '已启用' : '未启用'}
-- **压缩算法**: \${BACKEND_DATA.compressionBrotli ? 'Brotli ' : ''}\${BACKEND_DATA.compressionGzip ? 'Gzip' : '无'}
-- **HTTP/2 状态**: \${http2Status}
-- **机器人评分**: \${BACKEND_DATA.botScore}
+## 🔒 \${t.reportSecProto}
+- **\${t.protoLabel}**: \${BACKEND_DATA.httpProtocolRaw}
+- **\${t.tlsVersion}**: \${BACKEND_DATA.tlsVersion}
+- **\${t.cipher}**: \${BACKEND_DATA.tlsCipher}
+- **\${t.echLabel}**: \${BACKEND_DATA.tlsClientHelloLength > 0 ? t.echEnabled : t.echDisabled}
+- **\${t.compressLabel}**: \${BACKEND_DATA.compressionBrotli ? 'Brotli ' : ''}\${BACKEND_DATA.compressionGzip ? 'Gzip' : t.reportCompressNone}
+- **\${t.http2Label}**: \${http2Status}
+- **\${t.botLabel}**: \${BACKEND_DATA.botScore}
 
-## 📍 位置信息
-- **边缘节点**: \${BACKEND_DATA.city}, \${BACKEND_DATA.region}, \${BACKEND_DATA.country}
-- **客户端位置**: \${clientLocation}
-- **运营商**: \${BACKEND_DATA.realGeoOrg || BACKEND_DATA.asOrg}
+## 📍 \${t.reportLocation}
+- **\${t.edgeLabel}**: \${BACKEND_DATA.city}, \${BACKEND_DATA.region}, \${BACKEND_DATA.country}
+- **\${t.userLocation}**: \${clientLocation}
+- **\${t.userOrg}**: \${BACKEND_DATA.realGeoOrg || BACKEND_DATA.asOrg}
 
-\${fraudInfo ? '## 🛡️ IP 风险信息\\n' + fraudInfo : ''}
+\${fraudInfo ? '## 🛡️ ' + t.reportIpRisk + '\\n' + fraudInfo : ''}
 ---
-*报告由 NetSight Pro 自动生成 · 由 CF-workers-netdiag 强力驱动*\`;
+*\${t.reportFooter}*\`;
             }
 
             async function copyReport() {
@@ -3152,7 +3401,7 @@ async function handleRequest(event) {
                         panel.innerHTML = '<div class="no-data"><i class="fas fa-inbox"></i> <span id="t-no-records">' + i18n[currentLang].noRecords + '</span></div>';
                         return;
                     }
-                    let html = '<table class="speed-history-table"><thead><tr><th>' + i18n[currentLang].historyTitle + '</th><th>平均速度</th><th>节点</th></tr></thead><tbody>';
+                    let html = '<table class="speed-history-table"><thead><tr><th>' + i18n[currentLang].historyTitle + '</th><th>' + i18n[currentLang].historyAvgSpeed + '</th><th>' + i18n[currentLang].historyNode + '</th></tr></thead><tbody>';
                     const maxSpeed = Math.max(...records.map(r => r.avgSpeed), 1);
                     records.forEach(r => {
                         const d = new Date(r.timestamp);
@@ -3164,7 +3413,7 @@ async function handleRequest(event) {
                     html += '</tbody></table>';
                     panel.innerHTML = html;
                 } catch (e) {
-                    panel.innerHTML = '<div class="no-data"><i class="fas fa-exclamation-circle"></i> 加载失败</div>';
+                    panel.innerHTML = '<div class="no-data"><i class="fas fa-exclamation-circle"></i> ' + i18n[currentLang].loadFailed + '</div>';
                 }
             }
 
@@ -3175,42 +3424,50 @@ async function handleRequest(event) {
                     const res = await fetch('/api/usage-stats');
                     const stats = await res.json();
                     let html = '<div class="usage-total">' + (stats.totalRequests || 0).toLocaleString() + '</div>';
-                    html += '<div class="usage-total-label">总请求数</div>';
+                    html += '<div class="usage-total-label">' + i18n[currentLang].totalRequests + '</div>';
                     const endpoints = stats.endpoints || {};
                     const entries = Object.entries(endpoints).sort((a, b) => b[1] - a[1]).slice(0, 8);
                     for (const [ep, count] of entries) {
                         html += '<div class="usage-row"><span class="ep">' + ep + '</span><span class="count">' + count.toLocaleString() + '</span></div>';
                     }
                     if (entries.length === 0) {
-                        html += '<div class="usage-row"><span class="ep" style="color:rgba(255,255,255,0.3)">等待首次请求...</span></div>';
+                        html += '<div class="usage-row"><span class="ep" style="color:var(--text-quaternary)">' + i18n[currentLang].waitingFirstReq + '</span></div>';
                     }
                     panel.innerHTML = html;
                 } catch (e) {
-                    panel.innerHTML = '<div class="no-data"><i class="fas fa-exclamation-circle"></i> 加载失败</div>';
+                    panel.innerHTML = '<div class="no-data"><i class="fas fa-exclamation-circle"></i> ' + i18n[currentLang].loadFailed + '</div>';
                 }
             }
 
             // ==================== 主题切换 ====================
             const themeToggle = document.getElementById('themeToggle');
-            let currentTheme = localStorage.getItem('theme') || 'auto';
+            let currentTheme = 'auto';
+            try { currentTheme = localStorage.getItem('theme') || 'auto'; } catch(e) {}
+            const darkMQ = window.matchMedia('(prefers-color-scheme: dark)');
             function applyTheme(theme) {
                 const html = document.documentElement;
                 if (theme === 'auto') {
-                    html.removeAttribute('data-theme');
+                    if (darkMQ.matches) html.removeAttribute('data-theme');
+                    else html.setAttribute('data-theme', 'light');
                     themeToggle.innerHTML = '<i class="fas fa-adjust"></i>';
+                } else if (theme === 'dark') {
+                    html.removeAttribute('data-theme');
+                    themeToggle.innerHTML = '<i class="fas fa-sun"></i>';
                 } else {
-                    html.setAttribute('data-theme', theme);
-                    themeToggle.innerHTML = theme === 'dark' ? '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>';
+                    html.setAttribute('data-theme', 'light');
+                    themeToggle.innerHTML = '<i class="fas fa-moon"></i>';
                 }
-                localStorage.setItem('theme', theme);
+                try { localStorage.setItem('theme', theme); } catch(e) {}
                 currentTheme = theme;
             }
+            // 系统主题变化时，若当前为 auto 则实时跟随
+            darkMQ.addEventListener('change', () => { if (currentTheme === 'auto') applyTheme('auto'); });
             themeToggle.addEventListener('click', () => {
                 if (currentTheme === 'auto') applyTheme('dark');
                 else if (currentTheme === 'dark') applyTheme('light');
                 else applyTheme('auto');
             });
-            applyTheme(localStorage.getItem('theme') || 'auto');
+            applyTheme(currentTheme);
 
             // ==================== 初始化 ====================
             function init() {
@@ -3249,7 +3506,15 @@ async function handleRequest(event) {
                 
                 loadSpeedHistory();
                 loadUsageStats();
-                setInterval(() => { loadSpeedHistory(); loadUsageStats(); }, 30000);
+                let statsInterval = setInterval(() => { loadSpeedHistory(); loadUsageStats(); }, 30000);
+                document.addEventListener('visibilitychange', () => {
+                    if (document.hidden) {
+                        clearInterval(statsInterval);
+                    } else {
+                        loadSpeedHistory(); loadUsageStats();
+                        statsInterval = setInterval(() => { loadSpeedHistory(); loadUsageStats(); }, 30000);
+                    }
+                });
 
                 // 语言按钮绑定
                 document.querySelectorAll('.lang-btn').forEach(btn => {
