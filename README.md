@@ -5,34 +5,34 @@
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/BlueDriftHK/CF-workers-netdiag/pulls)
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/BlueDriftHK/CF-workers-netdiag)
 
-> 🚀 部署在 Cloudflare Workers 边缘节点的专业级网络诊断工具  
-> **实时监控 · 多维度测试 · 毫秒级响应 · Apple 极简视觉设计 · 企业级安全防护**
+> 部署在 Cloudflare Workers 边缘节点的专业级网络诊断工具
+> **实时监控 · 多维度测试 · 毫秒级响应 · 极光玻璃拟态设计 · 企业级安全防护**
 
-**版本**: 4.1 | **许可证**: AGPL-3.0 | **最后更新**: 2026-07-07
-
----
-
-## 📖 目录
-
-- [✨ 功能特性](#-功能特性)
-- [🖼️ 界面预览](#️-界面预览)
-- [🚀 快速开始](#-快速开始)
-- [📡 API 端点](#-api-端点)
-- [🧪 命令行测试](#-命令行测试)
-- [⚙️ 配置说明](#️-配置说明)
-- [🏗️ 技术架构](#️-技术架构)
-- [📁 项目结构](#-项目结构)
-- [🛡️ 安全策略](#️-安全策略)
-- [📝 更新日志](#-更新日志)
-- [❓ 常见问题](#-常见问题)
-- [🔧 故障排查](#-故障排查)
-- [📄 许可证](#-许可证)
+**版本**: 4.2 | **许可证**: AGPL-3.0 | **最后更新**: 2026-07-25
 
 ---
 
-## ✨ 功能特性
+## 目录
 
-### 📡 网络质量检测
+- [功能特性](#功能特性)
+- [界面预览](#界面预览)
+- [快速开始](#快速开始)
+- [API 端点](#api-端点)
+- [命令行测试](#命令行测试)
+- [配置说明](#配置说明)
+- [技术架构](#技术架构)
+- [项目结构](#项目结构)
+- [安全策略](#安全策略)
+- [更新日志](#更新日志)
+- [常见问题](#常见问题)
+- [故障排查](#故障排查)
+- [许可证](#许可证)
+
+---
+
+## 功能特性
+
+### 网络质量检测
 
 | 功能 | 说明 |
 | :--- | :--- |
@@ -42,9 +42,9 @@
 | **连接质量评分** | 五档分级（优秀 / 良好 / 一般 / 较差 / 极差） |
 | **最低 / 最高 RTT** | 统计周期内的延迟极值 |
 | **DNS 解析测试** | 通过 Worker 代理路由测试 Cloudflare/Google/GitHub 等域名真实延迟 |
-| **多节点对比** | 同时测试多个 Worker 节点的延迟，表格直观对比（v4.0 新增） |
+| **多节点对比** | 同时测试多个 Worker 节点的延迟，表格直观对比 |
 
-### ⚡ 性能测试工具
+### 性能测试工具
 
 | 功能 | 说明 | 限制 |
 | :--- | :--- | :--- |
@@ -53,15 +53,15 @@
 | **并发请求测试** | 模拟多并发下载（4/6/8 路） | 内部限制 4 并发，最大 16 路 |
 | **流式传输测试** | 测试吞吐量（逐步增大数据块） | 最大 10MB |
 | **WebSocket 延迟测试** | 5 次 ping-pong 往返延迟，30 秒心跳保持 | - |
-| **流媒体连通性** | 检测 Netflix/Disney+/YouTube/ChatGPT 的可访问性（v4.0 新增） | - |
+| **流媒体连通性** | 检测 Netflix/Disney+/YouTube/ChatGPT 的可访问性 | - |
 
-### 📊 测速历史与用量统计（v3.6 引入，v4.0 增强）
+### 测速历史与用量统计
 
 - **测速历史记录**：自动保存最近 5 条测速结果到 Cloudflare KV
 - **用量统计面板**：可视化展示 API 端点调用统计（Top 8）
 - **历史趋势**：通过 `/api/speed-history` 获取最近测速记录
 
-### 🔒 安全与协议检测
+### 安全与协议检测
 
 - **TLS 版本检测**：识别 TLS 1.0/1.1/1.2/1.3
 - **加密套件分析**：查看协商的加密算法
@@ -69,39 +69,39 @@
 - **压缩算法检测**：Brotli / Gzip / Deflate / Zstd
 - **HTTP/2/3 检测**：识别协议版本和 Early Hints 支持
 - **ALPN 协商**：查看应用层协议协商结果
-- **IP 欺诈评分**：调用 Scamalytics API 评估代理/VPN/Tor/托管风险（v4.0 增强）
+- **IP 欺诈评分**：调用 Scamalytics API 评估代理/VPN/Tor/托管风险
 
-### 🌍 地理位置追踪
+### 地理位置追踪
 
 - 边缘节点位置（城市/坐标/ASN/运营商）
-- 客户端真实地理位置（通过 ip-api.com）
+- 客户端真实地理位置（通过 ipapi.co）
 - 客户端与边缘节点距离计算（公里）
 
-### 🎨 Apple 极简视觉设计
+### 极光玻璃拟态设计（v4.2 全新 UI）
 
-- 30+ CSS 自定义属性，统一视觉决策
-- 浅色 / 深色 / 自动模式（跟随系统或手动切换）
-- SF 灰白基调 + Apple 蓝 `#007AFF` + 毛玻璃 `backdrop-filter: blur(24px)`
-- 大圆角 12‑24px、低弥散阴影、0.18‑0.25s 原生动画曲线
-- 简体中文 / 繁体中文 / English 三语切换（v4.1 全界面覆盖）
-- 768px / 480px 响应式断点
+- **极光渐变背景**：深空黑底色 + 流动绿/紫/青色带，`@keyframes auroraShift` 缓动动画
+- **玻璃拟态卡片**：`backdrop-filter: blur(24px) saturate(150%)`，半透明磨砂质感，indigo 色调点缀
+- **双主题支持**：深色（默认）/ 浅色 / 自动跟随系统，`[data-theme="light"]` 一键切换
+- **响应式布局**：桌面端（>1024px）多列网格 → 平板（768–1024px）部分折叠 → 手机（<480px）单列瀑布流
+- **信息层级重构**：安全信息全宽双列内部网格、地理卡片桌面端并排、硬件信息紧凑横条
+- **三语切换**：简体中文 / 繁体中文 / English 全界面覆盖
+- **30+ CSS 自定义属性**：统一设计令牌，`--glass-bg`、`--glass-border`、`--accent` 等
 
 ---
 
-## 🖼️ 界面预览
+## 界面预览
 
-> 以下为模拟界面，实际部署后数据实时更新。  
-> （您可以在部署后，将实际截图替换下方占位链接）
+> 以下为模拟界面，实际部署后数据实时更新。
 
-![主界面预览](https://via.placeholder.com/800x400?text=NetSight+Pro+Dashboard)  
-*主仪表盘 – RTT 监控、质量评估、诊断工具*
+![主界面预览](https://via.placeholder.com/800x400?text=NetSight+Pro+Aurora+Dashboard)
+*主仪表盘 – 极光背景 + 玻璃拟态卡片 + RTT 实时监控*
 
-![多节点对比](https://via.placeholder.com/800x400?text=Multi-Node+Comparison)  
+![多节点对比](https://via.placeholder.com/800x400?text=Multi-Node+Comparison)
 *多节点对比弹窗与结果表格*
 
 ---
 
-## 🚀 快速开始
+## 快速开始
 
 ### 前置条件
 
@@ -151,14 +151,14 @@ wrangler deploy --main _workers.js
 
 ---
 
-## 📡 API 端点
+## API 端点
 
 所有接口均支持 CORS，方便集成到您自己的工具链中。
 
 | 端点 | 方法 | 参数 | 参数限制 | 限流 | 描述 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| `/` | GET | - | - | ❌ | 主诊断页面（HTML） |
-| `/health` | GET | - | - | ❌ | 健康检查 |
+| `/` | GET | - | - | - | 主诊断页面（HTML） |
+| `/health` | GET | - | - | - | 健康检查 |
 | `/speedtest` | GET | `size` | ≤ 5MB | ✅ | 带宽测速 |
 | `/cpu-test` | GET | `n` | ≤ 200 万 | ✅ (3/min) | CPU 性能基准测试 |
 | `/ws-test` | WebSocket | - | - | ✅ | WebSocket 延迟测试 |
@@ -178,7 +178,7 @@ wrangler deploy --main _workers.js
 {
   "status": "ok",
   "timestamp": 1704067200000,
-  "version": "4.1",
+  "version": "4.2",
   "uptime": "unknown"
 }
 ```
@@ -223,7 +223,7 @@ wrangler deploy --main _workers.js
 
 ---
 
-## 🧪 命令行测试
+## 命令行测试
 
 ### 基础测试
 ```bash
@@ -268,7 +268,7 @@ websocat ws://your-worker.dev/ws-test
 
 ---
 
-## ⚙️ 配置说明
+## 配置说明
 
 ### 限流配置
 
@@ -293,8 +293,6 @@ if (cpuRateLimit(clientIp, 5)) {
 ```
 
 ### 测试参数上限配置
-
-各端点的参数上限可在代码中调整：
 
 | 端点 | 参数 | 默认上限 | 建议范围 |
 | :--- | :--- | :--- | :--- |
@@ -335,7 +333,7 @@ routes = [
 
 ---
 
-## 🏗️ 技术架构
+## 技术架构
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -362,7 +360,7 @@ routes = [
 │  │         ┌─────────────┴───────────────┘              ││   │
 │  │         ▼                                            ││   │
 │  │  ┌──────────────────────────────────────┐            ││   │
-│  │  │ 外部 API (ip-api.com, scamalytics)   │            ││   │
+│  │  │ 外部 API (ipapi.co, scamalytics)     │            ││   │
 │  │  │ KV 存储 (SPEED_HISTORY)              │            ││   │
 │  │  └──────────────────────────────────────┘            ││   │
 │  └─────────────────────────────────────────────────────┘   │
@@ -380,23 +378,25 @@ routes = [
 | ReadableStream API | 流式数据传输 | WHATWG Streams |
 | Web Crypto API | 随机数据生成 | W3C |
 | Fetch API | HTTP 请求处理 | WHATWG |
+| CSS backdrop-filter | 玻璃拟态视觉效果 | CSS Filter Effects L2 |
+| CSS Grid + Media Queries | 响应式多列/单列布局 | CSS Grid L1 |
 
 ### 浏览器兼容性
 
-| 浏览器 | 最低版本 | WebSocket | Canvas | Streams API | 状态 |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| Chrome | 80+ | ✅ | ✅ | ✅ | 完全支持 |
-| Firefox | 75+ | ✅ | ✅ | ✅ | 完全支持 |
-| Safari | 13.1+ | ✅ | ✅ | ⚠️ 部分支持 | 基本支持 |
-| Edge | 80+ | ✅ | ✅ | ✅ | 完全支持 |
+| 浏览器 | 最低版本 | WebSocket | Canvas | Streams API | backdrop-filter | 状态 |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| Chrome | 80+ | ✅ | ✅ | ✅ | ✅ | 完全支持 |
+| Firefox | 103+ | ✅ | ✅ | ✅ | ✅ | 完全支持 |
+| Safari | 13.1+ | ✅ | ✅ | ⚠️ 部分 | ✅ | 基本支持 |
+| Edge | 80+ | ✅ | ✅ | ✅ | ✅ | 完全支持 |
 
 ---
 
-## 📁 项目结构
+## 项目结构
 
 ```
 CF-workers-netdiag/
-├── _workers.js          # Cloudflare Worker 主文件（~2700行核心代码）
+├── _workers.js          # Cloudflare Worker 主文件（~3400行，含全部前端代码）
 ├── README.md            # 项目文档（本文件）
 ├── SECURITY.md          # 安全政策
 ├── LICENSE              # AGPL-3.0 许可证
@@ -413,13 +413,13 @@ CF-workers-netdiag/
 
 | 文件 | 大小 | 说明 |
 | :--- | :--- | :--- |
-| `_workers.js` | ~2700 行 | Worker 主程序，包含所有 API 逻辑、前端 HTML、CSS 设计体系和 KV 集成 |
-| `README.md` | 本文件 | 项目文档，包含所有使用说明 |
+| `_workers.js` | ~3400 行 | Worker 主程序，包含所有 API 逻辑、前端 HTML/CSS/JS、极光玻璃拟态设计体系和 KV 集成 |
+| `README.md` | 本文件 | 项目文档 |
 | `SECURITY.md` | - | 安全策略和报告流程 |
 
 ---
 
-## 🛡️ 安全策略
+## 安全策略
 
 完整安全策略请参阅 [SECURITY.md](./SECURITY.md)。
 
@@ -441,7 +441,18 @@ CF-workers-netdiag/
 
 ---
 
-## 📝 更新日志
+## 更新日志
+
+### v4.2 (2026-07-25)
+
+- **全新 UI 设计**：从 Apple 极简风格升级为极光玻璃拟态（Aurora Glassmorphism）设计体系
+- **极光渐变背景**：深空黑底色 + 多层流动色带（绿/紫/青），`auroraShift` 缓动动画，`blur(60px)` 柔化
+- **玻璃拟态卡片**：`backdrop-filter: blur(24px) saturate(150%)`，半透明磨砂质感，indigo 色调点缀
+- **响应式重构**：桌面端多列网格 → 平板部分折叠 → 手机单列瀑布流（1024px / 768px / 480px 三档断点）
+- **信息层级优化**：安全信息全宽 + 双列内部网格、地理卡片桌面端并排、硬件信息紧凑横条
+- **主题方案反转**：`:root` = 深色默认（无需属性），`[data-theme="light"]` = 浅色覆盖
+- **修复**：21 项代码审查问题（安全、性能、可访问性）
+- **修复**：`updateUI()` 中已移除元素的空引用
 
 ### v4.1 (2026-07-07)
 
@@ -491,7 +502,7 @@ CF-workers-netdiag/
 - 新增: 实时延迟监控模块，每2秒自动测量 RTT
 - 新增: Canvas 实时趋势图表绘制
 - 新增: 多档位带宽测速、CPU 密集型性能测试、WebSocket 双向延迟测试
-- 新增: 真实 IP 地理位置查询（通过 ip-api.com）
+- 新增: 真实 IP 地理位置查询（通过 ipapi.co）
 - UI: 全新蓝色玻璃态毛玻璃效果主题
 
 ### v1.0 (2026-05-01)
@@ -501,7 +512,7 @@ CF-workers-netdiag/
 
 ---
 
-## ❓ 常见问题
+## 常见问题
 
 ### 1. 部署后访问出现 404 错误？
 - **原因**: 可能未正确部署 `_workers.js` 文件
@@ -544,9 +555,17 @@ CF-workers-netdiag/
 ### 10. 如何自定义欺诈评分服务？
 - 修改 `_workers.js` 中的 `getIpFraudScore` 函数，替换为其他服务 API。
 
+### 11. 玻璃拟态效果在某些浏览器不生效？
+- Firefox 103 以下版本不支持 `backdrop-filter`，卡片会降级为半透明纯色背景
+- 确保浏览器未禁用硬件加速，`backdrop-filter` 依赖 GPU 合成
+
+### 12. 如何切换深色/浅色主题？
+- 点击页面右上角主题切换按钮（太阳/月亮/自动图标）
+- 选择会自动保存到 `localStorage`，下次访问自动应用
+
 ---
 
-## 🔧 故障排查
+## 故障排查
 
 ### 查看 Worker 日志
 
@@ -580,7 +599,7 @@ wrangler tail --format json
 
 ---
 
-## 📄 许可证
+## 许可证
 
 本项目使用 **GNU Affero General Public License v3.0** 许可证。
 
@@ -598,7 +617,7 @@ wrangler tail --format json
 
 ---
 
-## 💬 联系方式
+## 联系方式
 
 | 渠道 | 链接 |
 | :--- | :--- |
@@ -607,5 +626,5 @@ wrangler tail --format json
 
 ---
 
-*由 BlueDriftHK 用 ❤️ 制作*  
+*由 BlueDriftHK 用 ❤️ 制作*
 *GNU Affero 通用公共许可证 v3.0 · 开源自由 · 持续更新*
