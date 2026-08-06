@@ -569,6 +569,13 @@ async function handleRequest(event) {
   // ==================== 测速历史记录 (POST) ====================
   if (url.pathname === '/api/log-speed' && request.method === 'POST') {
     try {
+      const contentLength = parseInt(request.headers.get('content-length') || '0');
+      if (contentLength > 10240) {
+        return new Response(JSON.stringify({ ok: false, error: 'payload too large' }), {
+          status: 413,
+          headers: { 'content-type': 'application/json', ...CORS_HEADERS, ...SECURITY_HEADERS }
+        });
+      }
       const body = await request.json();
       const record = {
         timestamp: Date.now(),
