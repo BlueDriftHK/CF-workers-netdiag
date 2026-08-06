@@ -507,60 +507,6 @@
         .footer .social a:hover { color: var(--accent); }
 
         /* ============================================================
-           IP 信息卡片
-           ============================================================ */
-        .ip-info-card {
-            background: var(--glass-bg); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
-            border-radius: var(--radius-xl); border: 1px solid var(--glass-border);
-            padding: 32px 36px; margin-bottom: 50px;
-            box-shadow: var(--glass-shadow), var(--glass-highlight);
-            transition: all var(--transition); position: relative; overflow: hidden;
-        }
-        .ip-info-card::before {
-            content: ''; position: absolute; inset: 0;
-            background: linear-gradient(90deg, transparent, var(--accent-light), transparent);
-            opacity: 0.3; transform: translateX(-100%); animation: shimmer 8s infinite;
-            pointer-events: none;
-        }
-        .ip-info-card > * { position: relative; z-index: 1; }
-        .ip-info-header {
-            display: flex; align-items: center; gap: 14px; margin-bottom: 24px;
-        }
-        .ip-info-header .ip-icon {
-            width: 44px; height: 44px; background: var(--accent-light); border: 1px solid var(--accent-border);
-            border-radius: 12px; display: flex; align-items: center; justify-content: center;
-            font-size: 20px; color: var(--accent);
-        }
-        .ip-info-header h3 { font-size: 20px; font-weight: 700; }
-        .ip-info-header .ip-sub { font-size: 13px; color: var(--text-secondary); margin-top: 2px; }
-        .ip-info-grid {
-            display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px;
-        }
-        .ip-info-item {
-            background: rgba(255,255,255,0.02); border: 1px solid var(--divider);
-            border-radius: 12px; padding: 14px 18px; transition: all 0.25s;
-        }
-        .ip-info-item:hover { border-color: var(--accent-border); background: var(--glass-heavy); transform: translateY(-2px); }
-        .ip-info-item .item-label {
-            font-size: 11px; color: var(--text-tertiary); text-transform: uppercase;
-            letter-spacing: 0.5px; margin-bottom: 6px;
-        }
-        .ip-info-item .item-value {
-            font-size: 15px; font-weight: 600; color: var(--text-primary);
-            font-family: var(--font-mono); word-break: break-all;
-        }
-        .ip-info-item .item-value.flag-text { font-family: var(--font-sans); font-size: 16px; }
-        .ip-info-item .item-value a { color: var(--accent); text-decoration: none; }
-        .ip-info-item .item-value a:hover { text-decoration: underline; }
-        @media (max-width: 768px) {
-            .ip-info-grid { grid-template-columns: 1fr 1fr; }
-            .ip-info-card { padding: 24px 20px; }
-        }
-        @media (max-width: 480px) {
-            .ip-info-grid { grid-template-columns: 1fr; }
-        }
-
-        /* ============================================================
            响应式
            ============================================================ */
         @media (max-width: 1024px) {
@@ -594,8 +540,6 @@
             *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
         }
     </style>
-    <!-- IP 数据占位：Worker 会替换为实际 JSON -->
-    <script>window.__IP_DATA__ = /*IP_DATA*/null/*\/IP_DATA*/;</script>
 </head>
 <body>
     <!-- 鼠标跟随光晕 -->
@@ -637,43 +581,6 @@
                 <span><i class="fas fa-chart-line"></i> 历史统计</span>
             </div>
         </section>
-
-        <!-- ===== IP 信息卡片 ===== -->
-        <div class="ip-info-card reveal" id="ipInfoCard" style="display:none">
-            <div class="ip-info-header">
-                <div class="ip-icon"><i class="fas fa-fingerprint"></i></div>
-                <div>
-                    <h3>你的网络身份</h3>
-                    <p class="ip-sub">当前连接的基本信息</p>
-                </div>
-            </div>
-            <div class="ip-info-grid">
-                <div class="ip-info-item">
-                    <div class="item-label">IP 地址</div>
-                    <div class="item-value" id="ipAddr">--</div>
-                </div>
-                <div class="ip-info-item">
-                    <div class="item-label">国家 / 地区</div>
-                    <div class="item-value flag-text" id="ipCountry">--</div>
-                </div>
-                <div class="ip-info-item">
-                    <div class="item-label">城市</div>
-                    <div class="item-value" id="ipCity">--</div>
-                </div>
-                <div class="ip-info-item">
-                    <div class="item-label">ISP</div>
-                    <div class="item-value" id="ipIsp">--</div>
-                </div>
-                <div class="ip-info-item">
-                    <div class="item-label">时区</div>
-                    <div class="item-value" id="ipTimezone">--</div>
-                </div>
-                <div class="ip-info-item">
-                    <div class="item-label">坐标</div>
-                    <div class="item-value" id="ipCoords">--</div>
-                </div>
-            </div>
-        </div>
 
         <!-- ===== 项目统计看板 ===== -->
         <div class="stats-banner reveal">
@@ -1232,43 +1139,6 @@ return new Response(null, { status: 101, webSocket: client });</code></pre>
                     if (!isOpen) item.classList.add('open');
                 });
             });
-
-            // --- IP 信息获取 ---
-            (async function loadIPInfo() {
-                var card = document.getElementById('ipInfoCard');
-                if (!card) return;
-                var data = null;
-                // 优先使用 Worker 注入的数据
-                if (window.__IP_DATA__ && window.__IP_DATA__.ip) {
-                    data = window.__IP_DATA__;
-                } else {
-                    try {
-                        var res = await fetch('/api/ipinfo');
-                        if (res.ok) data = await res.json();
-                    } catch(e) {}
-                }
-                if (!data || !data.ip) return;
-                document.getElementById('ipAddr').textContent = data.ip;
-                if (data.country) {
-                    var flag = '';
-                    try {
-                        flag = String.fromCodePoint(
-                            127462 + data.country.charCodeAt(0) - 65,
-                            127462 + data.country.charCodeAt(1) - 65
-                        ) + ' ';
-                    } catch(e) {}
-                    document.getElementById('ipCountry').textContent = flag + data.country;
-                }
-                if (data.city) document.getElementById('ipCity').textContent = data.city;
-                if (data.isp) document.getElementById('ipIsp').textContent = data.isp;
-                if (data.timezone) document.getElementById('ipTimezone').textContent = data.timezone;
-                if (data.latitude && data.longitude) {
-                    var coordsEl = document.getElementById('ipCoords');
-                    coordsEl.innerHTML = '<a href="https://www.google.com/maps?q=' + data.latitude + ',' + data.longitude + '" target="_blank">' + data.latitude + ', ' + data.longitude + '</a>';
-                }
-                card.style.display = '';
-                card.classList.add('active');
-            })();
         })();
     </script>
 </body>
