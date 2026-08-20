@@ -1,12 +1,11 @@
 // ============================================================
 // NetSight Pro - Apple 极简网络诊断工具
 // Cloudflare Worker 完整优化版 | 全界面国际化 + 深色/浅色切换
-// 版本: 4.1 | 完整语言覆盖
+// 版本: 4.1-security | 完整语言覆盖 + 安全加固
 // ============================================================
 
 // ==================== 常量定义 ====================
 const CORS_HEADERS = {
-  'access-control-allow-origin': '*',
   'access-control-allow-methods': 'GET, HEAD, OPTIONS',
   'access-control-allow-headers': 'Content-Type',
   'cache-control': 'no-store',
@@ -19,6 +18,60 @@ const SECURITY_HEADERS = {
   'referrer-policy': 'strict-origin-when-cross-origin',
   'strict-transport-security': 'max-age=31536000; includeSubDomains; preload'
 };
+
+function getConfiguredOrigins() {
+  if (typeof ALLOWED_ORIGINS === 'undefined' || !ALLOWED_ORIGINS) return [];
+  return String(ALLOWED_ORIGINS)
+    .split(',')
+    .map(origin => origin.trim())
+    .filter(Boolean);
+}
+
+function isAllowedOrigin(request, origin) {
+  if (!origin) return true;
+  try {
+    const requestOrigin = new URL(request.url).origin;
+    if (origin === requestOrigin) return true;
+    const allowed = getConfiguredOrigins();
+    return allowed.includes('*') || allowed.includes(origin);
+  } catch (e) {
+    return false;
+  }
+}
+
+function corsHeaders(request, methods = 'GET, HEAD, OPTIONS') {
+  const origin = request.headers.get('Origin');
+  const headers = {
+    ...CORS_HEADERS,
+    'access-control-allow-methods': methods
+  };
+  if (origin && isAllowedOrigin(request, origin)) {
+    headers['access-control-allow-origin'] = origin;
+  }
+  return headers;
+}
+
+function isSameOriginNavigation(request) {
+  const origin = request.headers.get('Origin');
+  if (origin) return isAllowedOrigin(request, origin);
+  const referer = request.headers.get('Referer');
+  if (!referer) return true;
+  try {
+    return new URL(referer).origin === new URL(request.url).origin;
+  } catch (e) {
+    return false;
+  }
+}
+
+function forbiddenResponse(request) {
+  return new Response(JSON.stringify({
+    error: 'forbidden',
+    message: 'Origin is not allowed'
+  }), {
+    status: 403,
+    headers: { 'content-type': 'application/json', ...corsHeaders(request), ...SECURITY_HEADERS }
+  });
+}
 
 // 简单的限流实现（注意：Map 为 per-isolate 内存，非全局共享；高并发场景如需全局限流应使用 KV 或 Durable Object）
 const rateLimit = new Map();
@@ -88,6 +141,17 @@ function escapeForJS(str) {
     .replace(/&/g, '\\x26');
 }
 
+function clampInt(value, fallback, min, max) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(Math.max(parsed, min), max);
+}
+
+function safeNumber(value, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
 function pLimit(concurrency) {
   const queue = [];
   let activeCount = 0;
@@ -131,17 +195,13 @@ addEventListener('fetch', event => {
 
 // 处理 OPTIONS 预检请求
 function handleOptions(request) {
-  const origin = request.headers.get('Origin');
   const headers = {
-    ...CORS_HEADERS,
+    ...corsHeaders(request, 'GET, HEAD, POST, OPTIONS'),
     'access-control-max-age': '86400',
     ...SECURITY_HEADERS
   };
-  if (origin) {
-    headers['access-control-allow-origin'] = origin;
-  }
   return new Response(null, {
-    status: 204,
+    status: isAllowedOrigin(request, request.headers.get('Origin')) ? 204 : 403,
     headers
   });
 }
@@ -175,9 +235,7 @@ async function handleRequest(event) {
   const request = event.request;
   const url = new URL(request.url);
   const cache = caches.default;
-  const clientIp = request.headers.get('cf-connecting-ip') || 
-                   request.headers.get('x-forwarded-for') || 
-                   'unknown';
+  const clientIp = request.headers.get('cf-connecting-ip') || 'unknown';
   
   // 处理 OPTIONS 预检请求
   if (request.method === 'OPTIONS') {
@@ -195,11 +253,29 @@ async function handleRequest(event) {
         headers: {
           'content-type': 'application/json',
           'retry-after': '60',
-          ...CORS_HEADERS,
+          ...corsHeaders(request),
           ...SECURITY_HEADERS
         }
       });
     }
+  }
+
+  // 自动用量记录（非主页面和静态资源的请求）
+  // 注意：read-modify-write 在并发下存在竞态，计数可能少量丢失；如需精确计数应使用 Durable Object
+  if (url.pathname !== '/' && !url.pathname.startsWith('/static/')) {
+    event.waitUntil((async () => {
+      if (typeof SPEED_HISTORY !== 'undefined' && SPEED_HISTORY) {
+        try {
+          const raw = await SPEED_HISTORY.get('usage:stats');
+          let stats = raw ? JSON.parse(raw) : { totalRequests: 0, endpoints: {}, lastReset: 0 };
+          stats.totalRequests = (stats.totalRequests || 0) + 1;
+          const ep = url.pathname;
+          stats.endpoints[ep] = (stats.endpoints[ep] || 0) + 1;
+          if (!stats.lastReset) stats.lastReset = Date.now();
+          await SPEED_HISTORY.put('usage:stats', JSON.stringify(stats), { expirationTtl: 86400 * 30 });
+        } catch (e) {}
+      }
+    })());
   }
   
   // ==================== 健康检查端点 ====================
@@ -207,7 +283,7 @@ async function handleRequest(event) {
     return new Response(JSON.stringify({
       status: 'ok',
       timestamp: Date.now(),
-      version: '4.1',
+      version: '4.1-security',
       note: 'Cloudflare Workers are stateless; per-request context only'
     }), {
       headers: {
@@ -251,12 +327,13 @@ async function handleRequest(event) {
   
   // ==================== 速度测试端点 ====================
   if (url.pathname === '/speedtest') {
-    const size = Math.min(parseInt(url.searchParams.get('size')) || 102400, 5242880);
+    if (!isSameOriginNavigation(request)) return forbiddenResponse(request);
+    const size = clampInt(url.searchParams.get('size'), 102400, 1, 5242880);
     const data = fillRandom(new Uint8Array(size));
     return new Response(data, {
       headers: {
         'content-type': 'application/octet-stream',
-        ...CORS_HEADERS,
+        ...corsHeaders(request),
         ...SECURITY_HEADERS
       }
     });
@@ -264,17 +341,24 @@ async function handleRequest(event) {
   
   // ==================== 上传速度测试端点 ====================
   if (url.pathname === '/upload-test' && request.method === 'POST') {
-    const contentLength = parseInt(request.headers.get('content-length') || '0', 10);
-    if (contentLength > 10485760) {
+    if (!isSameOriginNavigation(request)) return forbiddenResponse(request);
+    const contentLength = Number.parseInt(request.headers.get('content-length') || '', 10);
+    if (!Number.isFinite(contentLength) || contentLength < 0 || contentLength > 10485760) {
       return new Response(JSON.stringify({ error: 'Payload too large', max: '10MB' }), {
         status: 413,
-        headers: { 'content-type': 'application/json', ...CORS_HEADERS, ...SECURITY_HEADERS }
+        headers: { 'content-type': 'application/json', ...corsHeaders(request, 'POST, OPTIONS'), ...SECURITY_HEADERS }
       });
     }
     const start = Date.now();
     const body = await request.arrayBuffer();
     const duration = Date.now() - start;
     const bytes = body.byteLength;
+    if (bytes > 10485760) {
+      return new Response(JSON.stringify({ error: 'Payload too large', max: '10MB' }), {
+        status: 413,
+        headers: { 'content-type': 'application/json', ...corsHeaders(request, 'POST, OPTIONS'), ...SECURITY_HEADERS }
+      });
+    }
     const speedMbps = duration > 0 ? ((bytes * 8) / (duration / 1000)) / 1000000 : 0;
     return new Response(JSON.stringify({
       bytes: bytes,
@@ -283,7 +367,7 @@ async function handleRequest(event) {
     }), {
       headers: {
         'content-type': 'application/json',
-        ...CORS_HEADERS,
+        ...corsHeaders(request, 'POST, OPTIONS'),
         ...SECURITY_HEADERS
       }
     });
@@ -291,7 +375,8 @@ async function handleRequest(event) {
   
   // ==================== CPU 密集型测试端点 ====================
   if (url.pathname === '/cpu-test') {
-    const clientIP = request.headers.get('CF-Connecting-IP') || 'unknown';
+    if (!isSameOriginNavigation(request)) return forbiddenResponse(request);
+    const clientIP = request.headers.get('cf-connecting-ip') || 'unknown';
     const now = Date.now();
     let cpulimit = cpuRateLimit.get(clientIP);
     if (!cpulimit || now > cpulimit.resetTime) {
@@ -303,13 +388,13 @@ async function handleRequest(event) {
         retryAfter: Math.ceil((cpulimit.resetTime - now) / 1000)
       }), {
         status: 429,
-        headers: { 'content-type': 'application/json', 'retry-after': String(Math.ceil((cpulimit.resetTime - now) / 1000)), ...CORS_HEADERS, ...SECURITY_HEADERS }
+        headers: { 'content-type': 'application/json', 'retry-after': String(Math.ceil((cpulimit.resetTime - now) / 1000)), ...corsHeaders(request), ...SECURITY_HEADERS }
       });
     }
     cpulimit.count++;
     cpuRateLimit.set(clientIP, cpulimit);
 
-    const iterations = Math.min(parseInt(url.searchParams.get('n')) || 500000, 500000);
+    const iterations = clampInt(url.searchParams.get('n'), 500000, 1, 500000);
     const start = performance.now();
     let result = 0;
     for (let i = 0; i < iterations; i++) {
@@ -324,7 +409,7 @@ async function handleRequest(event) {
     }), {
       headers: {
         'content-type': 'application/json',
-        ...CORS_HEADERS,
+        ...corsHeaders(request),
         ...SECURITY_HEADERS
       }
     });
@@ -332,19 +417,27 @@ async function handleRequest(event) {
   
   // ==================== DNS 代理测试端点 ====================
   if (url.pathname === '/dns-proxy') {
+    if (!isSameOriginNavigation(request)) return forbiddenResponse(request);
     const targetUrl = url.searchParams.get('url');
     if (!targetUrl) {
       return new Response(JSON.stringify({ error: 'missing url' }), {
         status: 400,
-        headers: { 'content-type': 'application/json', ...CORS_HEADERS, ...SECURITY_HEADERS }
+        headers: { 'content-type': 'application/json', ...corsHeaders(request), ...SECURITY_HEADERS }
       });
     }
     
-    let hostname;
-    try { hostname = new URL(targetUrl).hostname; } catch (e) {
+    let parsedTarget;
+    try { parsedTarget = new URL(targetUrl); } catch (e) {
       return new Response(JSON.stringify({ error: 'invalid url' }), {
         status: 400,
-        headers: { 'content-type': 'application/json', ...CORS_HEADERS, ...SECURITY_HEADERS }
+        headers: { 'content-type': 'application/json', ...corsHeaders(request), ...SECURITY_HEADERS }
+      });
+    }
+    const hostname = parsedTarget.hostname;
+    if (!['http:', 'https:'].includes(parsedTarget.protocol)) {
+      return new Response(JSON.stringify({ error: 'invalid scheme' }), {
+        status: 400,
+        headers: { 'content-type': 'application/json', ...corsHeaders(request), ...SECURITY_HEADERS }
       });
     }
     
@@ -352,29 +445,30 @@ async function handleRequest(event) {
     if (!allowed.some(d => hostname === d || hostname.endsWith('.' + d))) {
       return new Response(JSON.stringify({ error: 'forbidden domain' }), {
         status: 403,
-        headers: { 'content-type': 'application/json', ...CORS_HEADERS, ...SECURITY_HEADERS }
+        headers: { 'content-type': 'application/json', ...corsHeaders(request), ...SECURITY_HEADERS }
       });
     }
     
     const start = Date.now();
     let status = null;
     try {
-      const res = await fetch(targetUrl, { method: 'HEAD', redirect: 'manual', signal: AbortSignal.timeout(5000) });
+      const res = await fetch(parsedTarget.href, { method: 'HEAD', redirect: 'manual', signal: AbortSignal.timeout(5000) });
       status = res.status;
     } catch (e) {
       const time = Date.now() - start;
       return new Response(JSON.stringify({ time, status: null, error: 'fetch failed' }), {
-        headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...CORS_HEADERS, ...SECURITY_HEADERS }
+        headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...corsHeaders(request), ...SECURITY_HEADERS }
       });
     }
     const time = Date.now() - start;
     return new Response(JSON.stringify({ time, status }), {
-      headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...CORS_HEADERS, ...SECURITY_HEADERS }
+      headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...corsHeaders(request), ...SECURITY_HEADERS }
     });
   }
   
   // ==================== WebSocket 测试端点 ====================
   if (url.pathname === '/ws-test') {
+    if (!isSameOriginNavigation(request)) return forbiddenResponse(request);
     const upgradeHeader = request.headers.get('Upgrade');
     if (!upgradeHeader || upgradeHeader !== 'websocket') {
       return new Response('需要 WebSocket 升级', { status: 426 });
@@ -387,6 +481,7 @@ async function handleRequest(event) {
     
     let pingInterval;
     let heartbeatInterval;
+    let maxLifetimeTimeout;
     let isAlive = true;
     let closed = false;
     
@@ -400,6 +495,10 @@ async function handleRequest(event) {
       if (heartbeatInterval) {
         clearInterval(heartbeatInterval);
         heartbeatInterval = null;
+      }
+      if (maxLifetimeTimeout) {
+        clearTimeout(maxLifetimeTimeout);
+        maxLifetimeTimeout = null;
       }
     };
     
@@ -434,6 +533,11 @@ async function handleRequest(event) {
     server.addEventListener('message', event => {
       if (closed) return;
       try {
+        if (typeof event.data !== 'string' || event.data.length > 4096) {
+          server.close(1009, 'Message too large');
+          cleanup();
+          return;
+        }
         const data = JSON.parse(event.data);
         if (data.type === 'ping') {
           isAlive = true;
@@ -466,6 +570,12 @@ async function handleRequest(event) {
     });
     
     startHeartbeat();
+    maxLifetimeTimeout = setTimeout(() => {
+      if (server.readyState === 1) {
+        try { server.close(1000, 'Max test duration reached'); } catch (e) {}
+      }
+      cleanup();
+    }, 300000);
     
     return new Response(null, {
       status: 101,
@@ -497,7 +607,7 @@ async function handleRequest(event) {
     }), {
       headers: {
         'content-type': 'application/json',
-        ...CORS_HEADERS,
+        ...corsHeaders(request),
         ...SECURITY_HEADERS
       }
     });
@@ -505,8 +615,9 @@ async function handleRequest(event) {
   
   // ==================== 多文件并发下载测试 ====================
   if (url.pathname === '/concurrent-test') {
-    const count = Math.min(parseInt(url.searchParams.get('count')) || 4, 16);
-    const size = Math.min(parseInt(url.searchParams.get('size')) || 1024, 65536);
+    if (!isSameOriginNavigation(request)) return forbiddenResponse(request);
+    const count = clampInt(url.searchParams.get('count'), 4, 1, 16);
+    const size = clampInt(url.searchParams.get('size'), 1024, 1, 65536);
     
     const limit = pLimit(4);
     const promises = [];
@@ -530,7 +641,7 @@ async function handleRequest(event) {
     return new Response(JSON.stringify(results), {
       headers: {
         'content-type': 'application/json',
-        ...CORS_HEADERS,
+        ...corsHeaders(request),
         ...SECURITY_HEADERS
       }
     });
@@ -538,7 +649,8 @@ async function handleRequest(event) {
   
   // ==================== 大文件流式传输测试 ====================
   if (url.pathname === '/stream-test') {
-    const size = Math.min(parseInt(url.searchParams.get('size')) || 1048576, 10485760);
+    if (!isSameOriginNavigation(request)) return forbiddenResponse(request);
+    const size = clampInt(url.searchParams.get('size'), 1048576, 1, 10485760);
     const chunkSize = 65536;
     let sent = 0;
     
@@ -560,7 +672,7 @@ async function handleRequest(event) {
         'content-type': 'application/octet-stream',
         'cache-control': 'no-store',
         'content-length': size.toString(),
-        ...CORS_HEADERS,
+        ...corsHeaders(request),
         ...SECURITY_HEADERS
       }
     });
@@ -568,19 +680,25 @@ async function handleRequest(event) {
   
   // ==================== 测速历史记录 (POST) ====================
   if (url.pathname === '/api/log-speed' && request.method === 'POST') {
+    if (!isSameOriginNavigation(request)) return forbiddenResponse(request);
     try {
-      const contentLength = parseInt(request.headers.get('content-length') || '0');
-      if (contentLength > 10240) {
+      const contentLength = Number.parseInt(request.headers.get('content-length') || '', 10);
+      if (!Number.isFinite(contentLength) || contentLength < 0 || contentLength > 10240) {
         return new Response(JSON.stringify({ ok: false, error: 'payload too large' }), {
           status: 413,
-          headers: { 'content-type': 'application/json', ...CORS_HEADERS, ...SECURITY_HEADERS }
+          headers: { 'content-type': 'application/json', ...corsHeaders(request, 'POST, OPTIONS'), ...SECURITY_HEADERS }
         });
       }
       const body = await request.json();
+      const avgSpeed = Math.min(Math.max(safeNumber(body.avgSpeed, 0), 0), 100000);
+      const results = Array.isArray(body.results) ? body.results.slice(0, 10).map(item => ({
+        sizeKB: Math.min(Math.max(safeNumber(item?.sizeKB, 0), 0), 10485760),
+        speed: Math.min(Math.max(safeNumber(item?.speed, 0), 0), 100000)
+      })) : [];
       const record = {
         timestamp: Date.now(),
-        avgSpeed: parseFloat(body.avgSpeed) || 0,
-        results: body.results || [],
+        avgSpeed,
+        results,
         colo: (request.cf || {}).colo || 'N/A',
         asn: (request.cf || {}).asn || 'N/A'
       };
@@ -597,19 +715,19 @@ async function handleRequest(event) {
         }
       }
       return new Response(JSON.stringify({ ok: true }), {
-        headers: { 'content-type': 'application/json', ...CORS_HEADERS, ...SECURITY_HEADERS }
+        headers: { 'content-type': 'application/json', ...corsHeaders(request, 'POST, OPTIONS'), ...SECURITY_HEADERS }
       });
     } catch (e) {
       return new Response(JSON.stringify({ ok: false, error: 'invalid data' }), {
         status: 400,
-        headers: { 'content-type': 'application/json', ...CORS_HEADERS, ...SECURITY_HEADERS }
+        headers: { 'content-type': 'application/json', ...corsHeaders(request, 'POST, OPTIONS'), ...SECURITY_HEADERS }
       });
     }
   }
   
   // ==================== 测速历史查询 (GET) ====================
   if (url.pathname === '/api/speed-history') {
-    const limit = Math.min(parseInt(url.searchParams.get('limit')) || 10, 20);
+    const limit = clampInt(url.searchParams.get('limit'), 10, 1, 20);
     const records = [];
     
     if (typeof SPEED_HISTORY !== 'undefined' && SPEED_HISTORY) {
@@ -624,7 +742,7 @@ async function handleRequest(event) {
     }
     
     return new Response(JSON.stringify(records.slice(0, limit)), {
-      headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...CORS_HEADERS, ...SECURITY_HEADERS }
+      headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...corsHeaders(request), ...SECURITY_HEADERS }
     });
   }
   
@@ -640,7 +758,7 @@ async function handleRequest(event) {
     }
     
     return new Response(JSON.stringify(stats), {
-      headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...CORS_HEADERS, ...SECURITY_HEADERS }
+      headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...corsHeaders(request), ...SECURITY_HEADERS }
     });
   }
   
@@ -651,40 +769,24 @@ async function handleRequest(event) {
     if (!fraudData) {
       return new Response(JSON.stringify({ error: '无法获取风险数据' }), {
         status: 503,
-        headers: { 'content-type': 'application/json', ...CORS_HEADERS, ...SECURITY_HEADERS }
+        headers: { 'content-type': 'application/json', ...corsHeaders(request), ...SECURITY_HEADERS }
       });
     }
     return new Response(JSON.stringify(fraudData), {
       headers: {
         'content-type': 'application/json',
-        ...CORS_HEADERS,
+        ...corsHeaders(request),
         ...SECURITY_HEADERS
       }
     });
   }
   
-  // 自动用量记录（非主页面和静态资源的请求）
-  // 注意：read-modify-write 在并发下存在竞态，计数可能少量丢失；如需精确计数应使用 Durable Object
-  event.waitUntil((async () => {
-    if (typeof SPEED_HISTORY !== 'undefined' && SPEED_HISTORY && url.pathname !== '/' && !url.pathname.startsWith('/static/')) {
-      try {
-        const raw = await SPEED_HISTORY.get('usage:stats');
-        let stats = raw ? JSON.parse(raw) : { totalRequests: 0, endpoints: {}, lastReset: 0 };
-        stats.totalRequests = (stats.totalRequests || 0) + 1;
-        const ep = url.pathname;
-        stats.endpoints[ep] = (stats.endpoints[ep] || 0) + 1;
-        if (!stats.lastReset) stats.lastReset = Date.now();
-        await SPEED_HISTORY.put('usage:stats', JSON.stringify(stats), { expirationTtl: 86400 * 30 });
-      } catch (e) {}
-    }
-  })());
-  
   // ==================== 主诊断页面 ====================
   const workerStart = Date.now();
   const cf = request.cf || {};
   
-  const lat = parseFloat(cf.latitude) || 0;
-  const lon = parseFloat(cf.longitude) || 0;
+  const lat = safeNumber(cf.latitude, 0);
+  const lon = safeNumber(cf.longitude, 0);
   const latDir = lat >= 0 ? 'N' : 'S';
   const lonDir = lon >= 0 ? 'E' : 'W';
   
@@ -705,10 +807,10 @@ async function handleRequest(event) {
     tlsCipher: escapeForJS(cf.tlsCipher || 'N/A'),
     botScore: cf.botManagement?.score ?? 100,
     clientIp: escapeForJS(clientIp),
-    httpProtocolRaw: cf.httpProtocol || 'N/A',
+    httpProtocolRaw: escapeForJS(cf.httpProtocol || 'N/A'),
     latNum: lat,
     lonNum: lon,
-    tlsClientHelloLength: cf.tlsClientHelloLength || 0,
+    tlsClientHelloLength: safeNumber(cf.tlsClientHelloLength, 0),
     httpVersion: request.cf?.httpProtocol || 'N/A',
     tlsClientAuth: cf.tlsClientAuth?.certPresent ? 'YES' : 'NO',
     requestPriority: request.headers.get('priority') || 'N/A',
@@ -758,8 +860,8 @@ async function handleRequest(event) {
     region: escapeForJS(realGeo.regionName || cf.region || ''),
     country: escapeForJS(realGeo.country || cf.country || ''),
     countryCode: escapeForJS(realGeo.countryCode || ''),
-    lat: realGeo.lat || cf.latitude || 0,
-    lon: realGeo.lon || cf.longitude || 0,
+    lat: safeNumber(realGeo.lat, safeNumber(cf.latitude, 0)),
+    lon: safeNumber(realGeo.lon, safeNumber(cf.longitude, 0)),
     org: escapeForJS(realGeo.org || cf.asOrganization || ''),
     ip: escapeForJS(realGeo.query || clientIp)
   };
@@ -790,7 +892,7 @@ async function handleRequest(event) {
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="preconnect" href="https://cdnjs.cloudflare.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -2252,6 +2354,15 @@ async function handleRequest(event) {
                 return Math.round(R * c);
             }
 
+            function escapeHTML(value) {
+                return String(value ?? '')
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#39;');
+            }
+
             function showResult(element, html, isError = false) {
                 if (element) {
                     element.style.display = 'block';
@@ -2682,7 +2793,7 @@ async function handleRequest(event) {
                     elements.userGeoInfo.innerHTML = \`
                         <div class="info-row">
                             <span class="info-label"><i class="fas fa-city"></i> \${t.userLocation}</span>
-                            <span class="info-value">\${BACKEND_DATA.realGeoCity}, \${BACKEND_DATA.realGeoRegion}, \${BACKEND_DATA.realGeoCountry}</span>
+                            <span class="info-value">\${escapeHTML(BACKEND_DATA.realGeoCity)}, \${escapeHTML(BACKEND_DATA.realGeoRegion)}, \${escapeHTML(BACKEND_DATA.realGeoCountry)}</span>
                         </div>
                         <div class="info-row">
                             <span class="info-label"><i class="fas fa-ruler"></i> \${t.userDistance}</span>
@@ -2690,11 +2801,11 @@ async function handleRequest(event) {
                         </div>
                         <div class="info-row">
                             <span class="info-label"><i class="fas fa-building"></i> \${t.userOrg}</span>
-                            <span class="info-value">\${BACKEND_DATA.realGeoOrg}</span>
+                            <span class="info-value">\${escapeHTML(BACKEND_DATA.realGeoOrg)}</span>
                         </div>
                         <div class="info-row">
                             <span class="info-label"><i class="fas fa-ethernet"></i> \${t.userIp}</span>
-                            <span class="info-value"><code>\${BACKEND_DATA.realGeoIp}</code></span>
+                            <span class="info-value"><code>\${escapeHTML(BACKEND_DATA.realGeoIp)}</code></span>
                         </div>
                     \`;
                     loadFraudScore();
@@ -2724,7 +2835,7 @@ async function handleRequest(event) {
                     elements.userGeoInfo.innerHTML = \`
                         <div class="info-row">
                             <span class="info-label"><i class="fas fa-city"></i> \${t.userLocation}</span>
-                            <span class="info-value">\${geoData.city}, \${geoData.region}, \${geoData.country_name}</span>
+                            <span class="info-value">\${escapeHTML(geoData.city)}, \${escapeHTML(geoData.region)}, \${escapeHTML(geoData.country_name)}</span>
                         </div>
                         <div class="info-row">
                             <span class="info-label"><i class="fas fa-ruler"></i> \${t.userDistance}</span>
@@ -2732,11 +2843,11 @@ async function handleRequest(event) {
                         </div>
                         <div class="info-row">
                             <span class="info-label"><i class="fas fa-building"></i> \${t.userOrg}</span>
-                            <span class="info-value">\${geoData.org}</span>
+                            <span class="info-value">\${escapeHTML(geoData.org)}</span>
                         </div>
                         <div class="info-row">
                             <span class="info-label"><i class="fas fa-ethernet"></i> \${t.userIp}</span>
-                            <span class="info-value"><code>\${ip}</code></span>
+                            <span class="info-value"><code>\${escapeHTML(ip)}</code></span>
                         </div>
                     \`;
                     loadFraudScore();
@@ -3148,7 +3259,7 @@ async function handleRequest(event) {
                     let statusText = r.status === 'success' ? '✅' : '❌ ' + r.errorMsg;
                     let latencyText = r.latency !== null ? r.latency + ' ms' : '—';
                     let cls = r.status === 'success' ? (r.latency < 100 ? 'good' : (r.latency < 300 ? 'mid' : 'bad')) : 'bad';
-                    html += \`<tr><td>\${r.node}</td><td class="\${cls}">\${latencyText}</td><td>\${statusText}</td></tr>\`;
+                    html += \`<tr><td>\${escapeHTML(r.node)}</td><td class="\${cls}">\${latencyText}</td><td>\${escapeHTML(statusText)}</td></tr>\`;
                 });
                 html += '</tbody></table>';
                 showResult(elements.multiResult, html);
@@ -3409,13 +3520,14 @@ async function handleRequest(event) {
                         return;
                     }
                     let html = '<table class="speed-history-table"><thead><tr><th>' + i18n[currentLang].historyTitle + '</th><th>' + i18n[currentLang].historyAvgSpeed + '</th><th>' + i18n[currentLang].historyNode + '</th></tr></thead><tbody>';
-                    const maxSpeed = Math.max(...records.map(r => r.avgSpeed), 1);
+                    const maxSpeed = Math.max(...records.map(r => Number.isFinite(Number(r.avgSpeed)) ? Number(r.avgSpeed) : 0), 1);
                     records.forEach(r => {
                         const d = new Date(r.timestamp);
                         const time = d.toLocaleString('zh-CN', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' });
-                        const pct = Math.min((r.avgSpeed / maxSpeed) * 100, 100);
-                        let cls = r.avgSpeed > 50 ? 'speed-good' : (r.avgSpeed > 10 ? 'speed-mid' : 'speed-low');
-                        html += '<tr><td>' + time + '</td><td><span class="speed-bar" style="width:' + pct + 'px"></span><span class="' + cls + '">' + r.avgSpeed.toFixed(1) + ' Mbps</span></td><td>' + (r.colo || 'N/A') + '</td></tr>';
+                        const avg = Number.isFinite(Number(r.avgSpeed)) ? Number(r.avgSpeed) : 0;
+                        const pct = Math.min((avg / maxSpeed) * 100, 100);
+                        let cls = avg > 50 ? 'speed-good' : (avg > 10 ? 'speed-mid' : 'speed-low');
+                        html += '<tr><td>' + escapeHTML(time) + '</td><td><span class="speed-bar" style="width:' + pct + 'px"></span><span class="' + cls + '">' + avg.toFixed(1) + ' Mbps</span></td><td>' + escapeHTML(r.colo || 'N/A') + '</td></tr>';
                     });
                     html += '</tbody></table>';
                     panel.innerHTML = html;
@@ -3435,7 +3547,8 @@ async function handleRequest(event) {
                     const endpoints = stats.endpoints || {};
                     const entries = Object.entries(endpoints).sort((a, b) => b[1] - a[1]).slice(0, 8);
                     for (const [ep, count] of entries) {
-                        html += '<div class="usage-row"><span class="ep">' + ep + '</span><span class="count">' + count.toLocaleString() + '</span></div>';
+                        const safeCount = Number.isFinite(Number(count)) ? Number(count) : 0;
+                        html += '<div class="usage-row"><span class="ep">' + escapeHTML(ep) + '</span><span class="count">' + safeCount.toLocaleString() + '</span></div>';
                     }
                     if (entries.length === 0) {
                         html += '<div class="usage-row"><span class="ep" style="color:var(--text-quaternary)">' + i18n[currentLang].waitingFirstReq + '</span></div>';
