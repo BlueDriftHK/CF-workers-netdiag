@@ -1,1145 +1,808 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <meta name="description" content="NetSight Pro - 基于 Cloudflare Workers 的开源网络诊断工具。实时 RTT 监控、带宽测速、WebRTC 泄漏检测、TLS 指纹分析等 12 项诊断功能，免费部署，毫秒级响应。">
-    <meta property="og:title" content="NetSight Pro · 极光网络诊断">
-    <meta property="og:description" content="Cloudflare Workers 边缘诊断工具 — 12 项一键测试，实时 RTT、带宽测速、JA3/JA4 指纹、流媒体解锁检测，免费开源。">
-    <meta property="og:type" content="website">
-    <meta property="og:url" content="https://github.com/BlueDriftHK/CF-workers-netdiag">
-    <meta name="twitter:card" content="summary">
-    <meta name="twitter:title" content="NetSight Pro · 极光网络诊断">
-    <meta name="twitter:description" content="Cloudflare Workers 边缘诊断工具 — 12 项一键测试，免费开源。">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>NetSight Pro · 极光网络诊断</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700;14..32,800;14..32,900&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
     <style>
-        /* ============================================================
-           Design Tokens — 深色默认（极光玻璃拟态）
-           ============================================================ */
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        /* ===== Reset & Base ===== */
+        *,
+        *::before,
+        *::after {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
 
         :root {
-            --bg-primary: #050510;
-            --bg-orb-1: rgba(52, 211, 153, 0.18);
-            --bg-orb-2: rgba(129, 140, 248, 0.16);
-            --bg-orb-3: rgba(168, 85, 247, 0.14);
-            --bg-orb-4: rgba(34, 211, 238, 0.12);
-            --glass-bg: rgba(255, 255, 255, 0.04);
-            --glass-heavy: rgba(255, 255, 255, 0.06);
-            --glass-border: rgba(255, 255, 255, 0.08);
-            --glass-blur: blur(24px) saturate(150%);
-            --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-            --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.06);
-            --accent: #818cf8;
-            --accent-hover: #a5b4fc;
-            --accent-light: rgba(129, 140, 248, 0.10);
-            --accent-border: rgba(129, 140, 248, 0.20);
-            --success: #34d399;
-            --warning: #fbbf24;
-            --danger: #f87171;
-            --text-primary: rgba(255, 255, 255, 0.92);
-            --text-secondary: rgba(255, 255, 255, 0.60);
-            --text-tertiary: rgba(255, 255, 255, 0.38);
-            --divider: rgba(255, 255, 255, 0.06);
-            --radius-lg: 20px;
-            --radius-xl: 24px;
-            --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
-            --font-mono: 'SF Mono', 'JetBrains Mono', ui-monospace, monospace;
-            --transition: 0.35s cubic-bezier(0.25, 0.1, 0.25, 1);
-        }
-
-        [data-theme="light"] {
-            --bg-primary: #f0f2f5;
-            --bg-orb-1: rgba(52, 211, 153, 0.12);
-            --bg-orb-2: rgba(129, 140, 248, 0.10);
-            --bg-orb-3: rgba(168, 85, 247, 0.08);
-            --bg-orb-4: rgba(34, 211, 238, 0.08);
-            --glass-bg: rgba(255, 255, 255, 0.72);
-            --glass-heavy: rgba(255, 255, 255, 0.82);
-            --glass-border: rgba(0, 0, 0, 0.06);
-            --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.06);
-            --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+            --bg: #f0f4ff;
+            --bg-card: rgba(255, 255, 255, 0.70);
+            --text: #1e1b4b;
+            --text-secondary: #4b4b6b;
+            --text-muted: #8a8aaa;
             --accent: #6366f1;
             --accent-hover: #4f46e5;
-            --accent-light: rgba(99, 102, 241, 0.08);
-            --accent-border: rgba(99, 102, 241, 0.15);
-            --text-primary: #1a1a2e;
-            --text-secondary: #64748b;
-            --text-tertiary: #94a3b8;
-            --divider: rgba(0, 0, 0, 0.06);
+            --accent-glow: rgba(99, 102, 241, 0.15);
+            --border: rgba(0, 0, 0, 0.06);
+            --shadow: 0 8px 32px rgba(99, 102, 241, 0.08), 0 2px 8px rgba(0, 0, 0, 0.04);
+            --shadow-lg: 0 16px 48px rgba(99, 102, 241, 0.12), 0 4px 16px rgba(0, 0, 0, 0.06);
+            --radius: 20px;
+            --radius-sm: 12px;
+            --transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            --font: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
         }
 
-        html { scroll-behavior: smooth; -webkit-font-smoothing: antialiased; }
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg: #0a0a1a;
+                --bg-card: rgba(255, 255, 255, 0.04);
+                --text: #f0f0f5;
+                --text-secondary: #9898b0;
+                --text-muted: #5a5a72;
+                --border: rgba(255, 255, 255, 0.06);
+                --shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+                --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.4);
+                --accent: #818cf8;
+                --accent-hover: #a5b4fc;
+                --accent-glow: rgba(129, 140, 248, 0.15);
+            }
+        }
+
+        html {
+            scroll-behavior: smooth;
+            -webkit-font-smoothing: antialiased;
+        }
 
         body {
-            font-family: var(--font-sans);
-            background: var(--bg-primary);
-            min-height: 100vh;
-            padding: 28px 28px 0;
-            color: var(--text-primary);
-            transition: background 0.5s ease, color 0.4s ease;
-            overflow-x: hidden;
-            cursor: default;
+            font-family: var(--font);
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            padding: 0 24px;
+            transition: background 0.4s ease, color 0.4s ease;
         }
 
-        /* ============================================================
-           极光背景
-           ============================================================ */
-        body::before {
-            content: '';
-            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-            background:
-                linear-gradient(180deg, transparent 0%, var(--bg-orb-1) 20%, transparent 40%),
-                linear-gradient(160deg, transparent 30%, var(--bg-orb-3) 50%, transparent 70%),
-                linear-gradient(200deg, transparent 50%, var(--bg-orb-2) 70%, transparent 90%);
-            animation: auroraShift 12s ease-in-out infinite alternate;
-            filter: blur(60px);
-            pointer-events: none; z-index: 0;
-        }
-        body::after {
-            content: '';
-            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-            background:
-                radial-gradient(ellipse 80% 60% at 20% 80%, var(--bg-orb-4), transparent 60%),
-                radial-gradient(ellipse 60% 50% at 80% 20%, var(--bg-orb-2), transparent 50%);
-            animation: auroraShift 18s ease-in-out infinite alternate-reverse;
-            filter: blur(80px);
-            pointer-events: none; z-index: 0;
-        }
-        @keyframes auroraShift {
-            0%   { transform: translateY(-5%) skewX(-2deg) scaleY(1); opacity: 0.8; }
-            50%  { transform: translateY(3%) skewX(1deg) scaleY(1.1); opacity: 1; }
-            100% { transform: translateY(-2%) skewX(-1deg) scaleY(0.95); opacity: 0.7; }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 40px 20px 60px;
         }
 
-        .cursor-glow {
-            position: fixed; width: 320px; height: 320px; border-radius: 50%;
-            background: radial-gradient(circle, var(--accent-light), transparent 70%);
-            pointer-events: none; z-index: 0;
-            transform: translate(-50%, -50%);
-            transition: opacity 0.4s; opacity: 0; will-change: transform;
+        /* ===== Navigation ===== */
+        .navbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 0;
+            flex-wrap: wrap;
+            gap: 16px;
+            border-bottom: 1px solid var(--border);
         }
 
-        .container { max-width: 1150px; margin: 0 auto; position: relative; z-index: 1; }
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-weight: 700;
+            font-size: 22px;
+            letter-spacing: -0.5px;
+        }
 
-        /* ============================================================
-           头部导航
-           ============================================================ */
-        .header {
-            display: flex; justify-content: space-between; align-items: center;
-            padding: 16px 28px; margin-bottom: 40px; flex-wrap: wrap; gap: 16px;
-            background: var(--glass-heavy);
-            backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
-            border-radius: var(--radius-xl); border: 1px solid var(--glass-border);
-            box-shadow: var(--glass-shadow), var(--glass-highlight);
-            transition: all var(--transition); position: relative; overflow: hidden;
+        .logo i {
+            color: var(--accent);
+            font-size: 28px;
         }
-        .header::before {
-            content: ''; position: absolute; inset: 0;
-            background: linear-gradient(90deg, transparent, var(--accent-light), transparent);
-            opacity: 0.4; transform: translateX(-100%); animation: shimmer 6s infinite;
-        }
-        @keyframes shimmer { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
 
-        .logo { display: flex; align-items: center; gap: 14px; position: relative; z-index: 1; }
-        .logo-icon {
-            width: 48px; height: 48px; background: var(--accent); border-radius: 14px;
-            display: flex; align-items: center; justify-content: center;
-            font-size: 22px; color: #fff;
-            box-shadow: 0 4px 14px rgba(129, 140, 248, 0.3); transition: transform 0.3s;
+        .nav-links {
+            display: flex;
+            gap: 28px;
+            align-items: center;
+            flex-wrap: wrap;
         }
-        .logo:hover .logo-icon { transform: rotate(-8deg) scale(1.05); }
-        .logo h1 { font-size: 24px; font-weight: 800; letter-spacing: -0.3px; }
-        .logo p { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
 
-        .header-right { display: flex; align-items: center; gap: 12px; position: relative; z-index: 1; }
-        .theme-toggle {
-            background: var(--glass-bg); border: 1px solid var(--glass-border);
-            border-radius: 30px; padding: 8px 14px; cursor: pointer;
-            font-size: 18px; color: var(--text-secondary); transition: all 0.2s;
-            display: flex; align-items: center; gap: 6px;
+        .nav-links a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-weight: 500;
+            font-size: 15px;
+            transition: color var(--transition);
         }
-        .theme-toggle:hover { background: var(--glass-heavy); border-color: var(--accent-border); transform: scale(1.05); }
-        .github-btn {
-            display: inline-flex; align-items: center; gap: 8px;
-            padding: 9px 22px; background: var(--accent); color: #fff;
-            border-radius: 30px; font-size: 13px; font-weight: 600;
-            text-decoration: none; transition: all 0.25s;
-            box-shadow: 0 2px 12px rgba(129, 140, 248, 0.3);
-        }
-        .github-btn:hover { background: var(--accent-hover); box-shadow: 0 4px 20px rgba(129, 140, 248, 0.5); transform: translateY(-2px); }
 
-        /* ============================================================
-           Hero
-           ============================================================ */
+        .nav-links a:hover {
+            color: var(--accent);
+        }
+
+        .btn-outline {
+            padding: 8px 18px;
+            border: 1.5px solid var(--accent);
+            border-radius: 50px;
+            color: var(--accent);
+            background: transparent;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all var(--transition);
+            text-decoration: none;
+        }
+
+        .btn-outline:hover {
+            background: var(--accent);
+            color: #fff;
+            box-shadow: 0 4px 16px var(--accent-glow);
+        }
+
+        .btn-primary {
+            padding: 10px 24px;
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            border-radius: 50px;
+            font-weight: 600;
+            font-size: 15px;
+            cursor: pointer;
+            transition: all var(--transition);
+            text-decoration: none;
+            display: inline-block;
+            box-shadow: 0 4px 16px var(--accent-glow);
+        }
+
+        .btn-primary:hover {
+            background: var(--accent-hover);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px var(--accent-glow);
+        }
+
+        /* ===== Hero ===== */
         .hero {
-            position: relative; text-align: center; padding: 70px 20px 50px;
-            background: var(--glass-bg);
-            backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
-            border-radius: var(--radius-xl); border: 1px solid var(--glass-border);
-            box-shadow: var(--glass-shadow), var(--glass-highlight);
-            margin-bottom: 50px; overflow: hidden;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 60px;
+            align-items: center;
+            padding: 60px 0 40px;
         }
-        .hero::after {
-            content: ''; position: absolute; inset: -50%;
-            background: conic-gradient(from 0deg at 50% 50%, var(--accent-light), transparent 30%, transparent 70%, var(--accent-light));
-            opacity: 0.15; animation: spin 20s linear infinite; pointer-events: none;
-        }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        .hero * { position: relative; z-index: 2; }
-        .hero h2 {
-            font-size: 56px; font-weight: 900; letter-spacing: -2px; margin-bottom: 16px;
-            background: linear-gradient(135deg, var(--accent), #a78bfa, #34d399, var(--accent));
-            background-size: 300% 300%;
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-            background-clip: text; animation: gradShift 8s ease infinite;
-        }
-        @keyframes gradShift { 0%,100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
-        .hero p { font-size: 21px; color: var(--text-secondary); max-width: 680px; margin: 0 auto 28px; line-height: 1.7; }
-        .hero .badge-group { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; }
-        .hero .badge-group span {
-            background: var(--accent-light); border: 1px solid var(--accent-border);
-            padding: 8px 20px; border-radius: 40px; font-size: 14px; font-weight: 500;
-            color: var(--accent); transition: all 0.25s; cursor: default;
-        }
-        .hero .badge-group span:hover { transform: translateY(-3px); box-shadow: var(--glass-shadow); background: var(--glass-heavy); }
 
-        .license-badge {
-            display: inline-block; background: var(--accent-light); border: 1px solid var(--accent-border);
-            padding: 6px 16px; border-radius: 30px; font-size: 13px; font-weight: 600;
-            color: var(--accent); margin-bottom: 16px;
+        .hero-content h1 {
+            font-size: 48px;
+            font-weight: 800;
+            letter-spacing: -1.5px;
+            line-height: 1.1;
+            margin-bottom: 20px;
         }
-        .license-badge i { margin-right: 6px; }
 
-        /* ============================================================
-           通用动画 & 区块标题
-           ============================================================ */
-        .reveal { opacity: 0; transform: translateY(40px); transition: opacity 0.7s ease, transform 0.7s ease; }
-        .reveal.active { opacity: 1; transform: translateY(0); }
-        .reveal-delay-1 { transition-delay: 0.05s; }
-        .reveal-delay-2 { transition-delay: 0.1s; }
-        .reveal-delay-3 { transition-delay: 0.15s; }
-        .reveal-delay-4 { transition-delay: 0.2s; }
+        .hero-content h1 span {
+            background: linear-gradient(135deg, var(--accent), #a855f7);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
 
-        .section-title { font-size: 32px; font-weight: 800; margin-bottom: 12px; letter-spacing: -0.5px; display: flex; align-items: center; gap: 12px; }
-        .section-title i { color: var(--accent); font-size: 28px; }
-        .section-desc { color: var(--text-secondary); font-size: 17px; margin-bottom: 36px; max-width: 700px; line-height: 1.6; }
+        .hero-content p {
+            font-size: 18px;
+            color: var(--text-secondary);
+            max-width: 520px;
+            margin-bottom: 32px;
+        }
 
-        /* ============================================================
-           统计看板
-           ============================================================ */
-        .stats-banner { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-bottom: 56px; }
-        .stat-block {
-            background: var(--glass-bg); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
-            border-radius: var(--radius-lg); border: 1px solid var(--glass-border);
-            padding: 24px 16px; text-align: center; transition: all var(--transition);
-            box-shadow: var(--glass-highlight);
+        .hero-actions {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
         }
-        .stat-block:hover { transform: translateY(-4px); box-shadow: var(--glass-shadow); border-color: var(--accent-border); }
-        .stat-block .num { font-size: 40px; font-weight: 800; color: var(--accent); line-height: 1.1; letter-spacing: -1px; }
-        .stat-block .label { font-size: 13px; color: var(--text-secondary); margin-top: 6px; }
-        .stat-block .sub { font-size: 12px; color: var(--text-tertiary); margin-top: 4px; }
 
-        /* ============================================================
-           功能卡片
-           ============================================================ */
-        .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 28px; margin-bottom: 56px; }
-        .card {
-            background: var(--glass-bg); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
-            border-radius: var(--radius-lg); border: 1px solid var(--glass-border);
-            padding: 30px 26px; transition: all var(--transition);
-            box-shadow: var(--glass-highlight); position: relative; overflow: hidden;
+        .hero-actions .btn-primary i {
+            margin-right: 8px;
         }
-        .card::before {
-            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
-            background: linear-gradient(90deg, var(--accent), #a78bfa, transparent); opacity: 0; transition: opacity 0.4s;
-        }
-        .card:hover::before { opacity: 1; }
-        .card:hover { transform: translateY(-6px); box-shadow: var(--glass-shadow); border-color: var(--accent-border); background: var(--glass-heavy); }
-        .card i { font-size: 32px; color: var(--accent); margin-bottom: 16px; display: inline-block; transition: transform 0.3s; }
-        .card:hover i { transform: scale(1.1) rotate(-4deg); }
-        .card h3 { font-size: 19px; font-weight: 700; margin-bottom: 10px; }
-        .card p { font-size: 14px; color: var(--text-secondary); line-height: 1.7; }
-        .card .tag {
-            display: inline-block; margin-top: 16px; padding: 4px 14px;
-            background: var(--accent-light); border-radius: 30px; font-size: 11px; font-weight: 600;
-            color: var(--accent); border: 1px solid var(--accent-border); transition: all 0.2s;
-        }
-        .card:hover .tag { background: var(--accent); color: #fff; border-color: var(--accent); }
 
-        /* ============================================================
-           界面预览
-           ============================================================ */
-        .preview-section { margin-bottom: 56px; }
-        .preview-frame {
-            background: var(--glass-bg); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
-            border-radius: var(--radius-xl); border: 1px solid var(--glass-border);
-            padding: 24px 28px 32px; box-shadow: var(--glass-shadow), var(--glass-highlight); transition: all var(--transition);
+        .hero-visual {
+            display: flex;
+            justify-content: center;
+            align-items: center;
         }
-        .preview-frame:hover { border-color: var(--accent-border); }
-        .preview-frame .mockup {
-            background: var(--bg-primary); border-radius: var(--radius-lg);
-            padding: 20px; border: 1px solid var(--glass-border); position: relative; overflow: hidden;
-        }
-        .mockup .mock-header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 12px; border-bottom: 1px solid var(--divider); margin-bottom: 16px; }
-        .mockup .mock-header .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; }
-        .mockup .mock-header .dot.green { background: var(--success); }
-        .mockup .mock-header .dot.yellow { background: var(--warning); }
-        .mockup .mock-header .dot.red { background: var(--danger); }
-        .mockup .mock-row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 13px; border-bottom: 1px solid var(--divider); }
-        .mockup .mock-row:last-child { border-bottom: none; }
-        .mockup .mock-row .label { color: var(--text-secondary); }
-        .mockup .mock-row .value { font-weight: 600; color: var(--text-primary); font-family: var(--font-mono); }
-        .mockup .mock-row .value.accent { color: var(--accent); }
-        .mockup .mock-chart { height: 60px; margin: 12px 0 8px; display: flex; align-items: flex-end; gap: 4px; }
-        .mockup .mock-chart .bar { flex: 1; border-radius: 3px 3px 0 0; background: var(--accent); opacity: 0.6; height: calc(20% + (80% * var(--h))); transition: height 0.3s; }
-        .mockup .mock-chart .bar:nth-child(odd) { opacity: 0.8; }
-        .mockup .mock-chart .bar:nth-child(even) { background: #a78bfa; opacity: 0.6; }
 
-        /* ============================================================
-           使用场景
-           ============================================================ */
-        .scenes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-bottom: 56px; }
-        .scene-card {
-            background: var(--glass-bg); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
-            border-radius: var(--radius-lg); border: 1px solid var(--glass-border);
-            padding: 28px 24px; text-align: center; transition: all var(--transition); box-shadow: var(--glass-highlight);
+        .hero-visual .mockup {
+            width: 100%;
+            max-width: 520px;
+            border-radius: var(--radius);
+            background: var(--bg-card);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow-lg);
+            padding: 28px;
+            transition: transform var(--transition);
         }
-        .scene-card:hover { transform: translateY(-6px); box-shadow: var(--glass-shadow); border-color: var(--accent-border); }
-        .scene-card i { font-size: 40px; color: var(--accent); margin-bottom: 16px; }
-        .scene-card h4 { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
-        .scene-card p { font-size: 14px; color: var(--text-secondary); line-height: 1.6; }
 
-        /* ============================================================
-           技术栈
-           ============================================================ */
+        .hero-visual .mockup:hover {
+            transform: scale(1.01);
+        }
+
+        .mockup-header {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+
+        .mockup-header span {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #f87171;
+        }
+
+        .mockup-header span:nth-child(2) {
+            background: #fbbf24;
+        }
+
+        .mockup-header span:nth-child(3) {
+            background: #34d399;
+        }
+
+        .mockup-content {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .mockup-line {
+            height: 12px;
+            background: var(--border);
+            border-radius: 6px;
+            width: 100%;
+        }
+
+        .mockup-line.short {
+            width: 60%;
+        }
+
+        .mockup-line.medium {
+            width: 80%;
+        }
+
+        .mockup-line.accent {
+            background: var(--accent);
+            opacity: 0.3;
+        }
+
+        .mockup-chart {
+            display: flex;
+            align-items: flex-end;
+            gap: 6px;
+            height: 60px;
+            margin: 16px 0 8px;
+        }
+
+        .mockup-chart .bar {
+            flex: 1;
+            background: var(--accent);
+            opacity: 0.5;
+            border-radius: 4px 4px 0 0;
+            height: calc(20% + 10% * var(--h, 1));
+        }
+
+        .mockup-chart .bar:nth-child(1) {
+            --h: 4;
+        }
+        .mockup-chart .bar:nth-child(2) {
+            --h: 2;
+        }
+        .mockup-chart .bar:nth-child(3) {
+            --h: 5;
+        }
+        .mockup-chart .bar:nth-child(4) {
+            --h: 3;
+        }
+        .mockup-chart .bar:nth-child(5) {
+            --h: 6;
+        }
+        .mockup-chart .bar:nth-child(6) {
+            --h: 4;
+        }
+        .mockup-chart .bar:nth-child(7) {
+            --h: 7;
+        }
+        .mockup-chart .bar:nth-child(8) {
+            --h: 5;
+        }
+        .mockup-chart .bar:nth-child(9) {
+            --h: 3;
+        }
+        .mockup-chart .bar:nth-child(10) {
+            --h: 6;
+        }
+
+        /* ===== Sections ===== */
+        .section-title {
+            font-size: 32px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            margin-bottom: 12px;
+        }
+
+        .section-subtitle {
+            font-size: 18px;
+            color: var(--text-secondary);
+            margin-bottom: 40px;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 24px;
+            margin: 40px 0 60px;
+        }
+
+        .feature-card {
+            background: var(--bg-card);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 28px 24px;
+            box-shadow: var(--shadow);
+            transition: all var(--transition);
+        }
+
+        .feature-card:hover {
+            transform: translateY(-6px);
+            box-shadow: var(--shadow-lg);
+            border-color: var(--accent);
+        }
+
+        .feature-card .icon {
+            font-size: 32px;
+            color: var(--accent);
+            margin-bottom: 16px;
+            display: block;
+        }
+
+        .feature-card h3 {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .feature-card p {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        /* ===== Tech Stack ===== */
         .tech-stack {
-            background: var(--glass-heavy); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
-            border-radius: var(--radius-lg); border: 1px solid var(--glass-border);
-            padding: 32px 36px; margin-bottom: 56px;
-        }
-        .tech-stack .stack-items { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 20px; }
-        .tech-stack .stack-items span {
-            background: var(--glass-bg); border: 1px solid var(--glass-border);
-            padding: 8px 22px; border-radius: 40px; font-size: 14px; font-weight: 500;
-            color: var(--text-secondary); transition: all 0.25s; display: inline-flex; align-items: center; gap: 8px;
-        }
-        .tech-stack .stack-items span i { color: var(--accent); font-size: 16px; }
-        .tech-stack .stack-items span:hover { transform: translateY(-3px); box-shadow: var(--glass-shadow); border-color: var(--accent-border); background: var(--glass-heavy); }
-
-        /* ============================================================
-           API 端点
-           ============================================================ */
-        .api-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; margin-bottom: 56px; }
-        .api-item {
-            background: var(--glass-bg); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
-            border-radius: var(--radius-lg); border: 1px solid var(--glass-border);
-            padding: 20px 22px; transition: all var(--transition);
-        }
-        .api-item:hover { border-color: var(--accent-border); box-shadow: var(--glass-shadow); transform: translateY(-3px); }
-        .api-item .method {
-            display: inline-block; padding: 2px 12px; border-radius: 20px;
-            font-size: 11px; font-weight: 700; margin-bottom: 8px;
-        }
-        .api-item .method.get { background: rgba(52, 211, 153, 0.1); color: var(--success); border: 1px solid rgba(52, 211, 153, 0.2); }
-        .api-item .method.post { background: rgba(251, 191, 36, 0.1); color: var(--warning); border: 1px solid rgba(251, 191, 36, 0.2); }
-        .api-item .method.ws { background: rgba(168, 85, 247, 0.1); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.2); }
-        .api-item .path { font-family: var(--font-mono); font-size: 15px; font-weight: 600; color: var(--text-primary); }
-        .api-item .desc { font-size: 13px; color: var(--text-secondary); margin-top: 6px; }
-
-        /* ============================================================
-           架构流程
-           ============================================================ */
-        .architecture {
-            display: flex; flex-wrap: wrap; justify-content: center; gap: 12px 8px; padding: 30px 20px;
-            background: var(--glass-bg); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
-            border-radius: var(--radius-lg); border: 1px solid var(--glass-border); margin-bottom: 56px;
-        }
-        .arch-node {
-            background: var(--bg-primary); border: 1px solid var(--accent-border); border-radius: 12px;
-            padding: 10px 20px; font-size: 13px; font-weight: 600; color: var(--text-primary);
-            display: inline-flex; align-items: center; gap: 8px; transition: all 0.3s;
-        }
-        .arch-node:hover { transform: scale(1.05); box-shadow: var(--glass-shadow); border-color: var(--accent); }
-        .arch-node i { color: var(--accent); font-size: 16px; }
-        .arch-arrow { color: var(--text-tertiary); font-size: 20px; }
-
-        /* ============================================================
-           代码高亮
-           ============================================================ */
-        .code-block {
-            background: var(--glass-bg); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
-            border-radius: var(--radius-lg); border: 1px solid var(--glass-border);
-            padding: 24px 28px; margin-bottom: 56px; overflow: hidden;
-        }
-        .code-block .code-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
-        .code-block .code-header span { font-size: 14px; font-weight: 600; color: var(--text-secondary); }
-        .code-block .code-header i { color: var(--accent); }
-        .code-block pre {
-            margin: 0; border-radius: 12px; background: #0d0d1a !important;
-            padding: 16px 20px !important; font-size: 13px; line-height: 1.6; overflow-x: auto;
-            border: 1px solid var(--glass-border);
-        }
-        .code-block pre code { font-family: var(--font-mono); color: #a9dc76; }
-
-        /* ============================================================
-           部署指南
-           ============================================================ */
-        .deploy-box {
-            background: var(--glass-bg); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
-            border-radius: var(--radius-lg); border: 1px solid var(--glass-border);
-            padding: 32px 36px; margin-bottom: 56px; box-shadow: var(--glass-highlight); transition: all var(--transition);
-        }
-        .deploy-box:hover { box-shadow: var(--glass-shadow); border-color: var(--accent-border); }
-        .deploy-box ol { padding-left: 28px; color: var(--text-secondary); line-height: 2; font-size: 15px; counter-reset: step; }
-        .deploy-box ol li { list-style: none; position: relative; padding-left: 8px; counter-increment: step; }
-        .deploy-box ol li::before {
-            content: counter(step); position: absolute; left: -28px; top: 2px;
-            width: 22px; height: 22px; background: var(--accent-light); border-radius: 50%;
-            text-align: center; line-height: 22px; font-size: 12px; font-weight: 700;
-            color: var(--accent); border: 1px solid var(--accent-border);
-        }
-        .deploy-box ol li strong { color: var(--text-primary); }
-        .deploy-box code {
-            background: var(--bg-primary); padding: 2px 12px; border-radius: 6px;
-            font-size: 13px; border: 1px solid var(--glass-border); color: var(--accent); font-family: var(--font-mono);
-        }
-        .deploy-box .note {
-            margin-top: 18px; padding: 14px 20px; background: var(--accent-light);
-            border-radius: 12px; border-left: 4px solid var(--accent);
-            color: var(--text-secondary); font-size: 14px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            justify-content: center;
+            margin: 20px 0 40px;
         }
 
-        /* ============================================================
-           社区反馈
-           ============================================================ */
-        .testimonials { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-bottom: 56px; }
-        .testimonial {
-            background: var(--glass-bg); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
-            border-radius: var(--radius-lg); border: 1px solid var(--glass-border);
-            padding: 24px 22px; transition: all var(--transition); box-shadow: var(--glass-highlight);
+        .tech-badge {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 50px;
+            padding: 8px 20px;
+            font-size: 14px;
+            font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: var(--shadow);
+            transition: all var(--transition);
         }
-        .testimonial:hover { transform: translateY(-4px); box-shadow: var(--glass-shadow); border-color: var(--accent-border); }
-        .testimonial .quote { font-size: 14px; color: var(--text-secondary); line-height: 1.7; font-style: italic; }
-        .testimonial .author { display: flex; align-items: center; gap: 12px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--divider); }
-        .testimonial .author .avatar {
-            width: 36px; height: 36px; border-radius: 50%; background: var(--accent-light);
-            display: flex; align-items: center; justify-content: center;
-            font-weight: 700; color: var(--accent); font-size: 14px;
-        }
-        .testimonial .author .name { font-weight: 600; font-size: 14px; color: var(--text-primary); }
-        .testimonial .author .role { font-size: 12px; color: var(--text-tertiary); }
 
-        /* ============================================================
-           FAQ
-           ============================================================ */
-        .faq-section { margin-bottom: 56px; }
-        .faq-item {
-            background: var(--glass-bg); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
-            border-radius: var(--radius-lg); border: 1px solid var(--glass-border);
-            margin-bottom: 12px; overflow: hidden; transition: all var(--transition);
+        .tech-badge:hover {
+            transform: translateY(-2px);
+            border-color: var(--accent);
         }
-        .faq-item:hover { border-color: var(--accent-border); }
-        .faq-question {
-            width: 100%; padding: 18px 24px; background: transparent; border: none;
-            font-size: 16px; font-weight: 600; color: var(--text-primary); cursor: pointer;
-            display: flex; justify-content: space-between; align-items: center;
-            font-family: inherit; transition: background 0.2s; text-align: left;
-        }
-        .faq-question:hover { background: var(--accent-light); }
-        .faq-question i { transition: transform 0.3s; color: var(--accent); }
-        .faq-item.open .faq-question i { transform: rotate(180deg); }
-        .faq-answer { max-height: 0; overflow: hidden; transition: max-height 0.4s ease, padding 0.3s; padding: 0 24px; color: var(--text-secondary); font-size: 14px; line-height: 1.7; }
-        .faq-item.open .faq-answer { max-height: 300px; padding: 0 24px 20px; }
 
-        /* ============================================================
-           版本历史
-           ============================================================ */
-        .timeline { position: relative; padding-left: 30px; margin-bottom: 56px; }
-        .timeline::before { content: ''; position: absolute; left: 8px; top: 4px; bottom: 4px; width: 2px; background: var(--accent-border); }
-        .timeline-item { position: relative; margin-bottom: 24px; padding-left: 20px; }
-        .timeline-item::before {
-            content: ''; position: absolute; left: -22px; top: 6px;
-            width: 12px; height: 12px; border-radius: 50%;
-            background: var(--accent); border: 2px solid var(--bg-primary);
+        .tech-badge i {
+            color: var(--accent);
         }
-        .timeline-item .version { font-weight: 700; font-size: 16px; color: var(--text-primary); }
-        .timeline-item .date { font-size: 12px; color: var(--text-tertiary); margin-left: 10px; }
-        .timeline-item p { font-size: 14px; color: var(--text-secondary); margin-top: 4px; line-height: 1.6; }
 
-        /* ============================================================
-           社区 CTA
-           ============================================================ */
-        .community {
-            background: var(--glass-heavy); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
-            border-radius: var(--radius-lg); border: 1px solid var(--glass-border);
-            padding: 32px 36px; margin-bottom: 56px; text-align: center;
+        /* ===== Quick Start ===== */
+        .steps {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 24px;
+            margin: 32px 0 48px;
         }
-        .community .cta-buttons { display: flex; flex-wrap: wrap; justify-content: center; gap: 14px; margin-top: 20px; }
-        .community .cta-buttons a {
-            display: inline-flex; align-items: center; gap: 8px; padding: 10px 28px;
-            border-radius: 30px; font-size: 14px; font-weight: 600; text-decoration: none;
-            transition: all 0.25s; border: 1px solid var(--glass-border);
-            color: var(--text-primary); background: var(--glass-bg);
-        }
-        .community .cta-buttons a:hover { transform: translateY(-3px); box-shadow: var(--glass-shadow); border-color: var(--accent-border); }
-        .community .cta-buttons a.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
-        .community .cta-buttons a.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
 
-        /* ============================================================
-           底部
-           ============================================================ */
+        .step {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 24px;
+            text-align: center;
+            transition: all var(--transition);
+        }
+
+        .step:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .step .num {
+            display: inline-block;
+            width: 40px;
+            height: 40px;
+            background: var(--accent);
+            color: #fff;
+            border-radius: 50%;
+            line-height: 40px;
+            font-weight: 700;
+            font-size: 18px;
+            margin-bottom: 16px;
+        }
+
+        .step h4 {
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+
+        .step p {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        /* ===== CTA ===== */
+        .cta-section {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 48px 32px;
+            text-align: center;
+            margin: 40px 0;
+            box-shadow: var(--shadow-lg);
+        }
+
+        .cta-section h2 {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 12px;
+        }
+
+        .cta-section p {
+            color: var(--text-secondary);
+            max-width: 500px;
+            margin: 0 auto 28px;
+        }
+
+        /* ===== Footer ===== */
         .footer {
-            margin-top: 32px; padding: 20px 28px; text-align: center; font-size: 13px; color: var(--text-tertiary);
-            background: var(--glass-heavy); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
-            border-radius: var(--radius-lg); border: 1px solid var(--glass-border);
-            display: flex; justify-content: space-between; flex-wrap: wrap; gap: 14px; transition: all var(--transition);
+            border-top: 1px solid var(--border);
+            padding: 32px 0 16px;
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 20px;
+            font-size: 14px;
+            color: var(--text-muted);
         }
-        .footer a { color: var(--accent); text-decoration: none; font-weight: 500; transition: color 0.2s; }
-        .footer a:hover { text-decoration: underline; }
-        .footer .heart { color: #f87171; animation: heartBeat 1.5s infinite; display: inline-block; }
-        @keyframes heartBeat { 0%,100% { transform: scale(1); } 15% { transform: scale(1.2); } 30% { transform: scale(1); } 45% { transform: scale(1.15); } 60% { transform: scale(1); } }
-        .footer .social a { margin: 0 8px; color: var(--text-secondary); transition: color 0.2s; }
-        .footer .social a:hover { color: var(--accent); }
 
-        /* ============================================================
-           响应式
-           ============================================================ */
-        @media (max-width: 1024px) {
-            .scenes { grid-template-columns: repeat(2, 1fr); }
-            .testimonials { grid-template-columns: repeat(2, 1fr); }
+        .footer a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            transition: color var(--transition);
         }
-        @media (max-width: 768px) {
-            body { padding: 14px 14px 0; }
-            .hero h2 { font-size: 34px; }
-            .hero p { font-size: 17px; }
-            .header { flex-direction: column; text-align: center; }
-            .header-right { flex-wrap: wrap; justify-content: center; }
-            .grid-2 { grid-template-columns: 1fr; gap: 20px; }
-            .section-title { font-size: 26px; }
-            .footer { flex-direction: column; text-align: center; }
-            .code-block pre { font-size: 11px; padding: 12px 14px; }
-            .deploy-box { padding: 24px 20px; }
-            .tech-stack { padding: 24px 20px; }
-            .stats-banner { grid-template-columns: repeat(2, 1fr); }
-            .scenes { grid-template-columns: 1fr; gap: 16px; }
-            .testimonials { grid-template-columns: 1fr; }
-            .api-grid { grid-template-columns: 1fr; }
-            .architecture { flex-direction: column; align-items: center; }
-            .arch-arrow { transform: rotate(90deg); }
+
+        .footer a:hover {
+            color: var(--accent);
         }
-        @media (max-width: 480px) {
-            .stats-banner { grid-template-columns: 1fr; }
-            .hero h2 { font-size: 28px; }
+
+        .footer .socials {
+            display: flex;
+            gap: 16px;
         }
-        @media (prefers-reduced-motion: reduce) {
-            *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+
+        .footer .socials a {
+            font-size: 18px;
+        }
+
+        /* ===== Responsive ===== */
+        @media (max-width: 900px) {
+            .hero {
+                grid-template-columns: 1fr;
+                gap: 40px;
+                text-align: center;
+            }
+
+            .hero-content p {
+                margin-left: auto;
+                margin-right: auto;
+            }
+
+            .hero-actions {
+                justify-content: center;
+            }
+
+            .hero-visual .mockup {
+                max-width: 400px;
+                margin: 0 auto;
+            }
+        }
+
+        @media (max-width: 600px) {
+            body {
+                padding: 0 16px;
+            }
+            .container {
+                padding: 20px 0 40px;
+            }
+            .navbar {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .nav-links {
+                justify-content: center;
+                gap: 16px;
+            }
+            .hero-content h1 {
+                font-size: 32px;
+            }
+            .section-title {
+                font-size: 26px;
+            }
+            .steps {
+                grid-template-columns: 1fr;
+            }
+            .features-grid {
+                grid-template-columns: 1fr;
+            }
+            .cta-section {
+                padding: 32px 20px;
+            }
+            .footer {
+                flex-direction: column;
+                align-items: center;
+                text-align: center;
+            }
         }
     </style>
 </head>
 <body>
-    <!-- 鼠标跟随光晕 -->
-    <div class="cursor-glow" id="cursorGlow"></div>
 
     <div class="container">
-        <!-- ===== 头部 ===== -->
-        <header class="header">
+
+        <!-- ===== Navigation ===== -->
+        <nav class="navbar">
             <div class="logo">
-                <div class="logo-icon"><i class="fas fa-satellite-dish"></i></div>
-                <div>
-                    <h1>NetSight Pro</h1>
-                    <p><i class="fas fa-bolt"></i> 极光诊断 · 边缘网络分析</p>
-                </div>
+                <i class="fas fa-network-wired"></i>
+                <span>NetSight Pro</span>
             </div>
-            <div class="header-right">
-                <button class="theme-toggle" id="themeToggle" title="切换主题">
-                    <i class="fas fa-moon"></i>
-                </button>
-                <a href="https://github.com/BlueDriftHK/CF-workers-netdiag" class="github-btn" target="_blank">
-                    <i class="fas fa-rocket"></i> 在线体验
-                </a>
-                <a href="https://github.com/BlueDriftHK/CF-workers-netdiag" target="_blank" class="github-btn">
-                    <i class="fab fa-github"></i> GitHub
+            <div class="nav-links">
+                <a href="#features">特性</a>
+                <a href="#quickstart">快速部署</a>
+                <a href="https://github.com/BlueDriftHK/CF-workers-netdiag" target="_blank">GitHub</a>
+                <a href="https://github.com/BlueDriftHK/CF-workers-netdiag/blob/main/README.md" target="_blank">文档</a>
+                <a href="https://github.com/BlueDriftHK/CF-workers-netdiag/issues" target="_blank" class="btn-outline">
+                    <i class="fas fa-bug"></i> 反馈
                 </a>
             </div>
-        </header>
+        </nav>
 
         <!-- ===== Hero ===== -->
         <section class="hero">
-            <span class="license-badge"><i class="fas fa-balance-scale"></i> AGPL-3.0 License</span>
-            <h2>网络诊断，极光之美</h2>
-            <p>基于 Cloudflare Workers 构建的轻量级网络工具，集实时监控、安全检测、多节点对比于一体，为开发者和运维人员提供毫秒级边缘诊断体验。</p>
-            <div class="badge-group">
-                <span><i class="fas fa-bolt"></i> 实时 RTT</span>
-                <span><i class="fas fa-shield-alt"></i> 安全协议检测</span>
-                <span><i class="fas fa-user-secret"></i> IP 欺诈评分</span>
-                <span><i class="fas fa-globe-asia"></i> 多节点对比</span>
-                <span><i class="fas fa-chart-line"></i> 历史统计</span>
+            <div class="hero-content">
+                <h1>网络诊断<br />如<span>极光</span>般绚丽高效</h1>
+                <p>
+                    NetSight Pro 是一款部署在 Cloudflare Workers 上的全功能网络诊断工具，
+                    提供实时延迟监控、带宽测速、CPU 性能、WebSocket 延迟、TTFB 分析、WebRTC 泄漏检测等
+                    <strong>20+ 项诊断能力</strong>。
+                </p>
+                <div class="hero-actions">
+                    <a href="https://github.com/BlueDriftHK/CF-workers-netdiag#-快速部署3-分钟" target="_blank" class="btn-primary">
+                        <i class="fas fa-rocket"></i> 部署到 Cloudflare
+                    </a>
+                    <a href="https://github.com/BlueDriftHK/CF-workers-netdiag" target="_blank" class="btn-outline" style="padding:10px 24px;">
+                        <i class="fab fa-github"></i> 查看源码
+                    </a>
+                </div>
+            </div>
+            <div class="hero-visual">
+                <div class="mockup">
+                    <div class="mockup-header">
+                        <span></span><span></span><span></span>
+                    </div>
+                    <div class="mockup-content">
+                        <div class="mockup-line" style="width:40%;"></div>
+                        <div class="mockup-line short"></div>
+                        <div class="mockup-line medium"></div>
+                        <div class="mockup-chart">
+                            <div class="bar"></div><div class="bar"></div><div class="bar"></div>
+                            <div class="bar"></div><div class="bar"></div><div class="bar"></div>
+                            <div class="bar"></div><div class="bar"></div><div class="bar"></div>
+                            <div class="bar"></div>
+                        </div>
+                        <div class="mockup-line accent" style="width:70%;"></div>
+                        <div class="mockup-line" style="width:55%;"></div>
+                    </div>
+                </div>
             </div>
         </section>
 
-        <!-- ===== 项目统计看板 ===== -->
-        <div class="stats-banner reveal">
-            <div class="stat-block">
-                <div class="num" id="starsCount">--</div>
-                <div class="label"><i class="fab fa-github"></i> GitHub Stars</div>
-                <div class="sub">来自开发者的认可</div>
-            </div>
-            <div class="stat-block">
-                <div class="num" id="forksCount">--</div>
-                <div class="label"><i class="fas fa-code-branch"></i> Forks</div>
-                <div class="sub">社区贡献与衍生</div>
-            </div>
-            <div class="stat-block">
-                <div class="num" id="toolsCount">0</div>
-                <div class="label"><i class="fas fa-flask"></i> 诊断工具</div>
-                <div class="sub">一键测试全覆盖</div>
-            </div>
-            <div class="stat-block">
-                <div class="num" id="langsCount">0</div>
-                <div class="label"><i class="fas fa-language"></i> 界面语言</div>
-                <div class="sub">自动识别设备语言</div>
-            </div>
-        </div>
+        <!-- ===== Features ===== -->
+        <section id="features">
+            <h2 class="section-title">⚡ 特性一览</h2>
+            <p class="section-subtitle">一站式网络诊断，覆盖从链路质量到安全协议的全方位检测。</p>
 
-        <!-- ===== 核心功能 ===== -->
-        <div class="reveal">
-            <h2 class="section-title"><i class="fas fa-star"></i> 核心功能</h2>
-            <p class="section-desc">从延迟监控到 TLS 指纹分析，12 项一站式诊断工具，所有测试均在边缘执行，毫秒级响应。</p>
-        </div>
-        <div class="grid-2">
-            <div class="card reveal reveal-delay-1">
-                <i class="fas fa-wave-square"></i>
-                <h3>实时 RTT 监控</h3>
-                <p>每 2 秒自动探测延迟，绘制动态曲线图，同时计算抖动、丢包率，并提供网络质量评级。</p>
-                <span class="tag">Canvas 图表</span>
-            </div>
-            <div class="card reveal reveal-delay-2">
-                <i class="fas fa-lock"></i>
-                <h3>安全与协议检测</h3>
-                <p>显示 TLS 版本、加密套件、ECH 状态、HTTP/2/3 支持、压缩算法、机器人评分以及 JA3/JA4 TLS 客户端指纹。</p>
-                <span class="tag">TLS · JA3/JA4</span>
-            </div>
-            <div class="card reveal reveal-delay-3">
-                <i class="fas fa-map-pin"></i>
-                <h3>边缘 & 客户端定位</h3>
-                <p>展示 Cloudflare 边缘节点位置，同时通过 ipapi.co 获取客户端真实地理位置并计算到节点距离。</p>
-                <span class="tag">地理位置</span>
-            </div>
-            <div class="card reveal reveal-delay-4">
-                <i class="fas fa-user-secret"></i>
-                <h3>IP 欺诈评分</h3>
-                <p>调用 Scamalytics API 评估 IP 风险（代理/VPN/Tor/托管标记），识别异常流量来源。</p>
-                <span class="tag">风险等级</span>
-            </div>
-            <div class="card reveal reveal-delay-1">
-                <i class="fas fa-flask"></i>
-                <h3>一键诊断工具集</h3>
-                <p>包含丢包率、带宽测速、DNS 解析、CPU 性能、WebSocket 延迟、并发请求、流式吞吐量、流媒体连通性、WebRTC 泄漏检测等 12 项测试。</p>
-                <span class="tag">12 合 1</span>
-            </div>
-            <div class="card reveal reveal-delay-2">
-                <i class="fas fa-globe-asia"></i>
-                <h3>多节点对比</h3>
-                <p>同时测试多个 Worker 节点的延迟，以表格形式直观对比，便于评估全球网络性能。</p>
-                <span class="tag">并行测试</span>
-            </div>
-            <div class="card reveal reveal-delay-3">
-                <i class="fas fa-chart-line"></i>
-                <h3>测速历史 & 用量统计</h3>
-                <p>带宽测速记录自动保存至 KV 存储，并统计各 API 端点调用次数，方便追踪使用情况。</p>
-                <span class="tag">KV 持久化</span>
-            </div>
-            <div class="card reveal reveal-delay-4">
-                <i class="fas fa-palette"></i>
-                <h3>极光玻璃拟态 UI</h3>
-                <p>深空黑底色 + 流动极光色带，玻璃拟态卡片，深色/浅色/自动三模式，中/英/繁三语自动切换。</p>
-                <span class="tag">Aurora · i18n</span>
-            </div>
-        </div>
-
-        <!-- ===== 界面预览 ===== -->
-        <div class="preview-section reveal">
-            <h2 class="section-title"><i class="fas fa-desktop"></i> 界面预览</h2>
-            <p class="section-desc">极光背景 + 玻璃拟态卡片，让网络状态一目了然。</p>
-            <div class="preview-frame">
-                <div class="mockup">
-                    <div class="mock-header">
-                        <div>
-                            <span class="dot green"></span>
-                            <span class="dot yellow"></span>
-                            <span class="dot red"></span>
-                        </div>
-                        <span style="font-size:12px;color:var(--text-tertiary);">NetSight Pro · 实时监控</span>
-                    </div>
-                    <div class="mock-row">
-                        <span class="label">当前 RTT</span>
-                        <span class="value accent" id="previewRtt">23 ms</span>
-                    </div>
-                    <div class="mock-row">
-                        <span class="label">抖动</span>
-                        <span class="value" id="previewJitter">4.2 ms</span>
-                    </div>
-                    <div class="mock-row">
-                        <span class="label">丢包率</span>
-                        <span class="value" style="color:var(--success);">0.0%</span>
-                    </div>
-                    <div class="mock-chart" id="mockChart">
-                        <div class="bar" style="--h:0.3"></div>
-                        <div class="bar" style="--h:0.6"></div>
-                        <div class="bar" style="--h:0.8"></div>
-                        <div class="bar" style="--h:0.5"></div>
-                        <div class="bar" style="--h:0.9"></div>
-                        <div class="bar" style="--h:0.7"></div>
-                        <div class="bar" style="--h:0.4"></div>
-                        <div class="bar" style="--h:0.85"></div>
-                        <div class="bar" style="--h:0.6"></div>
-                        <div class="bar" style="--h:0.3"></div>
-                        <div class="bar" style="--h:0.75"></div>
-                        <div class="bar" style="--h:0.5"></div>
-                        <div class="bar" style="--h:0.9"></div>
-                        <div class="bar" style="--h:0.4"></div>
-                        <div class="bar" style="--h:0.7"></div>
-                    </div>
-                    <div class="mock-row" style="border-top:1px solid var(--divider);padding-top:12px;margin-top:4px;">
-                        <span class="label">边缘节点</span>
-                        <span class="value">NRT (东京)</span>
-                    </div>
-                    <div class="mock-row">
-                        <span class="label">到节点距离</span>
-                        <span class="value accent">1,247 km</span>
-                    </div>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <span class="icon"><i class="fas fa-wave-square"></i></span>
+                    <h3>实时 RTT 监控</h3>
+                    <p>每 2 秒发送 HEAD 请求，绘制延迟趋势图，计算抖动、丢包率，自动评估连接质量。</p>
+                </div>
+                <div class="feature-card">
+                    <span class="icon"><i class="fas fa-gauge-high"></i></span>
+                    <h3>带宽测速（下载/上传）</h3>
+                    <p>多档位下载和上传测试，计算平均速度，直观反映网络吞吐能力。</p>
+                </div>
+                <div class="feature-card">
+                    <span class="icon"><i class="fas fa-microchip"></i></span>
+                    <h3>CPU 基准测试</h3>
+                    <p>执行密集型数学运算，评估 Worker 或客户端设备的计算性能。</p>
+                </div>
+                <div class="feature-card">
+                    <span class="icon"><i class="fas fa-bolt"></i></span>
+                    <h3>WebSocket 延迟</h3>
+                    <p>建立双向 WebSocket 连接，进行 ping/pong 测距，反映实时双向通信延迟。</p>
+                </div>
+                <div class="feature-card">
+                    <span class="icon"><i class="fas fa-layer-group"></i></span>
+                    <h3>并发下载测试</h3>
+                    <p>模拟多路并发请求，检测网络在多连接场景下的吞吐表现。</p>
+                </div>
+                <div class="feature-card">
+                    <span class="icon"><i class="fas fa-stream"></i></span>
+                    <h3>流式传输吞吐量</h3>
+                    <p>流式读取大文件（最大 10MB），测试长连接下的稳定传输速率。</p>
+                </div>
+                <div class="feature-card">
+                    <span class="icon"><i class="fas fa-stopwatch"></i></span>
+                    <h3>TTFB 分阶段分析</h3>
+                    <p>分解 DNS、TCP、TLS、等待、下载各阶段耗时，精确定位性能瓶颈。</p>
+                </div>
+                <div class="feature-card">
+                    <span class="icon"><i class="fas fa-shield-halved"></i></span>
+                    <h3>安全与协议检测</h3>
+                    <p>显示 TLS 版本、加密套件、HTTP/2/3 支持、ECH 状态、JA3/JA4 指纹、机器人评分。</p>
+                </div>
+                <div class="feature-card">
+                    <span class="icon"><i class="fas fa-globe"></i></span>
+                    <h3>双栈 IP 与地理位置</h3>
+                    <p>同时获取 IPv4 和 IPv6，通过 ipapi.co 获取客户端真实地理位置及到边缘节点的距离。</p>
+                </div>
+                <div class="feature-card">
+                    <span class="icon"><i class="fas fa-user-secret"></i></span>
+                    <h3>IP 欺诈评分</h3>
+                    <p>集成 Scamalytics API，检测 IP 是否为代理/VPN/Tor/托管，并给出风险等级。</p>
+                </div>
+                <div class="feature-card">
+                    <span class="icon"><i class="fas fa-user-shield"></i></span>
+                    <h3>WebRTC 泄漏检测</h3>
+                    <p>检测本地和公网 IP 是否通过 WebRTC 泄露，保护隐私安全。</p>
+                </div>
+                <div class="feature-card">
+                    <span class="icon"><i class="fas fa-play-circle"></i></span>
+                    <h3>流媒体连通性</h3>
+                    <p>检测 Netflix、Disney+、YouTube、ChatGPT 等服务的可达性。</p>
+                </div>
+                <div class="feature-card">
+                    <span class="icon"><i class="fas fa-globe-asia"></i></span>
+                    <h3>多节点对比</h3>
+                    <p>输入其他 Worker 节点 URL，并行测试延迟，生成直观对比表格。</p>
+                </div>
+                <div class="feature-card">
+                    <span class="icon"><i class="fas fa-history"></i></span>
+                    <h3>测速历史与用量统计</h3>
+                    <p>存储最近测速记录，展示 API 端点调用统计（需 KV 支持）。</p>
+                </div>
+                <div class="feature-card">
+                    <span class="icon"><i class="fas fa-copy"></i></span>
+                    <h3>一键生成诊断报告</h3>
+                    <p>复制纯文本报告，包含所有关键指标，便于分享和存档。</p>
+                </div>
+                <div class="feature-card">
+                    <span class="icon"><i class="fas fa-language"></i></span>
+                    <h3>多语言与主题</h3>
+                    <p>支持 English、简体中文、繁體中文，深色/浅色/跟随系统主题，自动适配。</p>
                 </div>
             </div>
-        </div>
+        </section>
 
-        <!-- ===== 使用场景 ===== -->
-        <div class="reveal">
-            <h2 class="section-title"><i class="fas fa-users"></i> 适用场景</h2>
-            <p class="section-desc">无论您是开发者、运维工程师还是普通用户，NetSight Pro 都能为您提供价值。</p>
-        </div>
-        <div class="scenes reveal">
-            <div class="scene-card">
-                <i class="fas fa-code"></i>
-                <h4>开发调试</h4>
-                <p>快速验证 API 延迟、CDN 效果，排查网络瓶颈，提升应用性能。</p>
+        <!-- ===== Tech Stack ===== -->
+        <section>
+            <h2 class="section-title">🛠️ 技术栈</h2>
+            <div class="tech-stack">
+                <span class="tech-badge"><i class="fab fa-cloudflare"></i> Cloudflare Workers</span>
+                <span class="tech-badge"><i class="fas fa-code"></i> JavaScript (ES2020)</span>
+                <span class="tech-badge"><i class="fas fa-database"></i> KV (可选)</span>
+                <span class="tech-badge"><i class="fab fa-html5"></i> HTML5 + CSS3</span>
+                <span class="tech-badge"><i class="fas fa-paint-brush"></i> 毛玻璃设计</span>
+                <span class="tech-badge"><i class="fas fa-chart-line"></i> Canvas 图表</span>
+                <span class="tech-badge"><i class="fas fa-plug"></i> WebSocket</span>
+                <span class="tech-badge"><i class="fas fa-shield-alt"></i> 安全头 + CSP</span>
             </div>
-            <div class="scene-card">
-                <i class="fas fa-server"></i>
-                <h4>运维监控</h4>
-                <p>实时监控边缘节点状态，检测异常波动，保障服务稳定性。</p>
-            </div>
-            <div class="scene-card">
-                <i class="fas fa-user-check"></i>
-                <h4>用户体验优化</h4>
-                <p>分析用户真实网络质量，评估流媒体连通性，优化全球访问体验。</p>
-            </div>
-        </div>
+        </section>
 
-        <!-- ===== 技术栈 ===== -->
-        <div class="tech-stack reveal">
-            <h3 style="font-size: 22px; font-weight: 700; margin-bottom: 4px; display: flex; align-items: center; gap: 10px;">
-                <i class="fas fa-cogs" style="color: var(--accent);"></i> 技术栈
-            </h3>
-            <p style="color: var(--text-secondary); font-size: 15px;">纯前端 + Cloudflare Workers 边缘计算，零依赖单文件架构</p>
-            <div class="stack-items">
-                <span><i class="fab fa-cloudflare"></i> Cloudflare Workers</span>
-                <span><i class="fas fa-database"></i> KV 存储</span>
-                <span><i class="fas fa-code"></i> Vanilla JS (ES2022)</span>
-                <span><i class="fas fa-css3-alt"></i> CSS 设计令牌</span>
-                <span><i class="fas fa-chart-simple"></i> Canvas API</span>
-                <span><i class="fas fa-plug"></i> WebSocket</span>
-                <span><i class="fas fa-wind"></i> backdrop-filter</span>
-                <span><i class="fab fa-font-awesome"></i> Font Awesome</span>
-                <span><i class="fas fa-shield-alt"></i> CSP · HSTS</span>
-            </div>
-        </div>
+        <!-- ===== Quick Start ===== -->
+        <section id="quickstart">
+            <h2 class="section-title">🚀 快速部署</h2>
+            <p class="section-subtitle">3 分钟即可拥有自己的网络诊断服务。</p>
 
-        <!-- ===== API 端点文档 ===== -->
-        <div class="reveal">
-            <h2 class="section-title"><i class="fas fa-code"></i> API 端点</h2>
-            <p class="section-desc">所有接口均支持 CORS，方便集成到您自己的工具链中。</p>
-        </div>
-        <div class="api-grid reveal">
-            <div class="api-item">
-                <span class="method get">GET</span>
-                <div class="path">/health</div>
-                <div class="desc">健康检查，返回 Worker 状态与版本信息</div>
-            </div>
-            <div class="api-item">
-                <span class="method get">GET</span>
-                <div class="path">/speedtest</div>
-                <div class="desc">带宽测速，支持指定文件大小（?size=bytes）</div>
-            </div>
-            <div class="api-item">
-                <span class="method get">GET</span>
-                <div class="path">/cpu-test</div>
-                <div class="desc">CPU 性能基准测试，返回操作/毫秒</div>
-            </div>
-            <div class="api-item">
-                <span class="method ws">WebSocket</span>
-                <div class="path">/ws-test</div>
-                <div class="desc">WebSocket 延迟测试，支持 ping/pong 消息</div>
-            </div>
-            <div class="api-item">
-                <span class="method get">GET</span>
-                <div class="path">/concurrent-test</div>
-                <div class="desc">并发请求测试，模拟多路并发下载</div>
-            </div>
-            <div class="api-item">
-                <span class="method get">GET</span>
-                <div class="path">/stream-test</div>
-                <div class="desc">大文件流式传输，测试吞吐量</div>
-            </div>
-            <div class="api-item">
-                <span class="method get">GET</span>
-                <div class="path">/api/ip-fraud</div>
-                <div class="desc">IP 欺诈评分（代理/VPN/Tor 检测）</div>
-            </div>
-            <div class="api-item">
-                <span class="method post">POST</span>
-                <div class="path">/api/log-speed</div>
-                <div class="desc">记录测速结果到 KV 存储</div>
-            </div>
-            <div class="api-item">
-                <span class="method get">GET</span>
-                <div class="path">/dns-proxy</div>
-                <div class="desc">DNS 代理测试，仅允许白名单域名</div>
-            </div>
-        </div>
-
-        <!-- ===== 架构流程 ===== -->
-        <div class="reveal">
-            <h2 class="section-title"><i class="fas fa-sitemap"></i> 项目架构</h2>
-            <p class="section-desc">请求如何在边缘节点中流转，每一步都经过精心设计。</p>
-        </div>
-        <div class="architecture reveal">
-            <span class="arch-node"><i class="fas fa-globe"></i> 客户端</span>
-            <span class="arch-arrow"><i class="fas fa-arrow-right"></i></span>
-            <span class="arch-node"><i class="fas fa-shield-alt"></i> 限流 & 安全</span>
-            <span class="arch-arrow"><i class="fas fa-arrow-right"></i></span>
-            <span class="arch-node"><i class="fas fa-route"></i> 路由解析</span>
-            <span class="arch-arrow"><i class="fas fa-arrow-right"></i></span>
-            <span class="arch-node"><i class="fas fa-bolt"></i> 诊断引擎</span>
-            <span class="arch-arrow"><i class="fas fa-arrow-right"></i></span>
-            <span class="arch-node"><i class="fas fa-database"></i> KV 存储</span>
-            <span class="arch-arrow"><i class="fas fa-arrow-right"></i></span>
-            <span class="arch-node"><i class="fas fa-chart-simple"></i> 响应返回</span>
-        </div>
-
-        <!-- ===== 代码高亮 ===== -->
-        <div class="code-block reveal">
-            <div class="code-header">
-                <span><i class="fas fa-code"></i> 核心路由示例 (Worker 端)</span>
-                <span style="font-size: 12px; background: var(--accent-light); padding: 2px 12px; border-radius: 20px; color: var(--accent);">_workers.js</span>
-            </div>
-            <pre><code>// 带宽测速端点 — 生成指定大小的随机数据流
-if (url.pathname === '/speedtest') {
-    const size = Math.min(parseInt(url.searchParams.get('size')) || 102400, 5242880);
-    const stream = new ReadableStream({
-        start(controller) {
-            const chunk = crypto.getRandomValues(new Uint8Array(Math.min(size, 65536)));
-            let sent = 0;
-            while (sent < size) { controller.enqueue(chunk); sent += chunk.length; }
-            controller.close();
-        }
-    });
-    return new Response(stream, { headers: { 'Content-Type': 'application/octet-stream' } });
-}
-
-// WebSocket 延迟测试 (ping/pong)
-const [client, server] = Object.values(new WebSocketPair());
-server.accept();
-server.addEventListener('message', event => {
-    const msg = JSON.parse(event.data);
-    if (msg.type === 'ping')
-        server.send(JSON.stringify({ type: 'pong', t: msg.t }));
-});
-return new Response(null, { status: 101, webSocket: client });</code></pre>
-        </div>
-
-        <!-- ===== 部署指南 ===== -->
-        <div class="deploy-box reveal">
-            <h3 style="font-size: 22px; font-weight: 700; margin-bottom: 16px; display: flex; align-items: center; gap: 12px;">
-                <i class="fas fa-rocket" style="color: var(--accent);"></i> 快速部署
-            </h3>
-            <ol>
-                <li><strong>克隆仓库：</strong> <code>git clone https://github.com/BlueDriftHK/CF-workers-netdiag.git</code></li>
-                <li><strong>登录 Cloudflare：</strong> 安装 Wrangler CLI 并执行 <code>wrangler login</code></li>
-                <li><strong>创建 KV 命名空间：</strong> <code>wrangler kv:namespace create "SPEED_HISTORY"</code></li>
-                <li><strong>绑定 KV 到 Worker：</strong> 在 <code>wrangler.toml</code> 中配置 <code>kv_namespaces</code></li>
-                <li><strong>部署 Worker：</strong> <code>wrangler deploy --main _workers.js</code></li>
-                <li><strong>访问：</strong> 浏览器打开您的 Worker 域名，立即体验。</li>
-            </ol>
-            <div class="note">
-                <i class="fas fa-info-circle" style="color: var(--accent); margin-right: 8px;"></i>
-                详细配置请参考项目 README，支持自定义限流阈值、白名单域名、CORS 策略等。也可点击一键部署按钮直接上线。
-            </div>
-        </div>
-
-        <!-- ===== 社区反馈 ===== -->
-        <div class="reveal">
-            <h2 class="section-title"><i class="fas fa-comment-dots"></i> 社区反馈</h2>
-            <p class="section-desc">遇到问题或有建议？欢迎在 GitHub 上与我们交流。</p>
-        </div>
-        <div class="testimonials reveal">
-            <div class="testimonial">
-                <div class="quote">"部署只需 5 分钟，免费额度完全够个人使用。RTT 监控和流媒体检测是我最常用的功能。"</div>
-                <div class="author">
-                    <div class="avatar"><i class="fab fa-github"></i></div>
-                    <div>
-                        <div class="name">来自 GitHub 用户</div>
-                        <div class="role"><a href="https://github.com/BlueDriftHK/CF-workers-netdiag/issues" target="_blank" style="color:var(--accent);">查看更多反馈 →</a></div>
-                    </div>
+            <div class="steps">
+                <div class="step">
+                    <div class="num">1</div>
+                    <h4>克隆仓库</h4>
+                    <p><code>git clone https://github.com/BlueDriftHK/CF-workers-netdiag.git</code></p>
+                </div>
+                <div class="step">
+                    <div class="num">2</div>
+                    <h4>安装 Wrangler</h4>
+                    <p><code>npm install -g wrangler</code></p>
+                </div>
+                <div class="step">
+                    <div class="num">3</div>
+                    <h4>配置 KV（可选）</h4>
+                    <p><code>wrangler kv:namespace create "SPEED_HISTORY"</code></p>
+                </div>
+                <div class="step">
+                    <div class="num">4</div>
+                    <h4>发布</h4>
+                    <p><code>wrangler publish</code></p>
                 </div>
             </div>
-            <div class="testimonial">
-                <div class="quote">"极光玻璃拟态 UI 太好看了，深色模式下跑诊断有种赛博朋克的感觉。"</div>
-                <div class="author">
-                    <div class="avatar"><i class="fas fa-star"></i></div>
-                    <div>
-                        <div class="name">社区用户</div>
-                        <div class="role">v4.2 极光 UI 更新后</div>
-                    </div>
-                </div>
-            </div>
-            <div class="testimonial">
-                <div class="quote">"多节点对比功能帮我快速定位了跨区域延迟问题，省去了自己写脚本的麻烦。"</div>
-                <div class="author">
-                    <div class="avatar"><i class="fas fa-server"></i></div>
-                    <div>
-                        <div class="name">运维工程师</div>
-                        <div class="role">多节点对比用户</div>
-                    </div>
-                </div>
-            </div>
-        </div>
 
-        <!-- ===== FAQ ===== -->
-        <div class="faq-section reveal">
-            <h2 class="section-title"><i class="fas fa-question-circle"></i> 常见问题</h2>
-            <div class="faq-item">
-                <button class="faq-question">
-                    <span>NetSight Pro 需要付费吗？</span>
-                    <i class="fas fa-chevron-down"></i>
-                </button>
-                <div class="faq-answer">完全免费！NetSight Pro 是一个开源项目，您可以在 Cloudflare Workers 免费额度内部署和使用，无需任何费用。</div>
+            <div style="text-align: center;">
+                <a href="https://github.com/BlueDriftHK/CF-workers-netdiag#-详细部署步骤" target="_blank" class="btn-primary">
+                    <i class="fas fa-book"></i> 查看完整部署指南
+                </a>
             </div>
-            <div class="faq-item">
-                <button class="faq-question">
-                    <span>我可以自定义测速节点吗？</span>
-                    <i class="fas fa-chevron-down"></i>
-                </button>
-                <div class="faq-answer">当然可以。您可以通过修改 Worker 代码中的节点列表或通过环境变量配置，轻松添加或移除测速节点。所有被测试的节点都需要部署相同或兼容版本的 NetSight Pro。</div>
-            </div>
-            <div class="faq-item">
-                <button class="faq-question">
-                    <span>数据存储在哪里？是否安全？</span>
-                    <i class="fas fa-chevron-down"></i>
-                </button>
-                <div class="faq-answer">测速历史和用量统计存储在 Cloudflare KV 中，数据经过加密传输，且不会对外泄露。每条记录 TTL 为 7 天，最多保留 5 条，超出自动清理。</div>
-            </div>
-            <div class="faq-item">
-                <button class="faq-question">
-                    <span>玻璃拟态效果在某些浏览器不生效？</span>
-                    <i class="fas fa-chevron-down"></i>
-                </button>
-                <div class="faq-answer">Firefox 103 以下版本不支持 backdrop-filter，卡片会降级为半透明纯色背景，不影响功能使用。确保浏览器未禁用硬件加速即可获得最佳视觉效果。</div>
-            </div>
-            <div class="faq-item">
-                <button class="faq-question">
-                    <span>如何贡献代码或报告问题？</span>
-                    <i class="fas fa-chevron-down"></i>
-                </button>
-                <div class="faq-answer">欢迎通过 GitHub 提交 Issue 或 Pull Request。项目地址：<a href="https://github.com/BlueDriftHK/CF-workers-netdiag" target="_blank" style="color:var(--accent);">CF-workers-netdiag</a>，详见 CONTRIBUTING.md。</div>
-            </div>
-        </div>
+        </section>
 
-        <!-- ===== 版本历史 ===== -->
-        <div class="reveal">
-            <h2 class="section-title"><i class="fas fa-history"></i> 版本历史</h2>
-        </div>
-        <div class="timeline reveal">
-            <div class="timeline-item">
-                <span class="version">v4.2</span>
-                <span class="date">2026-07-25</span>
-                <p>全新极光玻璃拟态 UI（Aurora Glassmorphism）；深空黑 + 流动色带背景；三档响应式断点；21 项代码审查修复；主题方案反转（深色默认）。</p>
-            </div>
-            <div class="timeline-item">
-                <span class="version">v4.1</span>
-                <span class="date">2026-07-07</span>
-                <p>全界面国际化覆盖（中/英/繁）；新增 WebRTC 泄漏检测、TTFB 分析、JA3/JA4 TLS 指纹；设备语言自动识别。</p>
-            </div>
-            <div class="timeline-item">
-                <span class="version">v4.0</span>
-                <span class="date">2026-07-06</span>
-                <p>新增多节点对比、流媒体连通性检测、IP 欺诈评分端点；自动主题切换；KV 存储历史记录。</p>
-            </div>
-            <div class="timeline-item">
-                <span class="version">v3.6</span>
-                <span class="date">2026-07-04</span>
-                <p>测速历史记录功能；用量统计面板；DNS 代理路由修复；CPU 独立限流；KV 自动清理。</p>
-            </div>
-            <div class="timeline-item">
-                <span class="version">v3.0</span>
-                <span class="date">2026-05-10</span>
-                <p>实时延迟监控模块；Canvas 趋势图表；多档位带宽测速；WebSocket 延迟测试；IP 地理位置查询。</p>
-            </div>
-            <div class="timeline-item">
-                <span class="version">v1.0</span>
-                <span class="date">2026-05-01</span>
-                <p>首个正式版本，包含基础 IP 地址检测与地区验证。</p>
-            </div>
-        </div>
-
-        <!-- ===== 贡献者 / 社区 ===== -->
-        <div class="community reveal">
-            <h3 style="font-size: 24px; font-weight: 700; margin-bottom: 8px;">
-                <i class="fas fa-handshake" style="color: var(--accent);"></i> 加入社区
-            </h3>
-            <p style="color: var(--text-secondary); font-size: 15px; max-width: 600px; margin: 0 auto;">
-                NetSight Pro 是一个由社区驱动的开源项目，基于 <strong>AGPL-3.0</strong> 许可证发布。
-                欢迎 Star、Fork、提交 PR 或分享您的使用故事。
+        <!-- ===== CTA ===== -->
+        <div class="cta-section">
+            <h2>❤️ 加入社区</h2>
+            <p>
+                NetSight Pro 是开源项目，欢迎贡献代码、报告问题或提出建议。
+                让我们一起让网络诊断变得更简单、更强大。
             </p>
-            <div class="cta-buttons">
-                <a href="https://github.com/BlueDriftHK/CF-workers-netdiag" target="_blank" class="primary">
-                    <i class="fab fa-github"></i> GitHub 仓库
+            <div style="display: flex; gap: 16px; justify-content: center; flex-wrap: wrap;">
+                <a href="https://github.com/BlueDriftHK/CF-workers-netdiag" target="_blank" class="btn-primary">
+                    <i class="fab fa-github"></i> 访问 GitHub
                 </a>
-                <a href="https://github.com/BlueDriftHK/CF-workers-netdiag/issues" target="_blank">
-                    <i class="fas fa-bug"></i> 报告问题
+                <a href="https://github.com/BlueDriftHK/CF-workers-netdiag/issues" target="_blank" class="btn-outline" style="padding:10px 24px;">
+                    <i class="fas fa-comment"></i> 提 Issue
                 </a>
-                <a href="https://github.com/BlueDriftHK/CF-workers-netdiag" target="_blank">
-                    <i class="fas fa-star"></i> 给个 Star
-                </a>
-                <a href="https://github.com/BlueDriftHK/CF-workers-netdiag/blob/main/LICENSE" target="_blank">
-                    <i class="fas fa-balance-scale"></i> 查看许可证
+                <a href="https://github.com/BlueDriftHK/CF-workers-netdiag/blob/main/CONTRIBUTING.md" target="_blank" class="btn-outline" style="padding:10px 24px;">
+                    <i class="fas fa-code-branch"></i> 贡献指南
                 </a>
             </div>
         </div>
 
-        <!-- ===== 底部 ===== -->
+        <!-- ===== Footer ===== -->
         <footer class="footer">
             <span>
-                <i class="far fa-copyright"></i> 2026 NetSight Pro · 由 <a href="https://github.com/BlueDriftHK" target="_blank">BlueDriftHK</a> 维护
+                &copy; 2026 <a href="https://github.com/BlueDriftHK">BlueDriftHK</a>
+                &middot; 基于 <a href="https://opensource.org/licenses/MIT">MIT</a> 许可证
             </span>
-            <span class="social">
-                <a href="https://github.com/BlueDriftHK" target="_blank" title="GitHub"><i class="fab fa-github"></i></a>
-                <span class="heart">❤</span> 开源协议 <a href="https://github.com/BlueDriftHK/CF-workers-netdiag/blob/main/LICENSE" target="_blank" style="font-weight:600;">AGPL-3.0</a>
-            </span>
-            <span>
-                <a href="https://github.com/BlueDriftHK/CF-workers-netdiag/issues" target="_blank">报告问题</a>
-            </span>
+            <div class="socials">
+                <a href="https://github.com/BlueDriftHK/CF-workers-netdiag" target="_blank" aria-label="GitHub">
+                    <i class="fab fa-github"></i>
+                </a>
+                <a href="https://github.com/BlueDriftHK/CF-workers-netdiag/issues" target="_blank" aria-label="Issues">
+                    <i class="fas fa-bug"></i>
+                </a>
+                <a href="https://github.com/BlueDriftHK/CF-workers-netdiag/blob/main/SECURITY.md" target="_blank" aria-label="Security">
+                    <i class="fas fa-shield-alt"></i>
+                </a>
+            </div>
         </footer>
+
     </div>
 
-    <script>
-        (function() {
-            // --- 主题切换 ---
-            const toggle = document.getElementById('themeToggle');
-            const html = document.documentElement;
-            const darkMQ = window.matchMedia('(prefers-color-scheme: dark)');
-            let current = 'auto';
-            try { current = localStorage.getItem('theme') || 'auto'; } catch(e) {}
-
-            function applyTheme(theme) {
-                if (theme === 'auto') {
-                    if (darkMQ.matches) html.removeAttribute('data-theme');
-                    else html.setAttribute('data-theme', 'light');
-                    toggle.innerHTML = '<i class="fas fa-adjust"></i>';
-                } else if (theme === 'dark') {
-                    html.removeAttribute('data-theme');
-                    toggle.innerHTML = '<i class="fas fa-sun"></i>';
-                } else {
-                    html.setAttribute('data-theme', 'light');
-                    toggle.innerHTML = '<i class="fas fa-moon"></i>';
-                }
-                try { localStorage.setItem('theme', theme); } catch(e) {}
-                current = theme;
-            }
-            toggle.addEventListener('click', () => {
-                if (current === 'auto') applyTheme('dark');
-                else if (current === 'dark') applyTheme('light');
-                else applyTheme('auto');
-            });
-            darkMQ.addEventListener('change', () => { if (current === 'auto') applyTheme('auto'); });
-            applyTheme(current);
-
-            // --- 滚动入场 ---
-            const reveals = document.querySelectorAll('.reveal');
-            const observer = new IntersectionObserver((entries) => {
-                entries.forEach(entry => { if (entry.isIntersecting) entry.target.classList.add('active'); });
-            }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
-            reveals.forEach(el => observer.observe(el));
-            setTimeout(() => {
-                reveals.forEach(el => { if (el.getBoundingClientRect().top < window.innerHeight) el.classList.add('active'); });
-            }, 100);
-
-            // --- 统计数字动画 ---
-            function animateStat(el, target, suffix, duration) {
-                suffix = suffix || ''; duration = duration || 1500;
-                const startTime = performance.now();
-                const update = (now) => {
-                    const progress = Math.min((now - startTime) / duration, 1);
-                    const eased = 1 - Math.pow(1 - progress, 3);
-                    el.textContent = Math.round(target * eased).toLocaleString() + suffix;
-                    if (progress < 1) requestAnimationFrame(update);
-                };
-                requestAnimationFrame(update);
-            }
-            setTimeout(() => {
-                animateStat(document.getElementById('toolsCount'), 12);
-                animateStat(document.getElementById('langsCount'), 3);
-                fetch('https://api.github.com/repos/BlueDriftHK/CF-workers-netdiag')
-                    .then(r => r.json())
-                    .then(data => {
-                        animateStat(document.getElementById('starsCount'), data.stargazers_count || 2300);
-                        animateStat(document.getElementById('forksCount'), data.forks_count || 0);
-                    })
-                    .catch(() => {
-                        document.getElementById('starsCount').textContent = '2.3k+';
-                        document.getElementById('forksCount').textContent = '--';
-                    });
-            }, 400);
-
-            // --- 预览区动态变化 ---
-            const previewRtt = document.getElementById('previewRtt');
-            const previewJitter = document.getElementById('previewJitter');
-            setInterval(() => {
-                const rtt = 12 + Math.floor(Math.random() * 40);
-                const jitter = (2 + Math.random() * 8).toFixed(1);
-                previewRtt.textContent = rtt + ' ms';
-                previewJitter.textContent = jitter + ' ms';
-                document.querySelectorAll('#mockChart .bar').forEach(bar => {
-                    bar.style.setProperty('--h', (0.2 + Math.random() * 0.8).toFixed(2));
-                });
-            }, 3000);
-
-            // --- 鼠标光晕 ---
-            const glow = document.getElementById('cursorGlow');
-            let timeoutId;
-            document.addEventListener('mousemove', (e) => {
-                glow.style.left = e.clientX + 'px';
-                glow.style.top = e.clientY + 'px';
-                glow.style.opacity = '1';
-                clearTimeout(timeoutId);
-                timeoutId = setTimeout(() => { glow.style.opacity = '0'; }, 3000);
-            });
-            document.addEventListener('mouseleave', () => { glow.style.opacity = '0'; });
-
-            // --- FAQ 手风琴 ---
-            document.querySelectorAll('.faq-question').forEach(btn => {
-                btn.addEventListener('click', function() {
-                    const item = this.parentElement;
-                    const isOpen = item.classList.contains('open');
-                    document.querySelectorAll('.faq-item').forEach(i => i.classList.remove('open'));
-                    if (!isOpen) item.classList.add('open');
-                });
-            });
-        })();
-    </script>
 </body>
 </html>
