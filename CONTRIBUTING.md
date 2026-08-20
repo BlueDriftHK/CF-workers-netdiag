@@ -1,358 +1,271 @@
 # 贡献指南
 
-感谢您对 **NetSight Pro** 的关注与支持！我们欢迎任何形式的贡献——无论是报告 Bug、提出新功能建议、改进文档，还是提交代码。
-
-请花几分钟阅读本指南，以使贡献过程更顺畅高效。
+感谢您对 **NetSight Pro** 的关注！我们欢迎各种形式的贡献，无论是报告问题、提出新功能、改进代码还是完善文档。这份指南将帮助您了解如何参与项目，并确保您的贡献能顺利被采纳。
 
 ---
 
-## 目录
+## 📋 目录
 
-- [行为准则](#行为准则)
-- [如何贡献](#如何贡献)
-- [开发环境准备](#开发环境准备)
-- [项目架构概览](#项目架构概览)
-- [代码规范](#代码规范)
-- [CSS / UI 规范](#css--ui-规范)
-- [测试指南](#测试指南)
-- [提交 Pull Request](#提交-pull-request)
-- [代码审核流程](#代码审核流程)
-- [社区沟通](#社区沟通)
+- [行为准则](#-行为准则)
+- [我该如何贡献？](#-我该如何贡献？)
+  - [报告 Bug](#报告-bug)
+  - [提出新功能](#提出新功能)
+  - [提交代码（Pull Request）](#提交代码pull-request)
+- [开发环境设置](#-开发环境设置)
+- [代码规范](#-代码规范)
+  - [JavaScript 风格](#javascript-风格)
+  - [HTML/CSS 风格](#htmlcss-风格)
+  - [国际化文本](#国际化文本)
+- [提交信息规范](#-提交信息规范)
+- [测试](#-测试)
+- [文档](#-文档)
+- [安全性相关](#-安全性相关)
+- [许可证](#-许可证)
 
 ---
 
-## 行为准则
+## 📜 行为准则
 
-本项目遵循 [Contributor Covenant](https://www.contributor-covenant.org) 行为准则。参与即表示您同意遵守其条款。如有不可接受的行为，请向项目维护者报告（邮箱见 [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md)）。
+本项目遵循 **[贡献者公约行为准则](CODE_OF_CONDUCT.md)**。参与即表示您同意遵守该准则。请阅读全文，确保您的行为符合社区规范。
 
 ---
 
-## 如何贡献
+## 🤝 我该如何贡献？
 
 ### 报告 Bug
 
-如果您发现 Bug，请通过 [Issues](https://github.com/BlueDriftHK/CF-workers-netdiag/issues) 提交，并尽量包含以下信息：
+如果您发现了 Bug，请通过 [GitHub Issues](https://github.com/BlueDriftHK/CF-workers-netdiag/issues) 提交报告。为了让问题更快被解决，请提供：
 
-- **标题**：清晰简洁地描述问题
-- **环境**：浏览器/操作系统/设备类型（桌面/平板/手机）
-- **复现步骤**：详细的操作步骤
-- **预期行为**：您期望发生什么
-- **实际行为**：实际发生了什么（附截图或日志更佳）
-- **主题状态**：当时使用的是深色/浅色/自动模式
-- **其他上下文**：如是否稳定复现、是否与特定网络环境相关
+- **清晰的问题描述**：发生了什么，预期应该发生什么。
+- **重现步骤**：尽可能详细地列出操作步骤，最好附带截图或视频。
+- **环境信息**：浏览器版本、操作系统、Worker 部署的域名或版本。
+- **错误日志**：浏览器控制台（F12）或 Worker 日志中的错误信息。
+
+**请不要在 Issues 中透露任何敏感信息**，例如您的 Cloudflare 凭证或私有 API 密钥。
 
 ### 提出新功能
 
-欢迎提出新功能建议！请在 Issue 中说明：
+如果您有改进建议或新功能点子，同样请通过 Issues 提出，并勾选 **Feature Request** 标签。描述中请说明：
 
-- **功能描述**：该功能解决什么问题
-- **使用场景**：谁会用、怎么用
-- **替代方案**（如有）：当前有哪些变通方法
-- **额外上下文**：相关技术背景或参考实现
+- 该功能解决什么痛点？
+- 您期望的实现方式（可以附带伪代码或设计稿）。
+- 如果可能，请说明该功能是否会影响现有功能或性能。
 
-### 改进文档
+我们会定期审阅新功能提案，并优先考虑最符合项目定位（网络诊断工具）的提议。
 
-文档（README、API 说明、本贡献指南等）若有错别字、表述不清或遗漏，欢迎提交 PR 修正。即使是很小的改进也很有价值。
+### 提交代码（Pull Request）
 
-### 提交代码
+我们欢迎所有类型的代码贡献，包括 Bug 修复、性能优化、新功能、文档改进等。请遵循以下流程：
 
-如果您想贡献代码，请遵循以下流程：
+1. **Fork 仓库**：点击项目右上角的 Fork 按钮，将仓库复制到您的 GitHub 账户。
 
-1. **先沟通**：较大改动（如新增功能、重构、UI 改版）建议先在 Issue 中讨论，避免做无用功。
-2. **保持聚焦**：每个 PR 只解决一个问题或新增一个功能。
-3. **写测试**：若可行，请为新增功能或修复添加测试用例。
-4. **更新文档**：如有 API 变更或新功能，请同步更新 README 和本指南。
-5. **双主题验证**：涉及 UI 改动时，务必在深色和浅色主题下均验证通过。
+2. **克隆分支**：
+   ```bash
+   git clone https://github.com/您的用户名/CF-workers-netdiag.git
+   cd CF-workers-netdiag
+   ```
+
+3. **创建新分支**：请基于 `main` 分支创建功能分支，命名尽量反映内容，例如：
+   ```bash
+   git checkout -b fix/typo-readme
+   git checkout -b feature/add-webrtc-test
+   git checkout -b optimize/cpu-benchmark
+   ```
+
+4. **开发和测试**：在本地进行修改，并确保代码可以正常部署（可使用 `wrangler dev` 测试）。如果添加了新功能，请在适当位置添加注释，并更新相关文档。
+
+5. **提交代码**：遵循下文的 [提交信息规范](#-提交信息规范)。
+
+6. **推送并创建 PR**：
+   ```bash
+   git push origin 分支名
+   ```
+   然后进入您的 Fork 仓库页面，点击 **Compare & pull request**，填写 PR 描述。
+
+**PR 描述应包含**：
+- 简短标题，概括本次变更。
+- 详细说明变更内容、原因以及测试情况。
+- 如果修复了某个 Issue，请注明 `Fixes #123`。
+
+#### PR 审查标准
+
+- 代码必须通过安全检查（无硬编码密钥、无注入风险）。
+- 所有新功能必须有对应的前端界面调整或 API 说明。
+- 国际化文本必须同时更新三种语言（`en`、`zh-CN`、`zh-TW`）。
+- 不得破坏现有兼容性（除非有重大版本号变更）。
+- 鼓励添加注释，尤其是复杂逻辑部分。
 
 ---
 
-## 开发环境准备
+## 🛠️ 开发环境设置
 
-本项目是 Cloudflare Worker，使用 JavaScript (ES2022) 编写，单文件架构（~3400 行），部署在 Worker 运行时。
-
-### 必备工具
-
-- [Node.js](https://nodejs.org/) 18+ 及 npm
-- [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/)（Cloudflare Workers 官方 CLI）
-- 现代浏览器（Chrome 80+ / Firefox 103+ / Safari 13.1+ / Edge 80+）
+### 必需工具
+- [Node.js](https://nodejs.org/) (建议 LTS 版本)
+- [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/) (`npm install -g wrangler`)
+- Git
 
 ### 本地运行
 
+1. 安装依赖（此项目没有额外 npm 依赖，但建议安装 Prettier 等工具）：
+   ```bash
+   npm init -y
+   npm install --save-dev prettier
+   ```
+
+2. 在项目根目录创建 `wrangler.toml`（可从示例复制）：
+   ```toml
+   name = "netsight-pro"
+   type = "javascript"
+   account_id = "您的账号ID"
+   workers_dev = true
+   ```
+
+3. 启动本地开发服务器：
+   ```bash
+   wrangler dev
+   ```
+   访问 `http://localhost:8787` 即可预览。
+
+4. 修改代码后，Wrangler 会自动重新加载（需要刷新浏览器）。
+
+### 使用 KV 本地模拟（可选）
+如果需要对历史记录功能进行本地测试，可使用 Wrangler 的 KV 模拟：
 ```bash
-# 克隆仓库
-git clone https://github.com/BlueDriftHK/CF-workers-netdiag.git
-cd CF-workers-netdiag
-
-# 本地启动开发服务器（需要 Cloudflare 账号）
-wrangler dev _workers.js
-
-# 访问 http://localhost:8787 预览
-```
-
-> 注意：由于 Worker 依赖 Cloudflare 环境（如 `caches`、`WebSocket`、`KV`、`cf` 对象等），本地开发时某些功能可能受限。建议直接部署到测试环境进行完整验证。
-
-### 部署到测试环境
-
-```bash
-# 创建 KV 命名空间（首次）
-wrangler kv:namespace create SPEED_HISTORY
-
-# 部署到 Cloudflare
-wrangler deploy --main _workers.js
-
-# 实时查看日志
-wrangler tail
+wrangler dev --kv SPEED_HISTORY
 ```
 
 ---
 
-## 项目架构概览
+## 📐 代码规范
 
-`_workers.js` 是唯一的源文件，内部按以下顺序组织：
+### JavaScript 风格
 
-```
-_workers.js (~3400 行)
-├── 服务端逻辑
-│   ├── 限流中间件（IP 级别，通用 60/min + CPU 3/min）
-│   ├── 路由分发（/health, /speedtest, /cpu-test, /ws-test 等）
-│   ├── WebSocket 处理器（ping-pong + 30s 心跳）
-│   ├── KV 读写（测速历史，5 条上限，7 天 TTL）
-│   ├── 外部 API 调用（ipapi.co 地理定位, Scamalytics 欺诈评分）
-│   └── 安全响应头注入（CSP nonce, HSTS, X-Frame-Options 等）
-│
-├── HTML 模板（模板字符串）
-│   ├── <head>：meta、Font Awesome CDN、内联 <style>
-│   ├── <body>：极光背景层 → 卡片网格 → 诊断工具 → 页脚
-│   └── 动态数据注入点（${data.xxx} 模板变量）
-│
-├── CSS 设计体系（内联 <style>，~600 行）
-│   ├── :root 设计令牌（深色默认）
-│   ├── [data-theme="light"] 浅色覆盖
-│   ├── 极光背景动画（body::before / body::after + @keyframes）
-│   ├── 玻璃拟态卡片（backdrop-filter: blur(24px) saturate(150%)）
-│   ├── 响应式布局（CSS Grid + 1024/768/480px 三档断点）
-│   └── 组件样式（badge, info-row, rtt-display, btn 等）
-│
-└── 客户端 JavaScript（内联 <script>，~1200 行）
-    ├── BACKEND_DATA 对象（服务端注入的运行时数据）
-    ├── i18n 字典（zh-CN / zh-TW / en）
-    ├── DOM 引用缓存（elements 对象）
-    ├── 主题管理（applyTheme + matchMedia 监听）
-    ├── RTT 监控 + Canvas 图表
-    ├── 诊断工具集（丢包/测速/CPU/并发/流式/WebSocket/DNS）
-    ├── 地理位置（fetchUserGeo + calculateDistance）
-    ├── 多节点对比
-    └── 报告生成 + 剪贴板复制
-```
+- 使用 **ES2020** 语法（`async/await`、可选链 `?.`、空值合并 `??` 等）。
+- 缩进使用 **2 个空格**（不要使用 Tab）。
+- 字符串统一使用 **单引号**，模板字符串使用反引号。
+- 每个语句末尾不要加分号（项目约定）。
+- 函数命名采用 **camelCase**，类名采用 **PascalCase**。
+- 常量使用 **UPPER_SNAKE_CASE**（仅当为顶级常量且不可变时）。
+- 尽可能使用 `const` 和 `let`，避免 `var`。
+- 每个文件末尾保留一个空行。
 
-### 关键设计决策
+**示例**：
+```javascript
+const MAX_RETRIES = 3
 
-- **单文件架构**：所有代码在一个文件中，便于 Dashboard 直接粘贴部署，无需构建工具。
-- **服务端渲染数据**：`BACKEND_DATA` 对象由 Worker 在响应时注入，包含 IP、地理位置、TLS 信息等。
-- **客户端动态渲染**：部分卡片（如真实 IP 位置、欺诈评分）由客户端 JS 异步获取数据后填充 innerHTML。
-- **主题方案**：`:root` = 深色（默认，无需属性），`[data-theme="light"]` = 浅色覆盖。`applyTheme('auto')` 通过 `matchMedia('(prefers-color-scheme: dark)')` 判断。
-
----
-
-## 代码规范
-
-### JavaScript
-
-- **语言**：JavaScript (ES2022)，使用严格模式。
-- **缩进**：4 个空格（服务端）/ 4 个空格（客户端脚本）。
-- **分号**：每个语句末尾加分号。
-- **命名**：
-  - 变量/函数：`camelCase`（如 `fetchUserGeo`、`calculateDistance`）
-  - 常量：`UPPER_SNAKE_CASE`（如 `MAX_GEO_RETRY`、`BACKEND_DATA`）
-  - DOM ID：`kebab-case`（如 `user-geo-info`、`bot-score-val`）
-  - CSS 类：`kebab-case`（如 `glass-card`、`info-row`、`badge-info`）
-- **注释**：复杂逻辑、公共函数、关键算法需添加清晰注释。区块分隔使用 `// ==================== 区块名 ====================` 格式。
-- **错误处理**：对 I/O 操作（fetch、KV）使用 `try/catch`，并给出有意义的错误信息或静默降级。
-- **安全**：始终进行输入校验（`parseInt` 钳制、URL 白名单等），避免 XSS 和注入。用户可控数据必须经过 `escapeForJS()` 处理。
-
-### HTML 模板
-
-- 使用模板字符串（反引号）构建 HTML。
-- 动态数据通过 `${data.xxx}` 注入，所有用户可控字段必须经过 `escapeForJS()` 转义。
-- 需要 i18n 的文本元素必须带有 `id="t-xxx"` 属性，并在 `updateUI()` 中注册映射。
-
-### 国际化（i18n）
-
-- 三语支持：`zh-CN`（简体）、`zh-TW`（繁体）、`en`（英文）。
-- 所有用户可见文本必须通过 `i18n[currentLang].xxx` 获取，禁止硬编码。
-- 新增文本时，需同时在三个语言字典中添加对应条目。
-- 动态渲染的 innerHTML 模板中，使用 `${t.xxx}` 引用当前语言文本。
-
----
-
-## CSS / UI 规范
-
-### 设计令牌
-
-所有颜色、间距、圆角等必须通过 CSS 自定义属性引用，禁止硬编码：
-
-```css
-/* 深色主题（:root 默认） */
---bg-primary: #050510;
---glass-bg: rgba(255, 255, 255, 0.04);
---glass-border: rgba(255, 255, 255, 0.08);
---accent: #818cf8;
---text-primary: rgba(255, 255, 255, 0.92);
-
-/* 浅色主题覆盖 */
-[data-theme="light"] {
-    --bg-primary: #f0f2f5;
-    --glass-bg: rgba(255, 255, 255, 0.72);
-    --glass-border: rgba(0, 0, 0, 0.06);
-    --accent: #6366f1;
-    --text-primary: #1a1a2e;
+function processData(input) {
+  let result = 0
+  for (const item of input) {
+    result += item.value
+  }
+  return result
 }
 ```
 
-### 玻璃拟态卡片
+### HTML/CSS 风格
 
-```css
-.card {
-    background: var(--glass-bg);
-    backdrop-filter: blur(24px) saturate(150%);
-    -webkit-backdrop-filter: blur(24px) saturate(150%);
-    border: 1px solid var(--glass-border);
-    border-radius: var(--radius-lg);
-}
-```
+- 使用语义化 HTML5 标签。
+- 类名采用 **kebab-case**（如 `hero-card`、`rtt-display`）。
+- 样式遵循 **BEM** 命名方式（可选），但保持清晰。
+- CSS 变量集中定义在 `:root` 中，主题切换通过 `data-theme` 控制。
+- 避免使用 `!important`，优先通过权重和层级解决。
 
-### 响应式断点
+### 国际化文本
 
-| 断点 | 布局 |
-| :--- | :--- |
-| > 1024px | 多列网格（`repeat(auto-fit, minmax(300px, 1fr))`） |
-| 768px – 1024px | 部分折叠（`grid-2col` → 单列） |
-| < 480px | 完全单列瀑布流，字号缩小，间距收紧 |
+所有用户可见的字符串必须添加到前端 `i18n` 对象中，并同时提供三种语言的翻译。新增文本时：
 
-### 动效
+1. 在 `i18n.en` 中添加英文键值对。
+2. 在 `i18n['zh-CN']` 中添加简体中文。
+3. 在 `i18n['zh-TW']` 中添加繁体中文。
+4. 在 `updateUI` 的 `map` 对象中增加相应 ID 映射。
 
-- 极光背景：`@keyframes auroraShift`，12s ease-in-out infinite alternate
-- 卡片悬停：`transform: translateY(-2px)`，0.3s ease
-- 主题切换：`transition: background 0.5s ease, color 0.4s ease`
-- 避免在 `prefers-reduced-motion: reduce` 下播放动画
+**不要**在 HTML 或 JavaScript 中硬编码中文或英文文本。
 
 ---
 
-## 测试指南
+## 📝 提交信息规范
 
-目前项目暂无自动化测试框架，但欢迎贡献测试。手动测试时，请重点验证：
+提交信息应清晰描述变更，推荐遵循 [Conventional Commits](https://www.conventionalcommits.org/) 规范。格式：
 
-### 功能测试
+```
+<类型>(<范围>): <简短描述>
 
-- 所有 API 端点返回预期状态码和数据格式
-- WebSocket 连接及双向通信正常
-- 限流机制生效（触发 429 + `retry-after` 头）
-- 各诊断按钮（丢包率、测速、CPU、并发、流式、DNS）结果合理
-- 多节点对比功能正常
-- 测速历史写入/读取/清理正常
+<详细说明（可选）>
+```
 
-### UI 测试
+**类型**：
+- `feat`: 新功能
+- `fix`: Bug 修复
+- `docs`: 文档更新
+- `style`: 代码格式（不影响功能）
+- `refactor`: 代码重构
+- `perf`: 性能优化
+- `test`: 测试相关
+- `chore`: 构建/工具链变动
 
-- 深色/浅色/自动三种主题模式均正常渲染
-- 桌面（>1024px）/ 平板（768–1024px）/ 手机（<480px）布局正确
-- 极光背景动画流畅，不造成性能问题
-- 玻璃拟态效果在支持的浏览器中正常显示
-- 三语切换（中/英/繁）所有文本正确，无遗漏
-- 动态渲染卡片（真实 IP 位置、欺诈评分）加载后内容完整
+**示例**：
+```
+feat(api): add WebRTC leak detection endpoint
 
-### 安全测试
+Implement /api/webrtc-test which returns local and public IPs
+using RTCPeerConnection.
 
-- 限流触发后正确返回 429
-- DNS 代理仅允许白名单域名
-- CSP nonce 每次响应不同
-- 用户可控输入（IP、UA 等）经过转义，无 XSS
+Fixes #23
+```
 
-### 自动化测试（推荐）
+```
+fix(ui): correct RTT chart axis scaling
 
-若编写自动化测试，建议使用 [Vitest](https://vitest.dev/) 配合 `@cloudflare/workers-types`：
-
-```bash
-npm init -y
-npm install -D vitest @cloudflare/workers-types
+The chart now adjusts to max RTT value dynamically instead of
+being capped at 200ms.
 ```
 
 ---
 
-## 提交 Pull Request
+## 🧪 测试
 
-1. **Fork 仓库**：点击 GitHub 右上角的 Fork 按钮。
-2. **创建分支**：从 `main` 分支创建您的特性分支。
-3. **提交更改**：写清晰的提交信息（使用 [Conventional Commits](https://www.conventionalcommits.org/) 格式）。
-4. **推送分支**：推送到您的 Fork。
-5. **打开 PR**：前往原始仓库，点击 New Pull Request，选择您的分支并填写 PR 模板。
+目前项目未集成自动化测试框架，但我们鼓励贡献者手动测试以下场景：
 
-### 分支命名
+- 在主流浏览器（Chrome、Firefox、Safari、Edge）中打开页面，检查界面显示和交互。
+- 测试所有诊断按钮（特别是新增功能），确保输出正确。
+- 检查限流是否生效（快速点击测试按钮，查看是否返回 429）。
+- 检查 WebSocket 连接是否稳定。
+- 检查国际化切换后所有文本是否更新。
+- 检查深色/浅色主题切换是否正常。
 
-| 类型 | 格式 | 示例 |
-| :--- | :--- | :--- |
-| 新功能 | `feature/xxx` | `feature/traceroute-test` |
-| Bug 修复 | `fix/xxx` | `fix/websocket-timeout` |
-| UI 改进 | `ui/xxx` | `ui/aurora-animation-perf` |
-| 文档 | `docs/xxx` | `docs/api-examples` |
-| 重构 | `refactor/xxx` | `refactor/rate-limiter` |
-
-### 提交信息格式
-
-```
-<type>(<scope>): <description>
-
-[optional body]
-
-[optional footer]
-```
-
-类型：`feat` / `fix` / `ui` / `docs` / `refactor` / `perf` / `test` / `chore`
-
-示例：
-```
-feat(diagnostic): add traceroute test endpoint
-
-Implements a 30-hop traceroute using sequential fetch with TTL simulation.
-Returns JSON array of {hop, ip, rtt} objects.
-
-Closes #42
-```
-
-### PR 描述要求
-
-- **标题**：简洁描述改动（如 `feat: add multi-node comparison table`）
-- **内容**：说明改动目的、实现方式、影响范围，以及如何测试
-- **截图**：涉及 UI 改动时，附深色/浅色主题截图（桌面 + 手机各一张）
-- **关联 Issue**：如修复或关联某个 Issue，请注明 `Closes #xxx` 或 `Related to #xxx`
+如果您的贡献涉及后端逻辑，请确保本地 `wrangler dev` 下所有 API 响应正常。
 
 ---
 
-## 代码审核流程
+## 📖 文档
 
-- 所有 PR 至少需要一位维护者审核通过方可合并。
-- 审核者会关注：代码质量、性能影响、安全性、双主题兼容性、响应式表现、文档完整性。
-- 如有修改意见，请友善回应并积极调整。
-- 合并后，您的贡献将出现在项目历史中，并会在更新日志中致谢。
-
-### 审核检查清单
-
-- [ ] 代码风格符合本指南规范
-- [ ] 无硬编码颜色/文本（使用 CSS 变量 / i18n）
-- [ ] 新增用户可见文本已添加三语翻译
-- [ ] 涉及 UI 的改动在深色/浅色主题下均正常
-- [ ] 涉及 UI 的改动在桌面/平板/手机断点下均正常
-- [ ] 新增 API 端点已添加限流保护
-- [ ] 用户可控输入已做转义/校验
-- [ ] README 已同步更新（如有 API 变更）
+- 更新 `README.md` 以反映新增功能或变更。
+- 如果新增了 API 端点，请在文档的“API 端点”部分补充说明。
+- 如果修改了环境变量或部署步骤，请同步更新 README 和部署指南。
+- 代码中添加必要注释，尤其是复杂的逻辑或算法。
 
 ---
 
-## 社区沟通
+## 🔐 安全性相关
 
-- **问题讨论**：请在 [Issues](https://github.com/BlueDriftHK/CF-workers-netdiag/issues) 中讨论，便于追踪。
-- **实时交流**：暂未建立聊天群组，如有紧急事宜可邮件联系维护者（asiacomk@gmail.com）。
-- **尊重他人**：请遵循行为准则，保持友好和建设性的讨论氛围。
+由于本项目涉及网络诊断和 IP 信息，任何变更都不得削弱现有安全机制。特别注意：
+
+- 所有用户输入必须经过校验（`clampInt`、`safeNumber`、URL 白名单等）。
+- 敏感端点必须保留 `isSameOriginNavigation` 检查。
+- 不得在日志中输出用户 IP 或其他敏感信息（除非是调试目的且已脱敏）。
+- 如果新增外部 API，请确保设置合理的超时和错误处理。
+- 任何 CORS 配置变更需谨慎，防止跨域泄露。
 
 ---
 
-感谢您为 **NetSight Pro** 添砖加瓦！期待您的贡献！
+## 📄 许可证
+
+通过提交贡献，您同意您的代码将根据项目的 **[MIT 许可证](LICENSE)** 进行分发。
+
+---
+
+## 🙏 最后的感谢
+
+感谢您花时间阅读这份指南。我们期待您的第一次贡献！如果有任何疑问，请随时在 Issues 中提出，或直接联系维护者。
+
+**NetSight Pro** 因您的参与而更加出色。🌟
