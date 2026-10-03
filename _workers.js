@@ -16,7 +16,8 @@ const SECURITY_HEADERS = {
   'x-content-type-options': 'nosniff',
   'x-frame-options': 'DENY',
   'referrer-policy': 'strict-origin-when-cross-origin',
-  'strict-transport-security': 'max-age=31536000; includeSubDomains; preload'
+  'strict-transport-security': 'max-age=31536000; includeSubDomains; preload',
+  'permissions-policy': 'camera=(), microphone=(), geolocation=(), interest-cohort=()'
 };
 
 function getConfiguredOrigins() {
@@ -139,6 +140,35 @@ function escapeForJS(str) {
     .replace(/</g, '\\x3c')
     .replace(/>/g, '\\x3e')
     .replace(/&/g, '\\x26');
+}
+
+function escapeHtml(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// 站点体检的 SSRF 防护：拒绝内网/本机/非公网主机名
+function isPrivateHost(host) {
+  const h = String(host || '').toLowerCase().replace(/^\[|\]$/g, '');
+  if (!h) return true;
+  if (h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.local') || h.endsWith('.internal')) return true;
+  if (h.includes(':')) return true;
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(h)) {
+    const p = h.split('.').map(Number);
+    if (p.some(n => n > 255)) return true;
+    if (p[0] === 0 || p[0] === 10 || p[0] === 127) return true;
+    if (p[0] === 169 && p[1] === 254) return true;
+    if (p[0] === 172 && p[1] >= 16 && p[1] <= 31) return true;
+    if (p[0] === 192 && p[1] === 168) return true;
+    if (p[0] === 100 && p[1] >= 64 && p[1] <= 127) return true;
+    return false;
+  }
+  return !h.includes('.');
 }
 
 function clampInt(value, fallback, min, max) {
@@ -337,7 +367,7 @@ async function handleRequest(event) {
   // ==================== 速度测试端点 ====================
   if (url.pathname === '/speedtest') {
     if (!isSameOriginNavigation(request)) return forbiddenResponse(request);
-    const size = clampInt(url.searchParams.get('size'), 102400, 1, 5242880);
+    const size = clampInt(url.searchParams.get('size'), 102400, 1, 2097152);
     const data = fillRandom(new Uint8Array(size));
     return new Response(data, {
       headers: {
@@ -352,8 +382,8 @@ async function handleRequest(event) {
   if (url.pathname === '/upload-test' && request.method === 'POST') {
     if (!isSameOriginNavigation(request)) return forbiddenResponse(request);
     const contentLength = Number.parseInt(request.headers.get('content-length') || '', 10);
-    if (!Number.isFinite(contentLength) || contentLength < 0 || contentLength > 10485760) {
-      return new Response(JSON.stringify({ error: 'Payload too large', max: '10MB' }), {
+    if (Number.isFinite(contentLength) && (contentLength < 0 || contentLength > 5242880)) {
+      return new Response(JSON.stringify({ error: 'Payload too large', max: '5MB' }), {
         status: 413,
         headers: { 'content-type': 'application/json', ...corsHeaders(request, 'POST, OPTIONS'), ...SECURITY_HEADERS }
       });
@@ -362,8 +392,8 @@ async function handleRequest(event) {
     const body = await request.arrayBuffer();
     const duration = Date.now() - start;
     const bytes = body.byteLength;
-    if (bytes > 10485760) {
-      return new Response(JSON.stringify({ error: 'Payload too large', max: '10MB' }), {
+    if (bytes > 5242880) {
+      return new Response(JSON.stringify({ error: 'Payload too large', max: '5MB' }), {
         status: 413,
         headers: { 'content-type': 'application/json', ...corsHeaders(request, 'POST, OPTIONS'), ...SECURITY_HEADERS }
       });
@@ -406,7 +436,7 @@ async function handleRequest(event) {
       cleanupRateLimit();
     }
 
-    const iterations = clampInt(url.searchParams.get('n'), 500000, 1, 500000);
+    const iterations = clampInt(url.searchParams.get('n'), 20000, 1, 20000);
     const start = performance.now();
     let result = 0;
     for (let i = 0; i < iterations; i++) {
@@ -478,6 +508,77 @@ async function handleRequest(event) {
     });
   }
   
+  // ==================== 站点体检端点（HTTP 安全头审计） ====================
+  if (url.pathname === '/api/site-audit') {
+    if (!isSameOriginNavigation(request)) return forbiddenResponse(request);
+    const target = url.searchParams.get('url') || '';
+    let parsed;
+    try { parsed = new URL(target); } catch (e) {
+      return new Response(JSON.stringify({ error: 'invalid url' }), {
+        status: 400,
+        headers: { 'content-type': 'application/json', ...corsHeaders(request), ...SECURITY_HEADERS }
+      });
+    }
+    if (!['http:', 'https:'].includes(parsed.protocol) || isPrivateHost(parsed.hostname)) {
+      return new Response(JSON.stringify({ error: 'forbidden target' }), {
+        status: 403,
+        headers: { 'content-type': 'application/json', ...corsHeaders(request), ...SECURITY_HEADERS }
+      });
+    }
+    const auditStart = Date.now();
+    let current = parsed.href;
+    let resp = null;
+    let ttfb = 0;
+    let redirectCount = 0;
+    try {
+      for (let hop = 0; hop < 6; hop++) {
+        const t0 = Date.now();
+        resp = await fetch(current, {
+          method: 'GET',
+          redirect: 'manual',
+          headers: { 'user-agent': 'NetSight-Pro-Audit/1.0' },
+          signal: AbortSignal.timeout(8000)
+        });
+        if (hop === 0) ttfb = Date.now() - t0;
+        const loc = resp.headers.get('location');
+        if (resp.status >= 300 && resp.status < 400 && loc && hop < 5) {
+          let next;
+          try { next = new URL(loc, current); } catch (e) { break; }
+          if (!['http:', 'https:'].includes(next.protocol) || isPrivateHost(next.hostname)) break;
+          current = next.href;
+          redirectCount++;
+          continue;
+        }
+        break;
+      }
+    } catch (e) {
+      return new Response(JSON.stringify({ error: 'fetch failed' }), {
+        headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...corsHeaders(request), ...SECURITY_HEADERS }
+      });
+    }
+    const rh = resp.headers;
+    const auditData = {
+      finalUrl: current,
+      status: resp.status,
+      ttfb,
+      totalTime: Date.now() - auditStart,
+      redirectCount,
+      headers: {
+        hsts: rh.get('strict-transport-security') || null,
+        csp: rh.get('content-security-policy') || null,
+        xfo: rh.get('x-frame-options') || null,
+        xcto: rh.get('x-content-type-options') || null,
+        refpol: rh.get('referrer-policy') || null,
+        permpol: rh.get('permissions-policy') || null,
+        server: rh.get('server') || null,
+        contentType: rh.get('content-type') || null
+      }
+    };
+    return new Response(JSON.stringify(auditData), {
+      headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...corsHeaders(request), ...SECURITY_HEADERS }
+    });
+  }
+
   // ==================== WebSocket 测试端点 ====================
   if (url.pathname === '/ws-test') {
     if (!isSameOriginNavigation(request)) return forbiddenResponse(request);
@@ -597,6 +698,7 @@ async function handleRequest(event) {
   
   // ==================== HTTP/2 + Early Hints 检测端点 ====================
   if (url.pathname === '/http2-test') {
+    if (!isSameOriginNavigation(request)) return forbiddenResponse(request);
     const cf = request.cf || {};
     const protocol = cf.httpProtocol || 'N/A';
     const isHttp2 = protocol.includes('HTTP/2');
@@ -662,7 +764,7 @@ async function handleRequest(event) {
   // ==================== 大文件流式传输测试 ====================
   if (url.pathname === '/stream-test') {
     if (!isSameOriginNavigation(request)) return forbiddenResponse(request);
-    const size = clampInt(url.searchParams.get('size'), 1048576, 1, 10485760);
+    const size = clampInt(url.searchParams.get('size'), 1048576, 1, 5242880);
     const chunkSize = 65536;
     let sent = 0;
     
@@ -739,6 +841,7 @@ async function handleRequest(event) {
   
   // ==================== 测速历史查询 (GET) ====================
   if (url.pathname === '/api/speed-history') {
+    if (!isSameOriginNavigation(request)) return forbiddenResponse(request);
     const limit = clampInt(url.searchParams.get('limit'), 10, 1, 20);
     const records = [];
     
@@ -760,6 +863,7 @@ async function handleRequest(event) {
   
   // ==================== 用量统计 (GET) ====================
   if (url.pathname === '/api/usage-stats') {
+    if (!isSameOriginNavigation(request)) return forbiddenResponse(request);
     let stats = { totalRequests: 0, endpoints: {}, lastReset: 0 };
     
     if (typeof SPEED_HISTORY !== 'undefined' && SPEED_HISTORY) {
@@ -776,6 +880,7 @@ async function handleRequest(event) {
   
   // ==================== IP 欺诈评分端点 ====================
   if (url.pathname === '/api/ip-fraud') {
+    if (!isSameOriginNavigation(request)) return forbiddenResponse(request);
     const ip = clientIp;
     const fraudData = await getIpFraudScore(ip);
     if (!fraudData) {
@@ -829,6 +934,27 @@ async function handleRequest(event) {
     tlsClientJa3: escapeForJS(cf.tlsClientJa3 || 'N/A'),
     tlsClientJa4: escapeForJS(cf.tlsClientJa4 || 'N/A')
   };
+
+  // HTML 上下文专用的转义值（防止注入，与 JS 上下文的 data 区分开）
+  const h = {
+    colo: escapeHtml(cf.colo || 'NRT'),
+    asn: escapeHtml(cf.asn || 'N/A'),
+    asOrg: escapeHtml(cf.asOrganization || '未知运营商'),
+    city: escapeHtml(cf.city || '未知'),
+    country: escapeHtml(cf.country || '未知'),
+    region: escapeHtml(cf.region || '未知'),
+    lat: Math.abs(lat).toFixed(4),
+    lon: Math.abs(lon).toFixed(4),
+    latDir: escapeHtml(latDir),
+    lonDir: escapeHtml(lonDir),
+    rayId: escapeHtml(request.headers.get('cf-ray') || 'N/A'),
+    proto: escapeHtml(cf.httpProtocol || 'N/A'),
+    tlsVersion: escapeHtml(cf.tlsVersion || 'N/A'),
+    tlsCipher: escapeHtml(cf.tlsCipher || 'N/A'),
+    clientIp: escapeHtml(clientIp),
+    tlsClientJa3: escapeHtml(cf.tlsClientJa3 || 'N/A'),
+    tlsClientJa4: escapeHtml(cf.tlsClientJa4 || 'N/A')
+  };
   
   const acceptLang = request.headers.get('accept-language') || '';
   let defaultLang = 'en';
@@ -838,44 +964,16 @@ async function handleRequest(event) {
   
   const workerDuration = Date.now() - workerStart;
   
-  // 服务端直接查询真实客户端 IP 的地理位置
-  let realGeoData = null;
-  if (clientIp && clientIp !== 'unknown') {
-    try {
-      const geoRes = await fetch(`https://ipapi.co/${clientIp}/json/`, {
-        headers: { 'User-Agent': 'Cloudflare-Worker/1.0' },
-        signal: AbortSignal.timeout(4000)
-      });
-      if (geoRes.ok) {
-        const geoJson = await geoRes.json();
-        if (!geoJson.error) {
-          realGeoData = {
-            city: geoJson.city,
-            regionName: geoJson.region,
-            country: geoJson.country_name,
-            countryCode: geoJson.country_code,
-            lat: geoJson.latitude,
-            lon: geoJson.longitude,
-            org: geoJson.org,
-            query: geoJson.ip || clientIp
-          };
-        }
-      }
-    } catch (e) {
-      // 静默失败
-    }
-  }
-  
-  const realGeo = realGeoData || {};
+  // 客户端地理位置由前端 fetchUserGeo 异步获取，避免阻塞页面渲染与额外出站请求
   const realGeoJS = {
-    city: escapeForJS(realGeo.city || cf.city || ''),
-    region: escapeForJS(realGeo.regionName || cf.region || ''),
-    country: escapeForJS(realGeo.country || cf.country || ''),
-    countryCode: escapeForJS(realGeo.countryCode || ''),
-    lat: safeNumber(realGeo.lat, safeNumber(cf.latitude, 0)),
-    lon: safeNumber(realGeo.lon, safeNumber(cf.longitude, 0)),
-    org: escapeForJS(realGeo.org || cf.asOrganization || ''),
-    ip: escapeForJS(realGeo.query || clientIp)
+    city: '',
+    region: '',
+    country: '',
+    countryCode: '',
+    lat: safeNumber(cf.latitude, 0),
+    lon: safeNumber(cf.longitude, 0),
+    org: '',
+    ip: ''
   };
   
   const acceptEncoding = request.headers.get('accept-encoding') || '';
@@ -889,7 +987,7 @@ async function handleRequest(event) {
   
   // 生成随机 nonce 用于 CSP
   const nonce = crypto.randomUUID();
-  const cspHeader = `default-src 'self'; script-src 'self' 'nonce-${nonce}' https://cdnjs.cloudflare.com https://fonts.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; connect-src 'self' https:; img-src 'self' data: https://cloudflare.com https://www.google.com https://github.com https://www.netflix.com https://www.disneyplus.com https://www.youtube.com https://chat.openai.com;`;
+  const cspHeader = `default-src 'self'; script-src 'self' 'nonce-${nonce}'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; connect-src 'self' https:; img-src 'self' data: https://cloudflare.com https://www.google.com https://github.com https://www.netflix.com https://www.disneyplus.com https://www.youtube.com https://chat.openai.com;`;
 
   // ============================================================
   // 开始 HTML 模板（全界面国际化 + 美化）
@@ -909,101 +1007,106 @@ async function handleRequest(event) {
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
         :root {
-            --bg-primary: #050510;
-            --bg-orb-1: rgba(52, 211, 153, 0.18);
-            --bg-orb-2: rgba(129, 140, 248, 0.16);
-            --bg-orb-3: rgba(168, 85, 247, 0.14);
-            --bg-orb-4: rgba(34, 211, 238, 0.12);
+            --bg-primary: #0a0b0d;
+            --bg-orb-1: rgba(255, 255, 255, 0.02);
+            --bg-orb-2: rgba(255, 255, 255, 0.015);
+            --bg-orb-3: rgba(255, 255, 255, 0.012);
+            --bg-orb-4: rgba(255, 255, 255, 0.01);
 
-            --glass-bg: rgba(255, 255, 255, 0.04);
-            --glass-bg-hover: rgba(255, 255, 255, 0.07);
-            --glass-heavy: rgba(255, 255, 255, 0.06);
-            --glass-border: rgba(255, 255, 255, 0.08);
-            --glass-border-hover: rgba(255, 255, 255, 0.15);
-            --glass-highlight: inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
-            --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-            --glass-shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.4);
-            --glass-blur: blur(24px) saturate(150%);
+            --glass-bg: #101114;
+            --glass-bg-hover: #17181c;
+            --glass-heavy: #121316;
+            --glass-border: #24262b;
+            --glass-border-hover: #383b42;
+            --glass-highlight: inset 0 1px 0 0 rgba(255, 255, 255, 0.03);
+            --glass-shadow: 0 1px 0 rgba(0, 0, 0, 0.5);
+            --glass-shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.5);
+            --glass-blur: none;
 
-            --text-primary: #f0f0f5;
-            --text-secondary: #9898b0;
-            --text-tertiary: #5a5a72;
-            --text-quaternary: #3a3a50;
+            --text-primary: #e9eaec;
+            --text-secondary: #9a9da3;
+            --text-tertiary: #6a6d74;
+            --text-quaternary: #45484e;
 
-            --accent: #818cf8;
-            --accent-hover: #a5b4fc;
-            --accent-light: rgba(129, 140, 248, 0.10);
-            --accent-glass: rgba(129, 140, 248, 0.06);
-            --accent-glow: 0 0 20px rgba(129, 140, 248, 0.15);
+            --accent: #9aa0a8;
+            --accent-hover: #c6cad0;
+            --accent-light: rgba(255, 255, 255, 0.06);
+            --accent-glass: rgba(255, 255, 255, 0.04);
+            --accent-glow: none;
 
-            --success: #34d399;
-            --success-light: rgba(52, 211, 153, 0.10);
-            --warning: #fbbf24;
-            --warning-light: rgba(251, 191, 36, 0.10);
-            --danger: #f87171;
-            --danger-light: rgba(248, 113, 113, 0.10);
+            --success: #a7b6a9;
+            --success-light: rgba(255, 255, 255, 0.05);
+            --warning: #c8b07a;
+            --warning-light: rgba(200, 176, 122, 0.10);
+            --danger: #c98a8a;
+            --danger-light: rgba(201, 138, 138, 0.10);
 
-            --border: rgba(255, 255, 255, 0.06);
-            --border-accent: rgba(129, 140, 248, 0.2);
-            --divider: rgba(255, 255, 255, 0.05);
+            --border: #24262b;
+            --border-accent: rgba(255, 255, 255, 0.16);
+            --divider: #1d1f24;
 
-            --radius-sm: 12px;
-            --radius-md: 16px;
-            --radius-lg: 20px;
-            --radius-xl: 24px;
+            --radius-sm: 3px;
+            --radius-md: 4px;
+            --radius-lg: 6px;
+            --radius-xl: 8px;
 
-            --transition-fast: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-            --transition-smooth: 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+            --transition-fast: 0.15s ease;
+            --transition-smooth: 0.25s ease;
 
-            --chart-cyan: #22d3ee;
-            --chart-green: #34d399;
-            --chart-teal: #2dd4bf;
+            --chart-cyan: #c3c7cd;
+            --chart-green: #a7b6a9;
+            --chart-teal: #b0b4ba;
+
+            --grid-line: rgba(255, 255, 255, 0.03);
 
             --font: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
             --font-mono: 'SF Mono', 'JetBrains Mono', ui-monospace, monospace;
         }
 
         [data-theme="light"] {
-            --bg-primary: #f0f4ff;
-            --bg-orb-1: rgba(52, 211, 153, 0.12);
-            --bg-orb-2: rgba(99, 102, 241, 0.10);
-            --bg-orb-3: rgba(168, 85, 247, 0.08);
-            --bg-orb-4: rgba(34, 211, 238, 0.08);
+            --bg-primary: #f4f5f6;
+            --bg-orb-1: rgba(0, 0, 0, 0.02);
+            --bg-orb-2: rgba(0, 0, 0, 0.015);
+            --bg-orb-3: rgba(0, 0, 0, 0.012);
+            --bg-orb-4: rgba(0, 0, 0, 0.01);
 
-            --glass-bg: rgba(255, 255, 255, 0.55);
-            --glass-bg-hover: rgba(255, 255, 255, 0.7);
-            --glass-heavy: rgba(255, 255, 255, 0.65);
-            --glass-border: rgba(255, 255, 255, 0.7);
-            --glass-border-hover: rgba(255, 255, 255, 0.9);
-            --glass-highlight: inset 0 1px 0 0 rgba(255, 255, 255, 0.8);
-            --glass-shadow: 0 8px 32px rgba(99, 102, 241, 0.08), 0 2px 8px rgba(0, 0, 0, 0.04);
-            --glass-shadow-lg: 0 16px 48px rgba(99, 102, 241, 0.12), 0 4px 16px rgba(0, 0, 0, 0.06);
+            --glass-bg: #ffffff;
+            --glass-bg-hover: #f2f3f4;
+            --glass-heavy: #ffffff;
+            --glass-border: #dcdde0;
+            --glass-border-hover: #c3c5c9;
+            --glass-highlight: inset 0 1px 0 0 rgba(255, 255, 255, 0.9);
+            --glass-shadow: 0 1px 0 rgba(0, 0, 0, 0.03);
+            --glass-shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.08);
+            --glass-blur: none;
 
-            --text-primary: #1e1b4b;
-            --text-secondary: #64648b;
-            --text-tertiary: #9898b0;
-            --text-quaternary: #c0c0d4;
+            --text-primary: #17181a;
+            --text-secondary: #5b5e64;
+            --text-tertiary: #8a8d93;
+            --text-quaternary: #b7b9bd;
 
-            --accent: #6366f1;
-            --accent-hover: #4f46e5;
-            --accent-light: rgba(99, 102, 241, 0.08);
-            --accent-glass: rgba(99, 102, 241, 0.05);
-            --accent-glow: 0 0 20px rgba(99, 102, 241, 0.1);
+            --accent: #2a2c30;
+            --accent-hover: #45484d;
+            --accent-light: rgba(0, 0, 0, 0.05);
+            --accent-glass: rgba(0, 0, 0, 0.03);
+            --accent-glow: none;
 
-            --success: #10b981;
-            --success-light: rgba(16, 185, 129, 0.08);
-            --warning: #d97706;
-            --warning-light: rgba(217, 119, 6, 0.08);
-            --danger: #ef4444;
-            --danger-light: rgba(239, 68, 68, 0.08);
+            --success: #5f7265;
+            --success-light: rgba(0, 0, 0, 0.04);
+            --warning: #8a7538;
+            --warning-light: rgba(138, 117, 56, 0.10);
+            --danger: #9c6060;
+            --danger-light: rgba(156, 96, 96, 0.10);
 
-            --border: rgba(0, 0, 0, 0.06);
-            --border-accent: rgba(99, 102, 241, 0.15);
-            --divider: rgba(0, 0, 0, 0.05);
+            --border: #dcdde0;
+            --border-accent: rgba(0, 0, 0, 0.18);
+            --divider: #e7e8ea;
 
-            --chart-cyan: #0891b2;
-            --chart-green: #059669;
-            --chart-teal: #0d9488;
+            --chart-cyan: #4a4d52;
+            --chart-green: #5f7265;
+            --chart-teal: #55585d;
+
+            --grid-line: rgba(0, 0, 0, 0.035);
         }
 
         html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
@@ -1482,6 +1585,170 @@ async function handleRequest(event) {
             .info-label { font-size: 12px; }
             .info-value { font-size: 12px; }
         }
+
+        /* ==================== HUD 灰度覆盖层 ==================== */
+        /* 网格背景替换极光 */
+        body::before {
+            background-image:
+                linear-gradient(var(--grid-line) 1px, transparent 1px),
+                linear-gradient(90deg, var(--grid-line) 1px, transparent 1px) !important;
+            background-size: 40px 40px, 40px 40px !important;
+            animation: none !important;
+            filter: none !important;
+            opacity: 1 !important;
+            -webkit-mask-image: radial-gradient(circle at 50% 0%, #000 0%, transparent 85%);
+            mask-image: radial-gradient(circle at 50% 0%, #000 0%, transparent 85%);
+        }
+        body::after { display: none !important; }
+
+        .header, .hero-card, .card, .stats-card, .hw-strip, .footer, .theme-toggle, .lang-switcher, .stat-item, .btn { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+        .card:hover { transform: none; }
+        .hw-strip-label, .logo h1, .card-header h3, .stats-card .card-header h3 { letter-spacing: 0.6px; }
+        .info-label, .quality-label, .ip-label, .rtt-label, .usage-total-label {
+            text-transform: uppercase; letter-spacing: 1.1px;
+        }
+        .logo-icon {
+            background: linear-gradient(135deg, #2a2c31, #14151a) !important;
+            border: 1px solid var(--glass-border);
+            color: var(--text-primary) !important;
+            box-shadow: none !important;
+        }
+        [data-theme="light"] .logo-icon { background: linear-gradient(135deg, #e9eaec, #d3d5d9) !important; color: #17181a !important; }
+
+        /* 主按钮：灰度反白 */
+        .btn-primary {
+            background: var(--text-primary) !important;
+            color: var(--bg-primary) !important;
+            border-color: var(--text-primary) !important;
+            box-shadow: none !important;
+        }
+        .btn-primary:hover { background: #ffffff !important; border-color: #ffffff !important; }
+        [data-theme="light"] .btn-primary { background: #17181a !important; color: #ffffff !important; border-color: #17181a !important; }
+        [data-theme="light"] .btn-primary:hover { background: #000000 !important; }
+        .btn-cyan, .btn-purple {
+            background: var(--glass-bg-hover) !important;
+            border-color: var(--glass-border) !important;
+            color: var(--text-secondary) !important;
+            box-shadow: none !important;
+        }
+        .btn-cyan:hover, .btn-purple:hover { background: var(--glass-bg) !important; color: var(--text-primary) !important; box-shadow: none !important; }
+
+        /* 状态徽章去彩，仅保留克制的语义色 */
+        .badge-success { border-color: rgba(167, 182, 169, 0.28); }
+        .badge-warning { border-color: rgba(200, 176, 122, 0.28); }
+        .badge-danger { border-color: rgba(201, 138, 138, 0.28); }
+        .badge-info { border-color: var(--glass-border); }
+        .badge-purple { background: var(--glass-bg-hover); color: var(--text-secondary); border-color: var(--glass-border); }
+        .copy-btn:hover { background: var(--glass-bg-hover); }
+        .loading { border-color: var(--glass-border) !important; border-top-color: var(--text-secondary) !important; }
+        .modal-box textarea:focus { border-color: var(--glass-border-hover) !important; box-shadow: none !important; }
+
+        /* 标签导航 */
+        .tab-nav {
+            display: flex; gap: 2px; margin-bottom: 22px; padding: 4px;
+            background: var(--glass-heavy);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-lg);
+            overflow-x: auto; scrollbar-width: none;
+        }
+        .tab-nav::-webkit-scrollbar { display: none; }
+        .tab-btn {
+            flex: 1 1 0; min-width: max-content; white-space: nowrap;
+            display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+            padding: 10px 16px; border: none; border-radius: var(--radius-sm);
+            background: transparent; color: var(--text-tertiary);
+            font-family: var(--font); font-size: 13px; font-weight: 500; letter-spacing: 0.5px;
+            cursor: pointer; transition: var(--transition-fast);
+        }
+        .tab-btn i { font-size: 12px; opacity: 0.75; }
+        .tab-btn:hover { color: var(--text-primary); background: var(--glass-bg-hover); }
+        .tab-btn.active {
+            color: var(--text-primary); background: var(--glass-bg-hover);
+            box-shadow: inset 0 -2px 0 var(--text-primary);
+        }
+        .tab-panel { display: none; }
+        .tab-panel.active { display: block; animation: hudFade 0.25s ease; }
+        @keyframes hudFade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+        @media (max-width: 768px) {
+            .tab-btn { padding: 9px 12px; font-size: 12px; gap: 6px; }
+            .tab-btn i { display: none; }
+        }
+
+        /* ==================== 工具卡片网格 ==================== */
+        .tool-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
+        .tool-card {
+            display: flex; align-items: center; gap: 14px; text-align: left; width: 100%;
+            padding: 15px; border: 1px solid var(--glass-border); border-radius: var(--radius-md);
+            background: var(--glass-bg); cursor: pointer; color: var(--text-primary);
+            font-family: var(--font); transition: var(--transition-fast);
+        }
+        .tool-card:hover { background: var(--glass-bg-hover); border-color: var(--glass-border-hover); }
+        .tool-card .tc-icon {
+            width: 38px; height: 38px; flex: 0 0 38px; display: flex; align-items: center; justify-content: center;
+            border: 1px solid var(--glass-border); border-radius: var(--radius-sm);
+            color: var(--text-secondary); font-size: 15px; background: var(--glass-heavy);
+        }
+        .tool-card:hover .tc-icon { color: var(--text-primary); border-color: var(--glass-border-hover); }
+        .tool-card .tc-text { flex: 1; min-width: 0; }
+        .tool-card .tc-name { display: block; font-size: 13px; font-weight: 600; letter-spacing: 0.3px; }
+        .tool-card .tc-desc { display: block; font-size: 11px; color: var(--text-tertiary); margin-top: 3px; line-height: 1.35; }
+        .tool-card .tc-go { color: var(--text-quaternary); font-size: 10px; transition: var(--transition-fast); }
+        .tool-card:hover .tc-go { color: var(--text-secondary); }
+
+        /* ==================== 工具结果弹层 ==================== */
+        .tool-modal-box { max-width: 620px; width: 92%; max-height: 84vh; display: flex; flex-direction: column; }
+        .tool-modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding-bottom: 14px; border-bottom: 1px solid var(--divider); margin-bottom: 16px; }
+        .tool-modal-head h3 { font-size: 16px; font-weight: 600; letter-spacing: 0.3px; }
+        .tool-modal-head p { font-size: 12px; color: var(--text-tertiary); margin-top: 4px; }
+        .tool-close { flex: 0 0 auto; width: 30px; height: 30px; background: var(--glass-bg); border: 1px solid var(--glass-border); color: var(--text-secondary); border-radius: var(--radius-sm); cursor: pointer; transition: var(--transition-fast); }
+        .tool-close:hover { color: var(--text-primary); border-color: var(--glass-border-hover); }
+        .tool-modal-actions { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+        .tool-rerun { display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 12px; background: var(--glass-bg); border: 1px solid var(--glass-border); color: var(--text-secondary); border-radius: var(--radius-sm); cursor: pointer; font-family: var(--font); font-size: 12px; transition: var(--transition-fast); }
+        .tool-rerun:hover { color: var(--text-primary); border-color: var(--glass-border-hover); background: var(--glass-bg-hover); }
+        .tool-rerun i { font-size: 11px; }
+        @media (max-width: 520px) { .tool-rerun span { display: none; } .tool-rerun { padding: 0 9px; } }
+        .tool-modal-body { overflow-y: auto; min-height: 80px; }
+
+        .tool-loading { display: flex; align-items: center; gap: 8px; color: var(--text-secondary); font-size: 13px; padding: 14px 0; }
+        .tool-error { display: flex; align-items: center; gap: 9px; color: var(--danger); font-size: 13px; padding: 13px 14px; border: 1px solid var(--danger-light); border-radius: var(--radius-sm); }
+
+        /* 结果：指标卡 + 进度条 */
+        .result-title { font-size: 11px; text-transform: uppercase; letter-spacing: 1.1px; color: var(--text-tertiary); margin: 2px 0 12px; }
+        .metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 10px; }
+        .metric-card { border: 1px solid var(--glass-border); border-radius: var(--radius-sm); background: var(--glass-bg); padding: 14px; }
+        .metric-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .metric-value { font-size: 24px; font-weight: 700; font-family: var(--font-mono); letter-spacing: -0.5px; margin-top: 6px; color: var(--text-primary); }
+        .metric-unit { font-size: 11px; font-weight: 500; color: var(--text-tertiary); margin-left: 4px; font-family: var(--font); letter-spacing: 0; }
+        .metric-bar { height: 4px; border-radius: 2px; background: var(--divider); margin-top: 10px; overflow: hidden; }
+        .metric-bar i { display: block; height: 100%; width: 0; background: var(--text-primary); border-radius: 2px; transition: width 0.4s ease; }
+        .metric-card.tone-warn .metric-value { color: var(--warning); }
+        .metric-card.tone-warn .metric-bar i { background: var(--warning); }
+        .metric-card.tone-bad .metric-value { color: var(--danger); }
+        .metric-card.tone-bad .metric-bar i { background: var(--danger); }
+
+        /* 结果：行列表 */
+        .result-rows { display: flex; flex-direction: column; gap: 6px; }
+        .result-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 13px; border: 1px solid var(--glass-border); border-radius: var(--radius-sm); font-size: 12px; }
+        .result-row .rr-name { color: var(--text-secondary); }
+        .result-row .rr-val { font-family: var(--font-mono); color: var(--text-primary); font-weight: 600; }
+        .result-row.is-bad .rr-val { color: var(--danger); }
+        .result-row.is-warn .rr-val { color: var(--warning); }
+
+        /* 站点体检：输入行 */
+        .tool-field { display: flex; gap: 10px; margin-bottom: 4px; }
+        .tool-input { flex: 1 1 auto; min-width: 0; height: 40px; padding: 0 12px; background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: var(--radius-sm); color: var(--text-primary); font-family: var(--font-mono); font-size: 13px; }
+        .tool-input:focus { outline: none; border-color: var(--glass-border-hover); }
+        .tool-input::placeholder { color: var(--text-quaternary); font-family: var(--font); }
+        .tool-field .btn { flex: 0 0 auto; height: 40px; }
+        @media (max-width: 520px) { .tool-field { flex-direction: column; } .tool-field .btn { width: 100%; justify-content: center; } }
+
+        /* 结果：TTFB 阶段条 */
+        .ttfb-row { display: flex; align-items: center; gap: 10px; margin: 7px 0; }
+        .ttfb-label { min-width: 104px; font-size: 11px; color: var(--text-secondary); }
+        .ttfb-track { flex: 1; height: 12px; background: var(--divider); border-radius: 6px; overflow: hidden; }
+        .ttfb-track i { display: block; height: 100%; border-radius: 6px; transition: width 0.4s ease; }
+        .ttfb-val { min-width: 46px; text-align: right; font-size: 11px; font-weight: 600; font-family: var(--font-mono); color: var(--text-primary); }
 </style>
 </head>
 <body>
@@ -1506,18 +1773,27 @@ async function handleRequest(event) {
             </div>
         </div>
 
+        <!-- ==================== 标签导航 ==================== -->
+        <div class="tab-nav">
+            <button class="tab-btn active" data-tab="overview"><i class="fas fa-gauge-high"></i> <span id="tab-overview">概览</span></button>
+            <button class="tab-btn" data-tab="network"><i class="fas fa-network-wired"></i> <span id="tab-network">网络信息</span></button>
+            <button class="tab-btn" data-tab="tools"><i class="fas fa-flask"></i> <span id="tab-tools">诊断工具</span></button>
+            <button class="tab-btn" data-tab="history"><i class="fas fa-clock-rotate-left"></i> <span id="tab-history">历史统计</span></button>
+        </div>
+
+        <div class="tab-panel active" id="panel-overview">
         <!-- ==================== Hero 卡片 ==================== -->
         <div class="hero-card">
             <div class="ip-row">
                 <span class="ip-label"><i class="fas fa-globe"></i> IPv4</span>
-                <span id="v4" class="ip-val">检测中...</span>
+                <span id="v4" class="ip-val" data-pending="1">检测中...</span>
             </div>
             <div class="ip-row">
                 <span class="ip-label"><i class="fas fa-globe"></i> IPv6</span>
-                <span id="v6" class="ip-val ip-val-small">检测中...</span>
+                <span id="v6" class="ip-val ip-val-small" data-pending="1">检测中...</span>
             </div>
             <div class="stats-row">
-                <div class="stat-item"><i class="fas fa-map-marker-alt"></i> <span id="t-edge-label">边缘节点</span>: <strong id="colo-display">${data.colo}</strong></div>
+                <div class="stat-item"><i class="fas fa-map-marker-alt"></i> <span id="t-edge-label">边缘节点</span>: <strong id="colo-display">${h.colo}</strong></div>
                 <div class="stat-item"><i class="far fa-clock"></i> <span id="t-worker-label">Worker 耗时</span>: <strong>${workerDuration}ms</strong></div>
                 <div class="stat-item"><span class="live-dot"></span> <span id="t-live">实时监控中</span></div>
             </div>
@@ -1555,11 +1831,11 @@ async function handleRequest(event) {
                 <div class="quality-grid">
                     <div class="quality-card">
                         <span class="quality-label"><i class="fas fa-signal"></i> <span id="t-quality">连接质量</span></span>
-                        <span class="quality-value" id="quality-badge" style="color: var(--chart-green);">优秀</span>
+                        <span class="quality-value" id="quality-badge" style="color: var(--chart-green);">--</span>
                     </div>
                     <div class="quality-card">
                         <span class="quality-label"><i class="fas fa-chart-simple"></i> <span id="t-stability">网络稳定性</span></span>
-                        <span class="quality-value" id="stability-badge" style="color: var(--chart-teal);">稳定</span>
+                        <span class="quality-value" id="stability-badge" style="color: var(--chart-teal);">--</span>
                     </div>
                     <div class="quality-card">
                         <span class="quality-label"><i class="fas fa-chart-bar"></i> <span id="t-samples">样本数量</span></span>
@@ -1573,6 +1849,9 @@ async function handleRequest(event) {
             </div>
         </div>
 
+        </div>
+
+        <div class="tab-panel" id="panel-network">
         <!-- ==================== 安全与协议（全宽双列） ==================== -->
         <div class="card" style="margin-bottom:20px;">
             <div class="card-header">
@@ -1594,19 +1873,19 @@ async function handleRequest(event) {
                     </div>
                     <div class="info-row">
                         <span class="info-label"><i class="fas fa-network-wired"></i> <span id="t-asn">ASN</span></span>
-                        <span class="info-value">${data.asn}</span>
+                        <span class="info-value">${h.asn}</span>
                     </div>
                     <div class="info-row">
                         <span class="info-label"><i class="fas fa-exchange-alt"></i> <span id="t-proto-label">协议</span></span>
-                        <span class="info-value" id="proto-val">${data.proto}</span>
+                        <span class="info-value" id="proto-val">${h.proto}</span>
                     </div>
                     <div class="info-row">
                         <span class="info-label"><i class="fas fa-lock"></i> <span id="t-tls-version">TLS 版本</span></span>
-                        <span class="info-value"><span class="badge badge-info">${data.tlsVersion}</span></span>
+                        <span class="info-value"><span class="badge badge-info">${h.tlsVersion}</span></span>
                     </div>
                     <div class="info-row">
                         <span class="info-label"><i class="fas fa-key"></i> <span id="t-cipher">加密套件</span></span>
-                        <span class="info-value" style="font-size:11px;font-family:var(--font-mono);">${data.tlsCipher}</span>
+                        <span class="info-value" style="font-size:11px;font-family:var(--font-mono);">${h.tlsCipher}</span>
                     </div>
                     <div class="info-row">
                         <span class="info-label"><i class="fas fa-eye"></i> ECH</span>
@@ -1618,7 +1897,7 @@ async function handleRequest(event) {
                     </div>
                     <div class="info-row">
                         <span class="info-label"><i class="fas fa-rocket"></i> <span id="t-http2-label">HTTP/2 状态</span></span>
-                        <span class="info-value" id="http2-val">检测中...</span>
+                        <span class="info-value" id="http2-val">--</span>
                     </div>
                     <div class="info-row">
                         <span class="info-label"><i class="fas fa-robot"></i> <span id="t-bot-label">机器人评分</span></span>
@@ -1626,11 +1905,11 @@ async function handleRequest(event) {
                     </div>
                     <div class="info-row">
                         <span class="info-label"><i class="fas fa-fingerprint"></i> JA3</span>
-                        <span class="info-value" style="font-size:10px;word-break:break-all;">${data.tlsClientJa3}</span>
+                        <span class="info-value" style="font-size:10px;word-break:break-all;">${h.tlsClientJa3}</span>
                     </div>
                     <div class="info-row">
                         <span class="info-label"><i class="fas fa-fingerprint"></i> JA4</span>
-                        <span class="info-value" style="font-size:10px;word-break:break-all;">${data.tlsClientJa4}</span>
+                        <span class="info-value" style="font-size:10px;word-break:break-all;">${h.tlsClientJa4}</span>
                     </div>
                 </div>
             </div>
@@ -1650,15 +1929,15 @@ async function handleRequest(event) {
                 <div class="card-body">
                     <div class="info-row">
                         <span class="info-label"><i class="fas fa-location-dot"></i> <span id="t-geo-location">位置</span></span>
-                        <span class="info-value">${data.city}, ${data.region}, ${data.country}</span>
+                        <span class="info-value">${h.city}, ${h.region}, ${h.country}</span>
                     </div>
                     <div class="info-row">
                         <span class="info-label"><i class="fas fa-crosshairs"></i> <span id="t-geo-coord">坐标</span></span>
-                        <span class="info-value">${data.lat}°${data.latDir} / ${data.lon}°${data.lonDir}</span>
+                        <span class="info-value">${h.lat}°${h.latDir} / ${h.lon}°${h.lonDir}</span>
                     </div>
                     <div class="info-row">
                         <span class="info-label"><i class="fas fa-building"></i> <span id="t-geo-org">运营商</span></span>
-                        <span class="info-value" style="font-size:12px;">${data.asOrg}</span>
+                        <span class="info-value" style="font-size:12px;">${h.asOrg}</span>
                     </div>
                 </div>
             </div>
@@ -1681,9 +1960,12 @@ async function handleRequest(event) {
         <!-- ==================== 硬件信息（紧凑横条） ==================== -->
         <div class="hw-strip">
             <span class="hw-strip-label"><i class="fas fa-desktop"></i> <span id="t-hw">硬件信息</span></span>
-            <div id="hw-info" class="hw-grid">加载中...</div>
+            <div id="hw-info" class="hw-grid">--</div>
         </div>
 
+        </div>
+
+        <div class="tab-panel" id="panel-tools">
         <!-- ==================== 诊断工具集 ==================== -->
         <div class="card" style="margin-bottom:28px;">
             <div class="card-header">
@@ -1694,35 +1976,13 @@ async function handleRequest(event) {
                 </div>
             </div>
             <div class="card-body">
-                <div class="button-group">
-                    <button class="btn btn-outline" id="btn-loss-test"><i class="fas fa-tachometer-alt"></i> <span id="t-loss-btn">丢包率</span></button>
-                    <button class="btn btn-primary" id="btn-speed-test"><i class="fas fa-gauge-high"></i> <span id="t-speed-btn">带宽测速</span></button>
-                    <button class="btn btn-outline" id="btn-dns-test"><i class="fas fa-server"></i> <span id="t-dns-btn">DNS 解析</span></button>
-                    <button class="btn btn-cyan" id="btn-cpu-test"><i class="fas fa-microchip"></i> <span id="t-cpu-btn">CPU 性能</span></button>
-                    <button class="btn btn-purple" id="btn-ws-test"><i class="fas fa-bolt"></i> <span id="t-ws-btn">WebSocket</span></button>
-                    <button class="btn btn-cyan" id="btn-concurrent-test"><i class="fas fa-layer-group"></i> <span id="t-concurrent-btn">并发测试</span></button>
-                    <button class="btn btn-outline" id="btn-stream-test"><i class="fas fa-stream"></i> <span id="t-stream-btn">流式传输</span></button>
-                    <button class="btn btn-outline" id="btn-media-unlock"><i class="fas fa-play-circle"></i> <span id="t-media-btn">流媒体连通性</span></button>
-                    <button class="btn btn-outline" id="btn-multi-node"><i class="fas fa-globe-asia"></i> <span id="t-multi-btn">多节点对比</span></button>
-                    <button class="btn btn-outline" id="btn-webrtc-test"><i class="fas fa-user-shield"></i> <span id="t-webrtc-btn">WebRTC 泄漏</span></button>
-                    <button class="btn btn-outline" id="btn-ttfb-test"><i class="fas fa-stopwatch"></i> <span id="t-ttfb-btn">TTFB 分析</span></button>
-                    <button class="btn btn-cyan" id="btn-upload-test"><i class="fas fa-upload"></i> <span id="t-upload-btn">上传测速</span></button>
-                </div>
-                <div id="loss-result" class="result-area" style="display:none;"></div>
-                <div id="speed-result" style="display:none;"></div>
-                <div id="dns-result" class="result-area" style="display:none;"></div>
-                <div id="cpu-result" class="result-area" style="display:none;"></div>
-                <div id="ws-result" class="result-area" style="display:none;"></div>
-                <div id="concurrent-result" class="result-area" style="display:none;"></div>
-                <div id="stream-result" class="result-area" style="display:none;"></div>
-                <div id="media-result" class="result-area" style="display:none;"></div>
-                <div id="multi-node-result" class="result-area" style="display:none;"></div>
-                <div id="webrtc-result" class="result-area" style="display:none;"></div>
-                <div id="ttfb-result" class="result-area" style="display:none;"></div>
-                <div id="upload-result" class="result-area" style="display:none;"></div>
+                <div class="tool-grid" id="toolGrid"></div>
             </div>
         </div>
 
+        </div>
+
+        <div class="tab-panel" id="panel-history">
         <!-- ==================== 历史与统计 ==================== -->
         <div class="stats-grid">
             <div class="stats-card">
@@ -1751,10 +2011,12 @@ async function handleRequest(event) {
             </div>
         </div>
 
+        </div>
+
         <!-- ==================== 底部 ==================== -->
         <div class="footer">
-            <span><i class="fas fa-fingerprint"></i> RAY ID: <span style="font-family:monospace;">${data.rayId}</span></span>
-            <span><i class="fas fa-ethernet"></i> <span id="t-client-label">客户端</span>: ${data.clientIp}</span>
+            <span><i class="fas fa-fingerprint"></i> RAY ID: <span style="font-family:monospace;">${h.rayId}</span></span>
+            <span><i class="fas fa-ethernet"></i> <span id="t-client-label">客户端</span>: ${h.clientIp}</span>
             <span class="copy-btn" id="copy-report"><i class="fas fa-copy"></i> <span id="t-copy">复制报告</span></span>
         </div>
 
@@ -1778,6 +2040,23 @@ async function handleRequest(event) {
                 <button class="btn btn-outline" id="modalCancel"><span id="modal-cancel">取消</span></button>
                 <button class="btn btn-primary" id="modalStart"><span id="modal-start">开始测试</span></button>
             </div>
+        </div>
+    </div>
+
+    <!-- ====== 工具结果弹层 ====== -->
+    <div class="modal-overlay" id="toolModal">
+        <div class="modal-box tool-modal-box">
+            <div class="tool-modal-head">
+                <div>
+                    <h3 id="toolModalTitle">—</h3>
+                    <p id="toolModalDesc"></p>
+                </div>
+                <div class="tool-modal-actions">
+                    <button class="tool-rerun" id="toolModalRerun"><i class="fas fa-rotate-right"></i> <span id="toolModalRerunLabel">重新运行</span></button>
+                    <button class="tool-close" id="toolModalClose" aria-label="close"><i class="fas fa-xmark"></i></button>
+                </div>
+            </div>
+            <div class="tool-modal-body" id="toolModalBody"></div>
         </div>
     </div>
 
@@ -1955,7 +2234,44 @@ async function handleRequest(event) {
                     reportIpRisk: 'IP Risk Info',
                     reportCompressNone: 'None',
                     reportUnknown: 'Unknown',
-                    reportFooter: 'Report auto-generated by NetSight Pro · Powered by CF-workers-netdiag'
+                    reportFooter: 'Report auto-generated by NetSight Pro · Powered by CF-workers-netdiag',
+                    tabOverview: 'Overview',
+                    tabNetwork: 'Network',
+                    tabTools: 'Diagnostics',
+                    tabHistory: 'History',
+                    running: 'Running...',
+                    metricDuration: 'Duration',
+                    detecting: 'Detecting...',
+                    themeTip: 'Toggle theme',
+                    pageTitle: 'NetSight Pro | Aurora Network Diagnostics',
+                    rerun: 'Re-run',
+                    auditBtn: 'Site Audit',
+                    auditPrompt: 'Enter a site URL to audit',
+                    auditRun: 'Run Audit',
+                    auditFinal: 'Final URL',
+                    auditStatus: 'Status',
+                    auditTtfb: 'TTFB',
+                    auditTotal: 'Total',
+                    auditRedirects: 'Redirects',
+                    auditHeaders: 'Security Headers',
+                    auditMissing: 'Missing',
+                    auditInvalid: 'Enter a valid http(s) URL',
+                    auditFailed: 'Audit failed',
+                    toolDesc: {
+                        loss: 'Probe the endpoint repeatedly and measure packet loss',
+                        speed: 'Multi-size download to estimate downstream bandwidth',
+                        dns: 'Resolve popular sites and measure lookup time',
+                        cpu: 'Worker-side compute benchmark',
+                        ws: 'Measure WebSocket round-trip latency',
+                        concurrent: 'Fire concurrent requests at several levels',
+                        stream: 'Chunked streaming download throughput',
+                        media: 'Check reachability of streaming services',
+                        multi: 'Compare latency across multiple Worker nodes',
+                        webrtc: 'Detect whether WebRTC leaks your real IP',
+                        ttfb: 'Break down request timing phase by phase',
+                        upload: 'Multi-size upload to estimate upstream bandwidth',
+                        audit: 'Audit HTTP security headers and response timing of a site'
+                    }
                 },
                 'zh-CN': {
                     subtitle: '极光诊断 · 实时网络分析',
@@ -2112,7 +2428,44 @@ async function handleRequest(event) {
                     reportIpRisk: 'IP 风险信息',
                     reportCompressNone: '无',
                     reportUnknown: '未知',
-                    reportFooter: '报告由 NetSight Pro 自动生成 · 由 CF-workers-netdiag 强力驱动'
+                    reportFooter: '报告由 NetSight Pro 自动生成 · 由 CF-workers-netdiag 强力驱动',
+                    tabOverview: '概览',
+                    tabNetwork: '网络信息',
+                    tabTools: '诊断工具',
+                    tabHistory: '历史统计',
+                    running: '运行中...',
+                    metricDuration: '耗时',
+                    detecting: '检测中...',
+                    themeTip: '切换主题',
+                    pageTitle: 'NetSight Pro | 极光网络诊断',
+                    rerun: '重新运行',
+                    auditBtn: '站点体检',
+                    auditPrompt: '输入要检测的站点 URL',
+                    auditRun: '开始检测',
+                    auditFinal: '最终地址',
+                    auditStatus: '状态码',
+                    auditTtfb: '首字节',
+                    auditTotal: '总耗时',
+                    auditRedirects: '重定向',
+                    auditHeaders: '安全响应头',
+                    auditMissing: '缺失',
+                    auditInvalid: '请输入有效的 http(s) 地址',
+                    auditFailed: '检测失败',
+                    toolDesc: {
+                        loss: '连续探测端点，统计丢包率',
+                        speed: '多档位下载，估算下行带宽',
+                        dns: '解析主流站点，测量解析耗时',
+                        cpu: 'Worker 端计算基准测试',
+                        ws: 'WebSocket 往返延迟测量',
+                        concurrent: '多档位并发请求，观察吞吐',
+                        stream: '分块流式下载，测试持续吞吐',
+                        media: '检测流媒体站点可达性',
+                        multi: '对比多个 Worker 节点的延迟',
+                        webrtc: '检测 WebRTC 是否泄漏真实 IP',
+                        ttfb: '分阶段拆解请求耗时',
+                        upload: '多档位上传，估算上行带宽',
+                        audit: '审计目标站点的 HTTP 安全响应头与响应性能'
+                    }
                 },
                 'zh-TW': {
                     subtitle: '極光診斷 · 即時網路分析',
@@ -2269,7 +2622,44 @@ async function handleRequest(event) {
                     reportIpRisk: 'IP 風險資訊',
                     reportCompressNone: '無',
                     reportUnknown: '未知',
-                    reportFooter: '報告由 NetSight Pro 自動產生 · 由 CF-workers-netdiag 強力驅動'
+                    reportFooter: '報告由 NetSight Pro 自動產生 · 由 CF-workers-netdiag 強力驅動',
+                    tabOverview: '概覽',
+                    tabNetwork: '網路資訊',
+                    tabTools: '診斷工具',
+                    tabHistory: '歷史統計',
+                    running: '執行中...',
+                    metricDuration: '耗時',
+                    detecting: '偵測中...',
+                    themeTip: '切換主題',
+                    pageTitle: 'NetSight Pro | 極光網路診斷',
+                    rerun: '重新執行',
+                    auditBtn: '站點健檢',
+                    auditPrompt: '輸入要檢測的站點 URL',
+                    auditRun: '開始檢測',
+                    auditFinal: '最終網址',
+                    auditStatus: '狀態碼',
+                    auditTtfb: '首位元組',
+                    auditTotal: '總耗時',
+                    auditRedirects: '重新導向',
+                    auditHeaders: '安全回應標頭',
+                    auditMissing: '缺少',
+                    auditInvalid: '請輸入有效的 http(s) 網址',
+                    auditFailed: '檢測失敗',
+                    toolDesc: {
+                        loss: '連續探測端點，統計丟包率',
+                        speed: '多檔位下載，估算下行頻寬',
+                        dns: '解析主流站點，測量解析耗時',
+                        cpu: 'Worker 端運算基準測試',
+                        ws: 'WebSocket 往返延遲測量',
+                        concurrent: '多檔位併發請求，觀察吞吐',
+                        stream: '分塊串流下載，測試持續吞吐',
+                        media: '檢測串流媒體站點可達性',
+                        multi: '對比多個 Worker 節點的延遲',
+                        webrtc: '檢測 WebRTC 是否洩漏真實 IP',
+                        ttfb: '分階段拆解請求耗時',
+                        upload: '多檔位上傳，估算上行頻寬',
+                        audit: '稽核目標站點的 HTTP 安全回應標頭與回應效能'
+                    }
                 }
             };
 
@@ -2341,6 +2731,8 @@ async function handleRequest(event) {
             let minRtt = Infinity;
             let maxRtt = 0;
             let rttTestRunning = true;
+            let lastRtt = null;
+            let resolvedV4 = '';
 
             // ==================== 工具函数 ====================
             function isDataCenter() {
@@ -2375,14 +2767,46 @@ async function handleRequest(event) {
                     .replace(/'/g, '&#39;');
             }
 
-            function showResult(element, html, isError = false) {
-                if (element) {
-                    element.style.display = 'block';
-                    element.innerHTML = html;
-                    element.style.background = isError ? 'var(--danger-light)' : 'var(--glass-bg)';
-                    element.style.borderLeftColor = isError ? 'var(--danger)' : 'var(--accent)';
-                    element.style.opacity = '1';
-                }
+            function showResult(_element, html, isError = false) {
+                const body = document.getElementById('toolModalBody');
+                if (!body) return;
+                body.innerHTML = isError ? '<div class="tool-error">' + html + '</div>' : html;
+            }
+
+            function resultTitle(text) {
+                return '<div class="result-title">' + escapeHTML(text) + '</div>';
+            }
+
+            function metricCard(label, value, unit, tone, barPct) {
+                const safeTone = (tone === 'ok' || tone === 'warn' || tone === 'bad') ? ' tone-' + tone : '';
+                const bar = (barPct !== undefined && barPct !== null)
+                    ? '<div class="metric-bar"><i style="width:' + Math.max(2, Math.min(100, Number(barPct) || 0)) + '%"></i></div>'
+                    : '';
+                const unitHtml = unit ? '<span class="metric-unit">' + escapeHTML(String(unit)) + '</span>' : '';
+                return '<div class="metric-card' + safeTone + '">'
+                    + '<div class="metric-label">' + escapeHTML(String(label)) + '</div>'
+                    + '<div class="metric-value">' + escapeHTML(String(value)) + unitHtml + '</div>'
+                    + bar + '</div>';
+            }
+
+            function metricGrid(cards) {
+                return '<div class="metric-grid">' + cards.join('') + '</div>';
+            }
+
+            function openToolModal(title, desc) {
+                const mt = document.getElementById('toolModalTitle');
+                const md = document.getElementById('toolModalDesc');
+                if (mt) mt.textContent = title || '';
+                if (md) md.textContent = desc || '';
+                const body = document.getElementById('toolModalBody');
+                if (body) body.innerHTML = '<div class="tool-loading"><span class="loading"></span> ' + escapeHTML(i18n[currentLang].running) + '</div>';
+                const el = document.getElementById('toolModal');
+                if (el) el.classList.add('active');
+            }
+
+            function closeToolModal() {
+                const el = document.getElementById('toolModal');
+                if (el) el.classList.remove('active');
             }
 
             // ==================== UI 更新（全界面国际化） ====================
@@ -2456,7 +2880,12 @@ async function handleRequest(event) {
                     'modal-title': t.multiBtn,
                     'modal-desc': t.enterNodeUrls,
                     'modal-cancel': t.cancel,
-                    'modal-start': t.start
+                    'modal-start': t.start,
+                    'tab-overview': t.tabOverview,
+                    'tab-network': t.tabNetwork,
+                    'tab-tools': t.tabTools,
+                    'tab-history': t.tabHistory,
+                    'toolModalRerunLabel': t.rerun
                 };
                 Object.entries(map).forEach(([id, text]) => {
                     const el = document.getElementById(id);
@@ -2516,23 +2945,29 @@ async function handleRequest(event) {
                     else badgeClass = 'badge-danger';
                     elements.botScoreVal.innerHTML = '<span class="badge ' + badgeClass + '">' + score + '</span>';
                 }
+
+                // 文档标题 / 主题按钮提示 / 未解析的 IP 占位文案（随语言切换）
+                document.title = t.pageTitle;
+                const themeBtn = document.getElementById('themeToggle');
+                if (themeBtn) themeBtn.title = t.themeTip;
+                if (elements.v4 && elements.v4.dataset.pending === '1') elements.v4.textContent = t.detecting;
+                if (elements.v6 && elements.v6.dataset.pending === '1') elements.v6.textContent = t.detecting;
+
+                renderToolCards();
             }
 
             window.setLang = function(lang) {
+                if (!i18n[lang]) return;
                 currentLang = lang;
                 try { localStorage.setItem('pref-lang', lang); } catch(e) {}
                 updateUI();
-                // 重新加载可能已经显示的地理位置欺诈信息（可刷新，但为了简便，不强制刷新）
-                // 用户切语言后欺诈信息会重新加载，但这里暂不处理，因为欺诈信息是动态加载的，其文本会在 loadFraudScore 中使用 t 变量。
-                // 为了即时更新，可以重新调用 loadFraudScore，但需要确保 t 是最新的。
-                // 由于 loadFraudScore 内部使用了 i18n[currentLang]，直接重新调用即可。
-                // 但因为 loadFraudScore 是异步的，且在 fetchUserGeo 之后调用，我们可以在这里触发重新加载。
-                // 但为了简单，用户切语言后，可以手动刷新页面，或者我们重新调用 fetchUserGeo？
-                // 更好的方式：在 loadFraudScore 中读取最新的 currentLang，由于它是闭包，每次调用都会使用当前值。
-                // 所以直接重新调用 loadFraudScore 即可。
-                if (document.querySelector('.fraud-info')) {
-                    loadFraudScore(); // 重新渲染欺诈信息
-                }
+                // 动态生成的文本也跟随语言刷新（刷新硬件信息、网络质量、真实IP位置）
+                updateHardwareInfo();
+                if (lastRtt !== null) updateQuality(lastRtt);
+                fetchUserGeo();
+                if (document.querySelector('.fraud-info')) loadFraudScore();
+                // 若工具结果弹层正打开，按新语言重新执行，保证结果正文也同步
+                if (toolModalEl && toolModalEl.classList.contains('active')) rerunCurrentTool();
             };
 
             // ==================== 图表 ====================
@@ -2556,7 +2991,7 @@ async function handleRequest(event) {
                 if (rttData.length < 2) return;
                 
                 ctx.beginPath();
-                ctx.strokeStyle = '#06b6d4';
+                ctx.strokeStyle = '#c3c7cd';
                 ctx.lineWidth = 2.5;
                 const stepX = canvas.width / (MAX_RTT_POINTS - 1);
                 const maxRttVal = Math.max(...rttData, 100);
@@ -2569,8 +3004,8 @@ async function handleRequest(event) {
                 ctx.stroke();
                 
                 const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
-                gradient.addColorStop(0, 'rgba(6, 182, 212, 0.3)');
-                gradient.addColorStop(1, 'rgba(6, 182, 212, 0)');
+                gradient.addColorStop(0, 'rgba(195, 199, 205, 0.28)');
+                gradient.addColorStop(1, 'rgba(195, 199, 205, 0)');
                 ctx.fillStyle = gradient;
                 ctx.lineTo(canvas.width, canvas.height);
                 ctx.lineTo(0, canvas.height);
@@ -2590,12 +3025,15 @@ async function handleRequest(event) {
                         if (res.ok) {
                             const ip = (await res.text()).trim();
                             if (ip && !ip.includes('<')) {
+                                el.removeAttribute('data-pending');
                                 el.textContent = ip;
+                                if (version === 'v4') resolvedV4 = ip;
                                 return;
                             }
                         }
                     } catch (e) {}
                 }
+                el.removeAttribute('data-pending');
                 el.textContent = i18n[currentLang].unavailable;
                 el.style.opacity = '0.5';
             }
@@ -2611,19 +3049,19 @@ async function handleRequest(event) {
                 let qualityText = '', qualityColor = '';
                 if (currentRtt < 50) {
                     qualityText = currentLang === 'en' ? 'Excellent' : (currentLang === 'zh-TW' ? '優秀' : '优秀');
-                    qualityColor = '#34d399';
+                    qualityColor = 'var(--text-primary)';
                 } else if (currentRtt < 100) {
                     qualityText = currentLang === 'en' ? 'Good' : (currentLang === 'zh-TW' ? '良好' : '良好');
-                    qualityColor = '#34d399';
+                    qualityColor = 'var(--text-primary)';
                 } else if (currentRtt < 150) {
                     qualityText = currentLang === 'en' ? 'Fair' : (currentLang === 'zh-TW' ? '一般' : '一般');
-                    qualityColor = '#fbbf24';
+                    qualityColor = 'var(--warning)';
                 } else if (currentRtt < 250) {
                     qualityText = currentLang === 'en' ? 'Poor' : (currentLang === 'zh-TW' ? '較差' : '较差');
-                    qualityColor = '#f87171';
+                    qualityColor = 'var(--danger)';
                 } else {
                     qualityText = currentLang === 'en' ? 'Very Poor' : (currentLang === 'zh-TW' ? '極差' : '极差');
-                    qualityColor = '#f87171';
+                    qualityColor = 'var(--danger)';
                 }
                 if (qualityEl) {
                     qualityEl.textContent = qualityText;
@@ -2635,16 +3073,16 @@ async function handleRequest(event) {
                     let stabilityText = '', stabilityColor = '';
                     if (avgJitter < 10) {
                         stabilityText = currentLang === 'en' ? 'Very Stable' : (currentLang === 'zh-TW' ? '非常穩定' : '非常稳定');
-                        stabilityColor = '#34d399';
+                        stabilityColor = 'var(--text-primary)';
                     } else if (avgJitter < 30) {
                         stabilityText = currentLang === 'en' ? 'Stable' : (currentLang === 'zh-TW' ? '穩定' : '稳定');
-                        stabilityColor = '#22d3ee';
+                        stabilityColor = 'var(--text-primary)';
                     } else if (avgJitter < 60) {
                         stabilityText = currentLang === 'en' ? 'Unstable' : (currentLang === 'zh-TW' ? '不穩定' : '不稳定');
-                        stabilityColor = '#fbbf24';
+                        stabilityColor = 'var(--warning)';
                     } else {
                         stabilityText = currentLang === 'en' ? 'Very Unstable' : (currentLang === 'zh-TW' ? '極不穩定' : '极不稳定');
-                        stabilityColor = '#f87171';
+                        stabilityColor = 'var(--danger)';
                     }
                     stabilityEl.textContent = stabilityText;
                     stabilityEl.style.color = stabilityColor;
@@ -2656,7 +3094,7 @@ async function handleRequest(event) {
                 if (lossRateEl) {
                     const rate = sampleCount > 0 ? Math.round((totalLoss / sampleCount) * 100) : 0;
                     lossRateEl.textContent = rate + '%';
-                    lossRateEl.style.color = rate === 0 ? '#34d399' : (rate < 5 ? '#fbbf24' : '#f87171');
+                    lossRateEl.style.color = rate === 0 ? 'var(--text-primary)' : (rate < 5 ? 'var(--warning)' : 'var(--danger)');
                 }
             }
 
@@ -2680,6 +3118,7 @@ async function handleRequest(event) {
                     await fetchWithTimeout(window.location.origin + '/health?_=' + Date.now(), 
                         { method: 'HEAD', cache: 'no-store' }, 2000);
                     const diff = Math.round(performance.now() - start);
+                    lastRtt = diff;
                     if (elements.rttNum) elements.rttNum.textContent = diff;
                     
                     sampleCount++;
@@ -2824,9 +3263,9 @@ async function handleRequest(event) {
                     return;
                 }
                 
-                const ip = elements.v4 ? elements.v4.textContent : '';
+                const ip = resolvedV4;
                 const t = i18n[currentLang];
-                if (!ip || ip.includes('检测中') || ip.includes(t.unavailable)) {
+                if (!ip) {
                     if (geoRetryCount < MAX_GEO_RETRY) {
                         geoRetryCount++;
                         setTimeout(fetchUserGeo, 1500);
@@ -2895,13 +3334,13 @@ async function handleRequest(event) {
                 showResult(elements.cpuResult, '<span class="loading"></span> ' + t.cpuTesting);
                 
                 try {
-                    const res = await fetch('/cpu-test?n=500000');
+                    const res = await fetch('/cpu-test?n=20000');
                     const data = await res.json();
-                    let badgeClass = data.opsMs > 50 ? 'badge-success' : (data.opsMs > 20 ? 'badge-warning' : 'badge-danger');
-                    showResult(elements.cpuResult, \`
-                        <i class="fas fa-microchip"></i> \${t.cpuPerf}: <strong>\${data.opsMs}</strong> ops/ms
-                        <span class="badge \${badgeClass}">\${data.duration}ms</span>
-                    \`);
+                    const tone = data.opsMs > 50 ? 'ok' : (data.opsMs > 20 ? 'warn' : 'bad');
+                    showResult(elements.cpuResult, resultTitle(t.cpuPerf) + metricGrid([
+                        metricCard('OPS/MS', data.opsMs, 'ops/ms', tone, Math.min(100, data.opsMs)),
+                        metricCard(t.metricDuration, data.duration, 'ms', null, null)
+                    ]));
                 } catch (e) {
                     showResult(elements.cpuResult, '<i class="fas fa-exclamation-triangle"></i> ' + t.cpuFailed, true);
                 }
@@ -2938,8 +3377,12 @@ async function handleRequest(event) {
                             
                             ws.onmessage = (event) => {
                                 try {
-                                    const pongTime = performance.now();
                                     const data = JSON.parse(event.data);
+                                    if (data.type === 'ping') {
+                                        ws.send(JSON.stringify({ type: 'pong' }));
+                                        return;
+                                    }
+                                    const pongTime = performance.now();
                                     if (data.type === 'pong') {
                                         const latency = pongTime - (data.echoTime || data.timestamp);
                                         latencies.push(latency);
@@ -2968,11 +3411,12 @@ async function handleRequest(event) {
                     });
                     
                     if (result.success) {
-                        let badgeClass = result.avg < 50 ? 'badge-success' : (result.avg < 150 ? 'badge-warning' : 'badge-danger');
-                        showResult(elements.wsResult, \`
-                            <i class="fas fa-bolt"></i> \${t.wsLatency}: <strong>\${result.avg}ms</strong>
-                            <span class="badge \${badgeClass}">\${t.wsMin}: \${result.min}ms / \${t.wsMax}: \${result.max}ms</span>
-                        \`);
+                        const tone = result.avg < 50 ? 'ok' : (result.avg < 150 ? 'warn' : 'bad');
+                        showResult(elements.wsResult, resultTitle(t.wsLatency) + metricGrid([
+                            metricCard(t.wsLatency, result.avg, 'ms', tone, Math.min(100, result.avg / 3)),
+                            metricCard(t.wsMin, result.min, 'ms', null, null),
+                            metricCard(t.wsMax, result.max, 'ms', null, null)
+                        ]));
                     } else {
                         showResult(elements.wsResult, '<i class="fas fa-exclamation-triangle"></i> ' + t.wsConnFailed, true);
                     }
@@ -2994,14 +3438,12 @@ async function handleRequest(event) {
                         fetchWithTimeout(\`/concurrent-test?count=\${count}&size=2048\`, {}, 8000).then(r => r.json())
                     ));
                     
-                    let html = '<i class="fas fa-layer-group"></i> ' + t.concurrentResultTitle + ':<br><div style="display: flex; gap: 12px; margin-top: 8px; flex-wrap: wrap;">';
-                    results.forEach(r => {
+                    const cards = results.map(r => {
                         const avgDuration = Math.round(r.reduce((sum, item) => sum + (item.duration || 0), 0) / r.length);
-                        let badgeClass = avgDuration < 20 ? 'badge-success' : (avgDuration < 50 ? 'badge-warning' : 'badge-danger');
-                        html += \`<span class="badge \${badgeClass}">\${r.length} \${t.concurrentRequests}: \${avgDuration}ms</span>\`;
+                        const tone = avgDuration < 20 ? 'ok' : (avgDuration < 50 ? 'warn' : 'bad');
+                        return metricCard(r.length + ' ' + t.concurrentRequests, avgDuration, 'ms', tone, Math.min(100, avgDuration * 2));
                     });
-                    html += '</div>';
-                    showResult(elements.concurrentResult, html);
+                    showResult(elements.concurrentResult, resultTitle(t.concurrentResultTitle) + metricGrid(cards));
                 } catch (e) {
                     showResult(elements.concurrentResult, '<i class="fas fa-exclamation-triangle"></i> ' + t.concurrentFailed, true);
                 }
@@ -3039,10 +3481,8 @@ async function handleRequest(event) {
                     }
                 }
                 
-                let html = '<i class="fas fa-stream"></i> ' + t.streamThroughput + ':<br><div class="speed-result">';
-                html += results.map(r => \`<div class="speed-item">\${r.sizeKB} KB: \${r.speed} Mbps</div>\`).join('');
-                html += '</div>';
-                showResult(elements.streamResult, html);
+                const cards = results.map(r => metricCard(r.sizeKB + ' KB', r.speed, 'Mbps', null, Math.min(100, (parseFloat(r.speed) || 0) * 2)));
+                showResult(elements.streamResult, resultTitle(t.streamThroughput) + metricGrid(cards));
                 streamTestRunning = false;
             }
 
@@ -3064,11 +3504,12 @@ async function handleRequest(event) {
                     }
                 }
                 const lossPercent = Math.round((failed / total) * 100);
-                if (lossPercent === 0) {
-                    showResult(elements.lossResult, '<i class="fas fa-check-circle"></i> ' + t.lossNone);
-                } else {
-                    showResult(elements.lossResult, '<i class="fas fa-exclamation-triangle"></i> ' + t.lossResult + ': ' + lossPercent + '% (' + failed + '/' + total + ' ' + t.lossPacketsLost + ')', true);
-                }
+                const tone = lossPercent === 0 ? 'ok' : (lossPercent < 5 ? 'warn' : 'bad');
+                showResult(elements.lossResult, resultTitle(t.lossResult) + metricGrid([
+                    metricCard(t.lossResult, lossPercent, '%', tone, lossPercent),
+                    metricCard(t.samples, total, '', null, null),
+                    metricCard(t.lossPacketsLost, failed, '', null, null)
+                ]));
                 lossTestRunning = false;
             }
 
@@ -3098,12 +3539,11 @@ async function handleRequest(event) {
                 const avgSpeed = validResults.length > 0 
                     ? validResults.reduce((sum, r) => sum + parseFloat(r.speed), 0) / validResults.length 
                     : 0;
-                let avgBadge = avgSpeed > 50 ? 'badge-success' : (avgSpeed > 10 ? 'badge-warning' : 'badge-danger');
+                const avgTone = avgSpeed > 50 ? 'ok' : (avgSpeed > 10 ? 'warn' : 'bad');
                 
-                let html = '<i class="fas fa-gauge-high"></i> ' + t.speedResultTitle + ':<br><div class="speed-result">';
-                html += results.map(r => \`<div class="speed-item">\${r.sizeKB} KB: \${r.speed} Mbps</div>\`).join('');
-                html += \`</div><div style="margin-top: 8px;"><span class="badge \${avgBadge}">\${t.speedAvg}: \${avgSpeed.toFixed(2)} Mbps</span></div>\`;
-                showResult(elements.speedResult, html);
+                const cards = results.map(r => metricCard(r.sizeKB + ' KB', r.speed, 'Mbps', null, Math.min(100, (parseFloat(r.speed) || 0) * 2)));
+                cards.push(metricCard(t.speedAvg, avgSpeed.toFixed(2), 'Mbps', avgTone, Math.min(100, avgSpeed * 2)));
+                showResult(elements.speedResult, resultTitle(t.speedResultTitle) + metricGrid(cards));
                 logSpeedTest(avgSpeed, results);
                 speedTestRunning = false;
             }
@@ -3142,17 +3582,11 @@ async function handleRequest(event) {
                     }
                 }
                 
-                let html = '<i class="fas fa-server"></i> ' + t.dnsResultTitle + ':<br><div style="display: flex; gap: 12px; margin-top: 8px; flex-wrap: wrap;">';
-                results.forEach(r => {
-                    if (r.time !== null) {
-                        let badgeClass = r.time < 50 ? 'badge-success' : (r.time < 150 ? 'badge-warning' : 'badge-danger');
-                        html += \`<span class="badge \${badgeClass}">\${r.domain}: \${r.time}ms</span>\`;
-                    } else {
-                        html += \`<span class="badge badge-danger">\${r.domain}: \${t.dnsTimeout}</span>\`;
-                    }
-                });
-                html += '</div>';
-                showResult(elements.dnsResult, html);
+                const maxT = Math.max(...results.map(r => r.time || 0), 1);
+                const cards = results.map(r => r.time !== null
+                    ? metricCard(r.domain, r.time, 'ms', r.time < 50 ? 'ok' : (r.time < 150 ? 'warn' : 'bad'), (r.time / maxT) * 100)
+                    : metricCard(r.domain, t.dnsTimeout, '', 'bad', 100));
+                showResult(elements.dnsResult, resultTitle(t.dnsResultTitle) + metricGrid(cards));
                 dnsTestRunning = false;
             }
 
@@ -3192,33 +3626,22 @@ async function handleRequest(event) {
                 
                 const results = await Promise.all(services.map(s => checkService(s)));
                 
-                let html = '<i class="fas fa-play-circle"></i> ' + t.mediaResultTitle + ':<br><div class="speed-result" style="flex-wrap: wrap;">';
-                results.forEach(r => {
-                    html += \`<div class="speed-item" style="border-left-color: \${r.color};"><strong>\${r.name}</strong> \${r.icon} \${r.detail}</div>\`;
-                });
-                html += '</div>';
-                showResult(elements.mediaResult, html);
+                const rows = results.map(r => '<div class="result-row' + (r.status === 'available' ? '' : ' is-bad') + '"><span class="rr-name">' + escapeHTML(r.name) + '</span><span class="rr-val">' + escapeHTML(r.detail) + '</span></div>').join('');
+                showResult(elements.mediaResult, resultTitle(t.mediaResultTitle) + '<div class="result-rows">' + rows + '</div>');
                 mediaTestRunning = false;
             }
 
             // ==================== 多节点对比 ====================
-            const modal = document.getElementById('nodeModal');
+            const nodeModalEl = document.getElementById('nodeModal');
             const nodeUrlsInput = document.getElementById('nodeUrls');
             const modalCancel = document.getElementById('modalCancel');
             const modalStart = document.getElementById('modalStart');
 
-            elements.multiBtn.addEventListener('click', () => {
-                let saved = '';
-                try { saved = localStorage.getItem('nodeUrls') || ''; } catch(e) {}
-                nodeUrlsInput.value = saved;
-                modal.classList.add('active');
+            if (modalCancel) modalCancel.addEventListener('click', () => {
+                if (nodeModalEl) nodeModalEl.classList.remove('active');
             });
 
-            modalCancel.addEventListener('click', () => {
-                modal.classList.remove('active');
-            });
-
-            modalStart.addEventListener('click', async () => {
+            if (modalStart) modalStart.addEventListener('click', async () => {
                 const urls = nodeUrlsInput.value.split('\\n').map(s => s.trim()).filter(s => s);
                 if (urls.length === 0) {
                     nodeUrlsInput.style.borderColor = 'var(--danger)';
@@ -3227,13 +3650,94 @@ async function handleRequest(event) {
                 }
                 nodeUrlsInput.style.borderColor = '';
                 try { localStorage.setItem('nodeUrls', nodeUrlsInput.value); } catch(e) {}
-                modal.classList.remove('active');
+                if (nodeModalEl) nodeModalEl.classList.remove('active');
+                openToolModal(i18n[currentLang].multiBtn, (i18n[currentLang].toolDesc && i18n[currentLang].toolDesc.multi) || '');
                 await runMultiNodeTest(urls);
             });
 
-            modal.addEventListener('click', (e) => {
-                if (e.target === modal) modal.classList.remove('active');
+            if (nodeModalEl) nodeModalEl.addEventListener('click', (e) => {
+                if (e.target === nodeModalEl) nodeModalEl.classList.remove('active');
             });
+
+            // ==================== 工具卡片 + 结果弹层 ====================
+            const TOOL_LIST = [
+                { key: 'loss', icon: 'fa-percent', nameKey: 'lossBtn' },
+                { key: 'speed', icon: 'fa-gauge-high', nameKey: 'speedBtn' },
+                { key: 'dns', icon: 'fa-server', nameKey: 'dnsBtn' },
+                { key: 'cpu', icon: 'fa-microchip', nameKey: 'cpuBtn' },
+                { key: 'ws', icon: 'fa-bolt', nameKey: 'wsBtn' },
+                { key: 'concurrent', icon: 'fa-layer-group', nameKey: 'concurrentBtn' },
+                { key: 'stream', icon: 'fa-stream', nameKey: 'streamBtn' },
+                { key: 'media', icon: 'fa-circle-play', nameKey: 'mediaBtn' },
+                { key: 'multi', icon: 'fa-diagram-project', nameKey: 'multiBtn' },
+                { key: 'webrtc', icon: 'fa-user-shield', nameKey: 'webrtcBtn' },
+                { key: 'ttfb', icon: 'fa-stopwatch', nameKey: 'ttfbBtn' },
+                { key: 'upload', icon: 'fa-upload', nameKey: 'uploadBtn' },
+                { key: 'audit', icon: 'fa-stethoscope', nameKey: 'auditBtn' }
+            ];
+            let currentToolKey = null;
+            const TOOL_RUNNERS = {
+                loss: runLossTest, speed: runSpeedTest, dns: runDnsTest, cpu: runCpuTest, ws: runWsTest,
+                concurrent: runConcurrentTest, stream: runStreamTest, media: runClientMediaTest,
+                webrtc: runWebRtcTest, ttfb: runTtfbTest, upload: runUploadTest, audit: runSiteAudit
+            };
+
+            function renderToolCards() {
+                const grid = document.getElementById('toolGrid');
+                if (!grid) return;
+                const t = i18n[currentLang];
+                grid.innerHTML = TOOL_LIST.map(item =>
+                    '<button class="tool-card" data-tool="' + item.key + '">' +
+                        '<span class="tc-icon"><i class="fas ' + item.icon + '"></i></span>' +
+                        '<span class="tc-text"><span class="tc-name">' + escapeHTML(t[item.nameKey] || item.key) + '</span>' +
+                        '<span class="tc-desc">' + escapeHTML((t.toolDesc && t.toolDesc[item.key]) || '') + '</span></span>' +
+                        '<i class="fas fa-chevron-right tc-go"></i>' +
+                    '</button>'
+                ).join('');
+            }
+
+            function handleToolClick(key) {
+                const t = i18n[currentLang];
+                currentToolKey = key;
+                if (key === 'multi') {
+                    let saved = '';
+                    try { saved = localStorage.getItem('nodeUrls') || ''; } catch(e) {}
+                    if (nodeUrlsInput) nodeUrlsInput.value = saved;
+                    if (nodeModalEl) nodeModalEl.classList.add('active');
+                    return;
+                }
+                const runner = TOOL_RUNNERS[key];
+                if (!runner) return;
+                const item = TOOL_LIST.find(x => x.key === key);
+                openToolModal(t[item ? item.nameKey : key] || key, (t.toolDesc && t.toolDesc[key]) || '');
+                runner();
+            }
+
+            const toolModalEl = document.getElementById('toolModal');
+            const toolModalClose = document.getElementById('toolModalClose');
+            if (toolModalClose) toolModalClose.addEventListener('click', closeToolModal);
+            if (toolModalEl) toolModalEl.addEventListener('click', (e) => { if (e.target === toolModalEl) closeToolModal(); });
+            const toolGridEl = document.getElementById('toolGrid');
+            if (toolGridEl) toolGridEl.addEventListener('click', (e) => {
+                const card = e.target.closest('.tool-card');
+                if (card) handleToolClick(card.getAttribute('data-tool'));
+            });
+
+            function rerunCurrentTool() {
+                if (!currentToolKey) return;
+                if (currentToolKey === 'multi') {
+                    if (nodeModalEl) nodeModalEl.classList.add('active');
+                    return;
+                }
+                const t = i18n[currentLang];
+                const runner = TOOL_RUNNERS[currentToolKey];
+                if (!runner) return;
+                const item = TOOL_LIST.find(x => x.key === currentToolKey);
+                openToolModal(t[item ? item.nameKey : currentToolKey] || currentToolKey, (t.toolDesc && t.toolDesc[currentToolKey]) || '');
+                runner();
+            }
+            const toolRerunBtn = document.getElementById('toolModalRerun');
+            if (toolRerunBtn) toolRerunBtn.addEventListener('click', rerunCurrentTool);
 
             async function runMultiNodeTest(urls) {
                 const t = i18n[currentLang];
@@ -3266,15 +3770,12 @@ async function handleRequest(event) {
                     return { node, latency, status, errorMsg };
                 }));
 
-                let html = '<i class="fas fa-globe-asia"></i> ' + t.multiResult + '：<br><table class="node-table"><thead><tr><th>' + t.nodeName + '</th><th>' + t.latency + '</th><th>' + t.status + '</th></tr></thead><tbody>';
-                results.forEach(r => {
-                    let statusText = r.status === 'success' ? '✅' : '❌ ' + r.errorMsg;
-                    let latencyText = r.latency !== null ? r.latency + ' ms' : '—';
-                    let cls = r.status === 'success' ? (r.latency < 100 ? 'good' : (r.latency < 300 ? 'mid' : 'bad')) : 'bad';
-                    html += \`<tr><td>\${escapeHTML(r.node)}</td><td class="\${cls}">\${latencyText}</td><td>\${escapeHTML(statusText)}</td></tr>\`;
-                });
-                html += '</tbody></table>';
-                showResult(elements.multiResult, html);
+                const rows = results.map(r => {
+                    const bad = r.status !== 'success';
+                    const val = r.latency !== null ? r.latency + ' ms' : (r.errorMsg || '—');
+                    return '<div class="result-row' + (bad ? ' is-bad' : '') + '"><span class="rr-name">' + escapeHTML(r.node) + '</span><span class="rr-val">' + escapeHTML(String(val)) + '</span></div>';
+                }).join('');
+                showResult(elements.multiResult, resultTitle(t.multiResult) + '<div class="result-rows">' + rows + '</div>');
             }
 
             // ==================== WebRTC 泄漏检测 ====================
@@ -3299,7 +3800,7 @@ async function handleRequest(event) {
                                     resolve(found);
                                     return;
                                 }
-                                const match = e.candidate.candidate.match(/(\d{1,3}\.){3}\d{1,3}/);
+                                const match = e.candidate.candidate.match(/(\\d{1,3}\\.){3}\\d{1,3}/);
                                 if (match) found.add(match[0]);
                             };
                             pc.createOffer().then(offer => pc.setLocalDescription(offer)).catch(() => {
@@ -3313,24 +3814,20 @@ async function handleRequest(event) {
                     });
 
                     if (ips.size === 0) {
-                        showResult(elements.webrtcResult, '<i class="fas fa-check-circle" style="color:#34d399;"></i> ' + t.webrtcNone);
+                        showResult(elements.webrtcResult, resultTitle('WebRTC') + '<div class="result-row"><span class="rr-name">' + t.webrtcSafe + '</span><span class="rr-val">OK</span></div>');
                     } else {
                         const ipList = [...ips];
-                        const localIps = ipList.filter(ip => /^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(ip));
-                        const publicIps = ipList.filter(ip => !/^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(ip));
-                        let html = '<i class="fas fa-user-shield"></i> WebRTC: ';
-                        if (publicIps.length > 0 || localIps.length > 0) {
-                            html += '<span class="badge badge-warning">' + t.webrtcLeak + '</span><br><div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">';
-                            localIps.forEach(ip => { html += '<span class="badge badge-info">' + t.webrtcLocal + ': ' + ip + '</span>'; });
-                            publicIps.forEach(ip => { html += '<span class="badge badge-danger">' + t.webrtcPublic + ': ' + ip + '</span>'; });
-                            html += '</div>';
-                        } else {
-                            html += '<span class="badge badge-success">' + t.webrtcSafe + '</span>';
-                        }
-                        showResult(elements.webrtcResult, html);
+                        const localRe = /^(10\\.|172\\.(1[6-9]|2\\d|3[01])\\.|192\\.168\\.)/;
+                        const localIps = ipList.filter(ip => localRe.test(ip));
+                        const publicIps = ipList.filter(ip => !localRe.test(ip));
+                        let rows = '';
+                        localIps.forEach(ip => { rows += '<div class="result-row"><span class="rr-name">' + t.webrtcLocal + '</span><span class="rr-val">' + escapeHTML(ip) + '</span></div>'; });
+                        publicIps.forEach(ip => { rows += '<div class="result-row is-bad"><span class="rr-name">' + t.webrtcPublic + '</span><span class="rr-val">' + escapeHTML(ip) + '</span></div>'; });
+                        const verdict = (publicIps.length > 0 || localIps.length > 0) ? t.webrtcLeak : t.webrtcSafe;
+                        showResult(elements.webrtcResult, resultTitle('WebRTC · ' + verdict) + '<div class="result-rows">' + rows + '</div>');
                     }
                 } catch (e) {
-                    showResult(elements.webrtcResult, '<i class="fas fa-check-circle" style="color:#34d399;"></i> WebRTC ' + t.webrtcSafe, false);
+                    showResult(elements.webrtcResult, resultTitle('WebRTC') + '<div class="result-row"><span class="rr-name">' + t.webrtcSafe + '</span><span class="rr-val">OK</span></div>', false);
                 }
                 webrtcTestRunning = false;
             }
@@ -3373,15 +3870,17 @@ async function handleRequest(event) {
 
                     const bar = (label, val, color) => {
                         const pct = Math.max((val / maxVal) * 100, 2);
-                        return '<div style="display:flex;align-items:center;gap:8px;margin:4px 0;"><span style="min-width:110px;font-size:11px;color:var(--text-secondary);">' + label + '</span><div style="flex:1;height:14px;background:rgba(0,0,0,0.06);border-radius:7px;overflow:hidden;"><div style="width:' + pct + '%;height:100%;background:' + color + ';border-radius:7px;transition:width 0.3s;"></div></div><span style="min-width:45px;font-size:11px;font-weight:600;color:var(--text-primary);text-align:right;">' + val + 'ms</span></div>';
+                        return '<div class="ttfb-row"><span class="ttfb-label">' + label + '</span><div class="ttfb-track"><i style="width:' + pct + '%;background:' + color + '"></i></div><span class="ttfb-val">' + val + 'ms</span></div>';
                     };
 
-                    let html = '<i class="fas fa-stopwatch"></i> TTFB ' + t.ttfbTotal + ': <strong>' + total + 'ms</strong><div style="margin-top:10px;">';
-                    html += bar(t.ttfbDns, dns, '#06b6d4');
-                    html += bar(t.ttfbTcp, tcp, '#3b82f6');
-                    html += bar(t.ttfbTls, tls, '#8b5cf6');
-                    html += bar(t.ttfbWait, wait, '#f59e0b');
-                    html += bar(t.ttfbDownload, download, '#34d399');
+                    let html = resultTitle('TTFB') + metricGrid([
+                        metricCard(t.ttfbTotal, total, 'ms', null, null)
+                    ]) + '<div style="margin-top:12px;">';
+                    html += bar(t.ttfbDns, dns, '#e9eaec');
+                    html += bar(t.ttfbTcp, tcp, '#c3c7cd');
+                    html += bar(t.ttfbTls, tls, '#a5abb3');
+                    html += bar(t.ttfbWait, wait, '#878d95');
+                    html += bar(t.ttfbDownload, download, '#697076');
                     html += '</div>';
                     showResult(elements.ttfbResult, html);
                 } catch (e) {
@@ -3413,11 +3912,10 @@ async function handleRequest(event) {
                     }
                     const validResults = results.filter(r => parseFloat(r.speed) > 0);
                     const avgSpeed = validResults.length > 0 ? validResults.reduce((s, r) => s + parseFloat(r.speed), 0) / validResults.length : 0;
-                    let avgBadge = avgSpeed > 20 ? 'badge-success' : (avgSpeed > 5 ? 'badge-warning' : 'badge-danger');
-                    let html = '<i class="fas fa-upload"></i> ' + t.uploadResult + ':<br><div class="speed-result">';
-                    html += results.map(r => '<div class="speed-item">' + r.sizeKB + ' KB: ' + r.speed + ' Mbps</div>').join('');
-                    html += '</div><div style="margin-top:8px;"><span class="badge ' + avgBadge + '">' + t.uploadResult + ': ' + avgSpeed.toFixed(2) + ' Mbps</span></div>';
-                    showResult(elements.uploadResult, html);
+                    const avgTone = avgSpeed > 20 ? 'ok' : (avgSpeed > 5 ? 'warn' : 'bad');
+                    const cards = results.map(r => metricCard(r.sizeKB + ' KB', r.speed, 'Mbps', null, Math.min(100, (parseFloat(r.speed) || 0) * 3)));
+                    cards.push(metricCard(t.uploadResult, avgSpeed.toFixed(2), 'Mbps', avgTone, Math.min(100, avgSpeed * 3)));
+                    showResult(elements.uploadResult, resultTitle(t.uploadResult) + metricGrid(cards));
                 } catch (e) {
                     showResult(elements.uploadResult, '<i class="fas fa-exclamation-triangle"></i> ' + t.uploadFailed, true);
                 }
@@ -3429,6 +3927,82 @@ async function handleRequest(event) {
                 for (let i = 0; i < arr.length; i += CHUNK) {
                     crypto.getRandomValues(arr.subarray(i, Math.min(i + CHUNK, arr.length)));
                 }
+            }
+
+            // ==================== 站点体检 ====================
+            function runSiteAudit() {
+                const t = i18n[currentLang];
+                const body = document.getElementById('toolModalBody');
+                if (!body) return;
+                body.innerHTML = '<div class="tool-field">' +
+                    '<input type="url" id="auditUrl" class="tool-input" placeholder="' + escapeHTML(t.auditPrompt) + '" value="https://">' +
+                    '<button class="btn btn-primary" id="auditGo"><i class="fas fa-stethoscope"></i> ' + escapeHTML(t.auditRun) + '</button>' +
+                    '</div>';
+                const input = document.getElementById('auditUrl');
+                const go = document.getElementById('auditGo');
+                if (input && go) {
+                    const submit = () => startSiteAudit(input.value);
+                    go.addEventListener('click', submit);
+                    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
+                    input.focus();
+                }
+            }
+
+            async function startSiteAudit(rawUrl) {
+                const t = i18n[currentLang];
+                let u = (rawUrl || '').trim();
+                if (!u) return;
+                if (!/^https?:\\/\\//i.test(u)) u = 'https://' + u;
+                let valid = false;
+                try {
+                    const p = new URL(u);
+                    valid = (p.protocol === 'http:' || p.protocol === 'https:') && p.hostname.includes('.');
+                } catch (e) {}
+                if (!valid) {
+                    showResult(null, '<i class="fas fa-triangle-exclamation"></i> ' + escapeHTML(t.auditInvalid), true);
+                    return;
+                }
+                showResult(null, '<div class="tool-loading"><span class="loading"></span> ' + escapeHTML(t.running) + '</div>');
+                try {
+                    const res = await fetch('/api/site-audit?url=' + encodeURIComponent(u), { cache: 'no-store' });
+                    const data = await res.json();
+                    if (!res.ok || data.error) throw new Error(data.error || 'failed');
+                    renderSiteAudit(data);
+                } catch (e) {
+                    showResult(null, '<i class="fas fa-triangle-exclamation"></i> ' + escapeHTML(t.auditFailed), true);
+                }
+            }
+
+            function renderSiteAudit(d) {
+                const t = i18n[currentLang];
+                const statusOk = d.status >= 200 && d.status < 400;
+                const cards = [
+                    metricCard(t.auditStatus, d.status, '', statusOk ? 'ok' : 'bad', null),
+                    metricCard(t.auditTtfb, d.ttfb, 'ms', null, Math.min(100, d.ttfb)),
+                    metricCard(t.auditTotal, d.totalTime, 'ms', null, null),
+                    metricCard(t.auditRedirects, d.redirectCount, '', null, null)
+                ];
+                const hd = d.headers || {};
+                const items = [
+                    ['Strict-Transport-Security', hd.hsts],
+                    ['Content-Security-Policy', hd.csp],
+                    ['X-Frame-Options', hd.xfo],
+                    ['X-Content-Type-Options', hd.xcto],
+                    ['Referrer-Policy', hd.refpol],
+                    ['Permissions-Policy', hd.permpol]
+                ];
+                const rows = items.map(item => {
+                    const has = !!item[1];
+                    return '<div class="result-row' + (has ? '' : ' is-warn') + '"><span class="rr-name">' + escapeHTML(item[0]) + '</span>' +
+                        '<span class="rr-val">' + (has ? escapeHTML(String(item[1]).slice(0, 60)) : escapeHTML(t.auditMissing)) + '</span></div>';
+                }).join('');
+                const html =
+                    resultTitle(t.auditFinal) +
+                    '<div class="result-rows" style="margin-bottom:16px;"><div class="result-row"><span class="rr-name">' + escapeHTML(d.finalUrl || '') + '</span><span class="rr-val">' + escapeHTML(String(d.status)) + '</span></div></div>' +
+                    metricGrid(cards) +
+                    resultTitle(t.auditHeaders) +
+                    '<div class="result-rows">' + rows + '</div>';
+                showResult(null, html);
             }
 
             // ==================== 报告生成 ====================
@@ -3623,18 +4197,7 @@ async function handleRequest(event) {
                 testRtt();
                 setTimeout(() => fetchUserGeo(), 500);
                 if (elements.copyBtn) elements.copyBtn.addEventListener('click', copyReport);
-                if (elements.lossBtn) elements.lossBtn.addEventListener('click', runLossTest);
-                if (elements.speedBtn) elements.speedBtn.addEventListener('click', runSpeedTest);
-                if (elements.dnsBtn) elements.dnsBtn.addEventListener('click', runDnsTest);
-                if (elements.cpuBtn) elements.cpuBtn.addEventListener('click', runCpuTest);
-                if (elements.wsBtn) elements.wsBtn.addEventListener('click', runWsTest);
-                if (elements.concurrentBtn) elements.concurrentBtn.addEventListener('click', runConcurrentTest);
-                if (elements.streamBtn) elements.streamBtn.addEventListener('click', runStreamTest);
-                if (elements.mediaBtn) elements.mediaBtn.addEventListener('click', runClientMediaTest);
-                if (elements.webrtcBtn) elements.webrtcBtn.addEventListener('click', runWebRtcTest);
-                if (elements.ttfbBtn) elements.ttfbBtn.addEventListener('click', runTtfbTest);
-                if (elements.uploadBtn) elements.uploadBtn.addEventListener('click', runUploadTest);
-                // 多节点按钮已绑定
+                renderToolCards();
                 
                 loadSpeedHistory();
                 loadUsageStats();
@@ -3643,6 +4206,7 @@ async function handleRequest(event) {
                     if (document.hidden) {
                         clearInterval(statsInterval);
                     } else {
+                        clearInterval(statsInterval);
                         loadSpeedHistory(); loadUsageStats();
                         statsInterval = setInterval(() => { loadSpeedHistory(); loadUsageStats(); }, 30000);
                     }
@@ -3652,6 +4216,16 @@ async function handleRequest(event) {
                 document.querySelectorAll('.lang-btn').forEach(btn => {
                     btn.addEventListener('click', function() {
                         setLang(this.getAttribute('data-lang'));
+                    });
+                });
+
+                // 标签切换
+                document.querySelectorAll('.tab-btn').forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        const target = this.getAttribute('data-tab');
+                        document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b === this));
+                        document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + target));
+                        if (target === 'overview') setTimeout(resizeCanvas, 30);
                     });
                 });
 
