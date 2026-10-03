@@ -1,471 +1,387 @@
-# NetSight Pro · 极光网络诊断工具
+# NetSight Pro
 
-[![Cloudflare Worker](https://img.shields.io/badge/Cloudflare-Worker-F38020?logo=cloudflare&style=for-the-badge)](https://workers.cloudflare.com/)
-[![License](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](LICENSE)
-[![Version](https://img.shields.io/badge/version-4.1--security-brightgreen?style=for-the-badge)]()
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=for-the-badge)](https://github.com/BlueDriftHK/CF-workers-netdiag/pulls)
+> 单文件 Cloudflare Worker 网络诊断工具 · 灰度 HUD 界面 · 三语言 · 可视化结果
+>
+> A single-file Cloudflare Worker for network diagnostics · Grayscale HUD · Trilingual · Visualized results
 
-> **NetSight Pro** 是一款部署在 Cloudflare Workers 上的全功能网络诊断工具，提供实时延迟监控、带宽测速、CPU 性能测试、WebSocket 延迟、TTFB 分阶段分析、WebRTC 泄漏检测、多节点对比等 **20+ 项诊断能力**，并支持三语言国际化（English/简体中文/繁體中文）和深色/浅色主题。代码经过安全加固，适合个人或企业快速部署私有网络健康检查服务。
+![version](https://img.shields.io/badge/version-4.1--security-blue)
+![platform](https://img.shields.io/badge/platform-Cloudflare%20Workers-orange)
+![license](https://img.shields.io/badge/license-AGPL--3.0-green)
+![i18n](https://img.shields.io/badge/i18n-EN%20%7C%20%E7%AE%80%E4%BD%93%20%7C%20%E7%B9%81%E9%AB%94-lightgrey)
 
----
+NetSight Pro 是一个部署在 Cloudflare Workers 上的**整站网络诊断工具**。它把「我这条链路到 Cloudflare 边缘」以及「任意站点」的可观测数据一次性摊开：IP、边缘节点、TLS/协议指纹、实时 RTT、带宽、丢包、DNS、WebRTC 泄漏、HTTP 安全头审计等，并全部在浏览器端实时计算与渲染。整个项目就是**一个 Worker 脚本**——HTML/CSS/JS 全部内联，无需构建、无需依赖、无需前端工程。
 
-## 📋 目录
+NetSight Pro is an all-in-one **network diagnostics tool** that runs on Cloudflare Workers. It surfaces everything observable about "my path to the Cloudflare edge" and "any third-party site": IP, edge colo, TLS/protocol fingerprints, live RTT, bandwidth, packet loss, DNS, WebRTC leaks, HTTP security-header audit, and more — all computed and rendered client-side. The whole project is **a single Worker script** with the HTML/CSS/JS inlined: no build step, no dependencies, no frontend toolchain.
 
-- [✨ 特性总览](#-特性总览)
-- [📸 界面预览](#-界面预览)
-- [🧱 技术架构](#-技术架构)
-- [🚀 快速部署（3 分钟）](#-快速部署3-分钟)
-- [🛠️ 详细部署步骤](#️-详细部署步骤)
-  - [方式一：使用 Wrangler CLI（推荐）](#方式一使用-wrangler-cli推荐)
-  - [方式二：通过 Cloudflare Dashboard](#方式二通过-cloudflare-dashboard)
-- [⚙️ 环境变量与 KV 绑定](#️-环境变量与-kv-绑定)
-- [📌 所有 API 端点详解](#-所有-api-端点详解)
-- [🖱️ 前端功能详解](#️-前端功能详解)
-- [🔒 安全机制](#-安全机制)
-- [🌐 国际化与主题](#-国际化与主题)
-- [⚡ 性能与可靠性](#-性能与可靠性)
-- [🛠️ 自定义与扩展](#️-自定义与扩展)
-- [❓ 常见问题与故障排查](#-常见问题与故障排查)
-- [📄 许可证与贡献](#-许可证与贡献)
+- **版本 / Version**：`4.1-security`（在本仓库基础上做了界面重做与稳定性/安全加固）
+- **运行平台 / Runtime**：Cloudflare Workers（V8, ES2020）
+- **存储 / Storage**：KV（绑定 `SPEED_HISTORY`，用于测速历史与用量统计）
+- **上游 / Upstream**：基于 [`BlueDriftHK/CF-workers-netdiag`](https://github.com/BlueDriftHK/CF-workers-netdiag) 的增强版
 
 ---
 
-## ✨ 特性总览
+## 📋 目录 · Table of Contents
 
-| 类别 | 功能 | 描述 |
-|------|------|------|
-| 📡 **网络质量** | 实时 RTT 监控 | 每 2 秒发送 HEAD 请求，绘制延迟趋势图，计算抖动、最低/最高 RTT、丢包率 |
-| | 带宽测速（下载） | 多档位（100KB~2MB）下载测试，计算平均速度 |
-| | 带宽测速（上传） | 多档位（256KB~2MB）上传测试，计算上行速率 |
-| | 并发下载测试 | 模拟 4/6/8 路并发请求，检测多连接处理能力 |
-| | 流式传输吞吐量 | 流式读取大文件（最大 10MB），测试长连接吞吐 |
-| | TTFB 分阶段分析 | 分解 DNS 解析、TCP 连接、TLS 握手、等待响应、内容下载各阶段耗时 |
-| 🔒 **协议与安全** | HTTP/2 / HTTP/3 检测 | 判断连接是否使用 HTTP/2 或 QUIC，并显示 ALPN 信息 |
-| | TLS 信息 | 显示 TLS 版本、加密套件、客户端 Hello 长度（ECH 推断） |
-| | 客户端指纹 | 显示 JA3 和 JA4 指纹（用于会话识别） |
-| | 机器人评分 | 展示 Cloudflare 的 Bot Management 评分（0~100） |
-| | 压缩算法 | 检测客户端支持的压缩算法（br/gzip/deflate/zstd） |
-| 🌍 **IP 与位置** | 双栈 IP 检测 | 分别获取 IPv4 和 IPv6 地址（使用多个公共 API 备用） |
-| | 地理位置 | 通过 ipapi.co 获取客户端真实地理位置（城市、国家、运营商） |
-| | 距离计算 | 计算客户端到 Cloudflare 边缘节点的直线距离 |
-| | IP 欺诈评分 | 集成 Scamalytics API，检测 IP 是否为代理/VPN/Tor/托管，并给出风险等级 |
-| 💻 **客户端环境** | 硬件信息 | 屏幕分辨率、CPU 核心数、时区、语言、操作系统平台 |
-| | WebRTC 泄漏检测 | 检测本地/公网 IP 是否通过 WebRTC 泄露 |
-| | 流媒体连通性 | 检测 Netflix/Disney+/YouTube/ChatGPT 的 favicon 是否可达 |
-| 📊 **对比与历史** | 多节点对比 | 输入其他 Worker 节点 URL，并行测试延迟，生成对比表格 |
-| | 测速历史 | 存储最近 5 条测速记录（需 KV 支持），展示时间、速度、边缘节点 |
-| | API 用量统计 | 统计各端点调用次数（需 KV 支持） |
-| 🎨 **用户交互** | 一键复制报告 | 生成纯文本诊断报告，包含所有关键指标 |
-| | 主题切换 | 深色/浅色/跟随系统，自动适配 |
-| | 语言切换 | 英语、简体中文、繁體中文，界面完全覆盖 |
+- [✨ 特性总览 · Features](#-特性总览--features)
+- [🎨 界面 · UI](#-界面--ui)
+- [🧱 技术架构 · Architecture](#-技术架构--architecture)
+- [🚀 快速部署 · Quick Deploy](#-快速部署--quick-deploy)
+- [🛠️ 详细部署 · Detailed Deployment](#️-详细部署--detailed-deployment)
+- [⚙️ 绑定与变量 · Bindings & Vars](#️-绑定与变量--bindings--vars)
+- [📌 API 端点 · Endpoints](#-api-端点--endpoints)
+- [🖱️ 前端功能与工具 · Frontend & Tools](#️-前端功能与工具--frontend--tools)
+- [🔒 安全机制 · Security](#-安全机制--security)
+- [🌐 国际化与主题 · i18n & Theme](#-国际化与主题--i18n--theme)
+- [⚡ 性能与可靠性 · Performance](#-性能与可靠性--performance)
+- [🔀 相较上游的改动 · Changes vs Upstream](#-相较上游的改动--changes-vs-upstream)
+- [🛠️ 自定义与扩展 · Customization](#️-自定义与扩展--customization)
+- [❓ 常见问题 · FAQ](#-常见问题--faq)
+- [📄 许可证与贡献 · License & Contributing](#-许可证与贡献--license--contributing)
 
 ---
 
-## 📸 界面预览
+## ✨ 特性总览 · Features
 
-（由于无法直接插入图片，请自行部署后访问。界面为毛玻璃质感，带极光背景动画，风格类似 macOS 的简约设计。）
-
-- **头部**：Logo、主题按钮、语言切换器
-- **主卡片**：IPv4/IPv6 地址、边缘节点、Worker 耗时、实时状态点
-- **RTT 监控卡片**：四个大数字（当前/抖动/最低/最高）、动态折线图、四个质量指标（连接质量、稳定性、样本数、丢包率）
-- **安全与协议卡片**：数据中心标识、风险等级、ASN、协议、TLS 版本、加密套件、ECH、压缩、HTTP/2、Bot 分数、JA3/JA4
-- **位置信息卡片**（双栏）：边缘节点位置（城市/坐标/运营商）和真实 IP 位置（含距离及欺诈评分表格）
-- **硬件信息条**：屏幕、CPU、时区、语言、平台
-- **诊断工具集**：12 个按钮，点击后动态展示结果
-- **历史与统计**：测速历史表格、用量统计（总请求数 + 端点调用排行）
-- **底部**：RAY ID、客户端 IP、复制报告按钮
-
----
-
-## 🧱 技术架构
-
-### 后端（Cloudflare Worker）
-- **运行时**：Cloudflare Workers（基于 V8 引擎）
-- **语言**：JavaScript（ES2020）
-- **存储**：可选 KV（`SPEED_HISTORY` 和 `CACHE_KV`）
-- **API 设计**：RESTful，返回 JSON 或二进制流
-- **并发控制**：自定义 `pLimit` 函数限制并发数
-- **限流**：内存 Map（per‑isolate），可扩展为 KV/DO
-- **安全头**：HSTS、X-Frame-Options、CSP、CORS 白名单
-
-### 前端（原生 SPA）
-- **框架**：纯原生 JavaScript，无第三方依赖（除字体与图标库）
-- **图表**：Canvas 2D 绘制实时折线图
-- **WebSocket**：支持 `wss://` 双向通信测试
-- **响应式**：CSS Grid + Flexbox，适配桌面、平板、手机
-- **存储**：localStorage 保存语言偏好和主题
-
-### 外部服务依赖
-- **IP 查询**：ipapi.co（地理位置、ISP）
-- **IP 检测**：api4.ipify.org、api6.ipify.org、ipv4.icanhazip.com、ipv6.icanhazip.com、ip4.seeip.org
-- **欺诈评分**：scamalytics.com
-- **字体**：Google Fonts（Inter）
-- **图标**：Font Awesome 6
+| 类别 Category | 功能 Feature | 描述 Description |
+| --- | --- | --- |
+| 📡 网络质量 Quality | 实时 RTT 监控 / Live RTT | 每 2s 探测一次，绘制延迟趋势图，计算抖动、最低/最高 RTT、丢包率 |
+| | 下载测速 / Download speed | 多档位（100KB~2MB）下载，估算下行带宽 |
+| | 上传测速 / Upload speed | 多档位（256KB~2MB）上传，估算上行带宽 |
+| | 并发测试 / Concurrency | 4/6/8 路并发请求，观察多连接处理能力 |
+| | 流式吞吐 / Stream | 分块流式下载，测试长连接持续吞吐 |
+| | TTFB 分阶段 / TTFB phase | 拆解 DNS / TCP / TLS / 等待 / 下载各阶段耗时 |
+| 🔒 协议与安全 Protocol | HTTP/2 · HTTP/3 | 判定 HTTP/2 或 QUIC，显示 ALPN |
+| | TLS 信息 / TLS info | TLS 版本、加密套件、ECH 推断 |
+| | 客户端指纹 / Fingerprints | JA3、JA4 指纹 |
+| | Bot 评分 / Bot score | Cloudflare Bot Management 评分（0~100） |
+| | 压缩 / Compression | 检测 br / gzip / deflate / zstd |
+| | **站点体检 / Site Audit** | **审计任意站点的 HTTP 安全响应头与响应性能** |
+| 🌍 IP 与位置 Location | 双栈 IP / Dual-stack | 多公共 API 备用获取 IPv4 / IPv6 |
+| | 真实位置 / Geo | 客户端侧解析城市、国家、运营商 |
+| | 距离 / Distance | 客户端到边缘节点的直线距离（Haversine） |
+| | IP 风险评分 / IP risk | 代理 / VPN / 托管标记与风险等级 |
+| 💻 客户端环境 Client | 硬件信息 / Hardware | 屏幕、CPU 核心数、时区、语言、平台 |
+| | WebRTC 泄漏 / WebRTC leak | 检测内网/公网 IP 是否经 WebRTC 泄露 |
+| | 流媒体连通 / Media | Netflix / Disney+ / YouTube / ChatGPT 可达性 |
+| 📊 对比与历史 Compare | 多节点对比 / Multi-node | 输入多个节点 URL，并行测延迟并对比 |
+| | 测速历史 / Speed history | 最近记录（需 KV），含时间、速度、边缘节点 |
+| | 用量统计 / Usage stats | 各端点调用次数（需 KV） |
+| 🎨 交互 UX | 一键报告 / Copy report | 生成纯文本诊断报告 |
+| | 主题 / Theme | 深色 / 浅色 / 跟随系统 |
+| | 语言 / Language | English / 简体中文 / 繁體中文，全量覆盖 |
 
 ---
 
-## 🚀 快速部署（3 分钟）
+## 🎨 界面 · UI
 
-如果你已熟悉 Cloudflare Workers，可快速完成：
+**灰度 HUD 风格**：近黑底 + 细网格背景 + 直角卡片 + 等宽数字；颜色只保留给状态语义——正常=白灰、警告=暗琥珀、异常=暗红，整体克制而"仪器化"。不再使用毛玻璃模糊与极光动画，渲染更轻、观感更专业。
 
-1. **克隆仓库**
-   ```bash
-   git clone https://github.com/BlueDriftHK/CF-workers-netdiag.git
-   cd CF-workers-netdiag
-   ```
+**Grayscale HUD aesthetic**: near-black background with a subtle grid, square-cornered cards, monospaced numerals. Color is reserved for status only — neutral (white/gray) for normal, dark amber for warnings, dark red for errors. This keeps the panel restrained and instrument-like.
 
-2. **安装 Wrangler**
-   ```bash
-   npm install -g wrangler
-   ```
+界面分为 **4 个标签页 / 4 tabs**：
 
-3. **登录 Cloudflare**
-   ```bash
-   wrangler login
-   ```
+- **概览 Overview**：IPv4/IPv6、边缘节点、Worker 耗时 + 实时 RTT 监控（图表 + 质量/稳定性/丢包/样本）
+- **网络信息 Network**：TLS/协议/指纹/ECH/压缩/Bot、边缘位置与运营商、真实 IP 位置与风险、硬件信息
+- **诊断工具 Tools**：13 张工具卡片网格
+- **历史统计 History**：测速历史、用量统计
 
-4. **创建 KV（可选但推荐）**
-   ```bash
-   wrangler kv:namespace create "SPEED_HISTORY"
-   ```
-
-5. **编辑 `wrangler.toml`**，填入 KV ID 和账号 ID。
-
-6. **发布**
-   ```bash
-   wrangler publish
-   ```
-
-7. 访问 Worker 分配的 URL，即可使用。
+诊断工具采用 **卡片网格 + 结果弹层**：点击卡片 → 弹出层内运行并展示结果，右上角带「重新运行」按钮，窄屏自动精简。结果用**指标卡 + 进度条 / 行列表**结构化呈现，而非一段裸文本。
 
 ---
 
-## 🛠️ 详细部署步骤
+## 🧱 技术架构 · Architecture
 
-### 方式一：使用 Wrangler CLI（推荐）
+**后端 · Backend（Cloudflare Worker）**
+- 运行时 Runtime：Cloudflare Workers（V8）
+- 语言 Language：JavaScript（ES2020）
+- 存储 Storage：可选 KV（`SPEED_HISTORY`、`CACHE_KV`）
+- API 设计：RESTful，返回 JSON 或二进制流
+- 并发控制 Concurrency：自定义 `pLimit`
+- 限流 Rate limit：内存 Map（per-isolate）
+- 安全头 Security headers：HSTS、X-Frame-Options、CSP(nonce)、CORS 白名单
 
-#### 前置条件
-- Node.js 16+ 和 npm
-- Cloudflare 账号
-- （可选）Cloudflare 付费计划（用于自定义域名和 KV 额度）
+**前端 · Frontend（原生 SPA）**
+- 框架 Framework：纯原生 JS，无第三方框架（仅字体与图标库）
+- 图表 Chart：Canvas 2D 实时折线
+- WebSocket：`wss://` 双向通信测试
+- 响应式 Responsive：CSS Grid + Flexbox
+- 本地存储：`localStorage` 保存语言与主题偏好
 
-#### Step 1: 安装 Wrangler
+**外部依赖 · External deps**：IP 查询（`ipapi.co`）、IP 探测（`ipify` / `icanhazip` / `seeip`）、IP 风险（`ip-api.com`）、字体 Google Fonts（Inter）、图标 Font Awesome 6。
+
+---
+
+## 🚀 快速部署 · Quick Deploy
+
+```bash
+# 1) 获取代码
+git clone https://github.com/BlueDriftHK/CF-workers-netdiag.git
+cd CF-workers-netdiag
+
+# 2) 安装 Wrangler
+npm install -g wrangler
+
+# 3) 登录 Cloudflare
+wrangler login
+
+# 4) 创建 KV（可选但推荐）
+wrangler kv:namespace create "SPEED_HISTORY"
+
+# 5) 在 wrangler.toml 填入 KV id 与 account_id
+
+# 6) 发布
+wrangler deploy
+```
+
+访问 Worker 分配的 `*.workers.dev` 域名即可使用。
+Then open the assigned `*.workers.dev` URL.
+
+---
+
+## 🛠️ 详细部署 · Detailed Deployment
+
+### 方式一 / Option A：Wrangler CLI（推荐 / Recommended）
+
+**前置条件 Prerequisites**：Node.js 16+、Cloudflare 账号。
+（可选）Cloudflare 付费计划，用于自定义域名与更大 KV 额度。
+
+**Step 1 · 安装 Wrangler**
 ```bash
 npm install -g wrangler
 ```
 
-#### Step 2: 克隆项目
-```bash
-git clone https://github.com/BlueDriftHK/CF-workers-netdiag.git
-cd CF-workers-netdiag
-```
-
-#### Step 3: 登录 Cloudflare
+**Step 2 · 登录 Cloudflare**
 ```bash
 wrangler login
 ```
-浏览器会自动打开 Cloudflare 授权页面，点击允许即可。
+浏览器会自动打开授权页面，点击允许。
 
-#### Step 4: 创建 KV 命名空间（用于存储测速历史和用量统计）
+**Step 3 · 创建 KV 命名空间**
 ```bash
-# 创建生产环境 KV
 wrangler kv:namespace create "SPEED_HISTORY"
 ```
-输出会显示类似：
+输出形如：
 ```
-🌀 Creating namespace with title "netsight-pro-SPEED_HISTORY"
 ✨ Success! Worker KV namespace created:
-{ binding: "SPEED_HISTORY", id: "abc123def456" }
+{ binding = "SPEED_HISTORY", id = "abc123def456" }
 ```
-记下 `id`，后面需要填入 `wrangler.toml`。
+记下 `id`。若还想缓存静态资源，可再创建 `CACHE_KV`。
 
-如果你想额外缓存静态资源，还可以创建另一个 KV：
-```bash
-wrangler kv:namespace create "CACHE_KV"
-```
-
-#### Step 5: 配置 `wrangler.toml`
-在项目根目录创建或编辑 `wrangler.toml`：
-
+**Step 4 · 配置 `wrangler.toml`**
 ```toml
 name = "netsight-pro"
-type = "javascript"
-account_id = "你的账号ID"   # 可在 Cloudflare Dashboard 的 Workers 页面找到
-workers_dev = true
+main = "worker.js"
+compatibility_date = "2024-01-01"
 
-# 绑定 SPEED_HISTORY KV（必须与上面创建的 ID 一致）
 [[kv_namespaces]]
 binding = "SPEED_HISTORY"
 id = "abc123def456"
 
-# 可选：绑定静态资源缓存 KV
+# 可选 optional
 # [[kv_namespaces]]
 # binding = "CACHE_KV"
 # id = "your-cache-kv-id"
 
-# 环境变量（可选）
 [vars]
-ALLOWED_ORIGINS = "https://yourdomain.com,https://another.com"
+# 可选：跨域白名单（逗号分隔；含 * 表示允许全部）
+ALLOWED_ORIGINS = "https://yourdomain.com"
 ```
 
-> **说明**：`account_id` 可在 Cloudflare Dashboard 的 “Workers & Pages” → “概述” 页面右下角找到。
-
-#### Step 6: （可选）添加自定义域名
-如果你希望使用自己的域名，可以在 Cloudflare Dashboard 的 “Workers & Pages” → 选择你的 Worker → “触发器” → “自定义域” 中添加，然后配置 DNS 记录。
-
-#### Step 7: 发布 Worker
+**Step 5 · 发布并验证**
 ```bash
-wrangler publish
+wrangler deploy
 ```
-首次发布可能需要几秒钟。完成后会显示一个 `.workers.dev` 子域名，例如 `netsight-pro.your-subdomain.workers.dev`。
+访问输出的 `*.workers.dev` 域名，看到主界面即成功。
 
-#### Step 8: 验证部署
-访问该域名，应看到 NetSight Pro 的主界面。若页面正常加载，说明部署成功。
+### 方式二 / Option B：Cloudflare Dashboard
 
----
+1. 登录 Dashboard → **Workers & Pages** → 创建 Worker。
+2. 把本项目的 Worker 脚本完整粘贴进在线编辑器。
+3. **设置 → 变量 / Settings → Bindings** 添加 KV Namespace：
+   - 名称 Name：`SPEED_HISTORY`
+   - 值 Value：选择你的 KV 命名空间
+4. 可选添加 `CACHE_KV` 与 `ALLOWED_ORIGINS`。
+5. 保存并部署。
 
-### 方式二：通过 Cloudflare Dashboard
-
-适用于不想安装 Node.js 的用户。
-
-1. 登录 [Cloudflare Dashboard](https://dash.cloudflare.com/)。
-2. 点击左侧菜单 “Workers & Pages” → “创建应用程序” → “创建 Worker”。
-3. 在编辑器中，将本项目的 `worker.js` 代码复制粘贴进去。
-4. 在 “设置” → “变量” 中添加 KV 命名空间绑定：
-   - 变量名称：`SPEED_HISTORY`
-   - 值：选择一个已创建的 KV 命名空间（如果没有，需先创建）
-   - 同样可添加 `CACHE_KV`。
-5. 在 “设置” → “环境变量” 中添加 `ALLOWED_ORIGINS`（可选）。
-6. 点击 “保存并部署”。
-7. 部署后，Worker 会分配一个 `.workers.dev` 域名，即可访问。
-
-> **注意**：Dashboard 方式无法使用 Wrangler 的本地调试和热更新，建议仅用于快速测试。
+> 注意：Dashboard 方式不支持本地调试与热更新，适合快速测试。若 Worker 允许访问 Dashboard，请务必把同名变量名与代码一致（区分大小写）。
 
 ---
 
-## ⚙️ 环境变量与 KV 绑定
+## ⚙️ 绑定与变量 · Bindings & Vars
 
-| 变量名 | 类型 | 必填 | 描述 |
-|--------|------|------|------|
-| `ALLOWED_ORIGINS` | 环境变量 | 否 | 允许跨域请求的 Origin 列表（逗号分隔）。若未设置或为空，则仅允许同源请求。 |
-| `SPEED_HISTORY` | KV 绑定 | 否 | 用于存储测速历史和用量统计。若未绑定，历史记录功能将降级（仅显示“暂无记录”）。 |
-| `CACHE_KV` | KV 绑定 | 否 | 用于缓存静态资源（如 `/static/` 下的文件）。若未绑定，将使用 Workers Cache API。 |
+| 名称 Name | 类型 Type | 必填 Required | 描述 Description |
+| --- | --- | --- | --- |
+| `SPEED_HISTORY` | KV Namespace | 否 No | 测速历史 + 用量统计。未绑定时相关功能优雅降级为"暂无记录"，**不影响其它功能** |
+| `CACHE_KV` | KV Namespace | 否 No | `/static/*` 静态资源读取；未绑定时回退到 Cache API |
+| `ALLOWED_ORIGINS` | 环境变量 Var | 否 No | 跨域来源白名单（逗号分隔）。未设置时仅允许同源；含 `*` 允许全部 |
 
-> 强烈建议绑定 `SPEED_HISTORY` 以启用完整功能。
-
----
-
-## 📌 所有 API 端点详解
-
-| 端点 | 方法 | 参数 | 描述 | 响应格式 |
-|------|------|------|------|----------|
-| `/` | GET | - | 主诊断页面（HTML） | `text/html` |
-| `/health` | GET | - | 健康检查 | JSON `{ status, version }` |
-| `/speedtest` | GET | `size` (1~5MB) | 下载速度测试（生成随机字节） | `application/octet-stream` |
-| `/upload-test` | POST | 二进制 body | 上传速度测试（最大 10MB） | JSON `{ bytes, duration, speedMbps }` |
-| `/cpu-test` | GET | `n` (1~500k) | CPU 基准测试 | JSON `{ duration, iterations, opsMs, result }` |
-| `/dns-proxy` | GET | `url` (白名单域名) | DNS 代理测试（HEAD 请求） | JSON `{ time, status }` 或 `{ error }` |
-| `/ws-test` | GET | - | WebSocket 握手（需 Upgrade 头） | WebSocket 连接 |
-| `/http2-test` | GET | - | HTTP/2/3、TLS 信息检测 | JSON `{ http2, http3, protocol, tlsVersion, earlyHints, alpn }` |
-| `/concurrent-test` | GET | `count` (1~16), `size` (1~64KB) | 并发下载测试 | JSON 数组 `[{ index, size, duration }]` |
-| `/stream-test` | GET | `size` (1~10MB) | 流式大文件传输 | `application/octet-stream` |
-| `/api/log-speed` | POST | `{ avgSpeed, results }` | 记录测速结果到 KV | JSON `{ ok }` 或错误 |
-| `/api/speed-history` | GET | `limit` (1~20) | 查询测速历史 | JSON 数组 |
-| `/api/usage-stats` | GET | - | 查询用量统计 | JSON `{ totalRequests, endpoints }` |
-| `/api/ip-fraud` | GET | - | IP 欺诈评分 | JSON `{ score, isProxy, isVpn, isTor, isHosting, riskLevel }` |
-| `OPTIONS` | OPTIONS | - | CORS 预检 | 空响应体，含 CORS 头 |
-
-所有端点在响应中均携带安全头，敏感端点实施同源保护。
+> 所有绑定都是**软依赖**：代码用 `typeof X !== 'undefined'` 判断，未绑定也能完整运行。
+> All bindings are **soft dependencies** — the script degrades gracefully when absent.
 
 ---
 
-## 🖱️ 前端功能详解
+## 📌 API 端点 · Endpoints
 
-### 实时 RTT 监控
-- 每隔 2 秒向当前页面发送 HEAD 请求（带缓存破坏参数），计算往返时间。
-- 存储最近 40 个样本，绘制折线图（Canvas），填充渐变区域。
-- 动态计算：
-  - **抖动**：当前 RTT 与上次 RTT 的绝对值的移动平均（窗口 10）。
-  - **最低/最高 RTT**：自页面加载以来的极值。
-  - **丢包率**：连续失败次数 + 总失败次数 / 总样本数。
-- **质量等级**：根据当前 RTT 分为 Excellent / Good / Fair / Poor / Very Poor。
-- **稳定性等级**：根据平均抖动分为 Very Stable / Stable / Unstable / Very Unstable。
+| 端点 Endpoint | 方法 Method | 参数 Params | 说明 Description | 限制 Limit |
+| --- | --- | --- | --- | --- |
+| `/` | GET | — | 主诊断页 | — |
+| `/health` | GET | — | 健康检查 | — |
+| `/static/*` | GET | — | 静态资源（CDN 缓存 / CACHE_KV） | — |
+| `/speedtest` | GET | `size` | 下载测速（随机字节） | 1..2,097,152（默认 100KB） |
+| `/upload-test` | POST | body | 上传测速 | body ≤ 5MB |
+| `/cpu-test` | GET | `n` | CPU 基准测试 | 1..20,000；限流 3/分钟 |
+| `/dns-proxy` | GET | `url` | HEAD 探测 | 仅 http/https + 域名白名单 |
+| `/ws-test` | GET | — | WebSocket 往返延迟 | Upgrade 头；消息 ≤ 4KB |
+| `/http2-test` | GET | — | HTTP/2·3 / TLS / ALPN | — |
+| `/concurrent-test` | GET | `count`,`size` | 并发下载 | count 1..16；size 1..65536 |
+| `/stream-test` | GET | `size` | 流式传输 | 1..5,242,880 |
+| `/api/log-speed` | POST | `{avgSpeed,results}` | 记录测速到 KV | body ≤ 10KB |
+| `/api/speed-history` | GET | `limit` | 查询测速历史 | limit 1..20 |
+| `/api/usage-stats` | GET | — | 查询用量统计 | — |
+| `/api/ip-fraud` | GET | — | IP 风险评分 | 依赖第三方接口 |
+| `/api/site-audit` | GET | `url` | 站点体检（安全头审计） | 仅公网 http/https |
+| `/*` | OPTIONS | — | CORS 预检 | 含 CORS 头 |
 
-### 地理位置与距离
-- 页面加载后，通过 `navigator` 或 `ipapi.co` 获取客户端真实 IP 地理位置。
-- 利用 Haversine 公式计算客户端到边缘节点（`cf.latitude/longitude`）的距离，以公里显示。
-
-### 诊断工具集（12 个测试按钮）
-每个按钮点击后，会显示一个临时结果区域，展示测试结果（支持成功/错误状态，带图标和颜色标识）。
-
-| 按钮 | 测试内容 | 输出示例 |
-|------|----------|----------|
-| 丢包率 | 连续 10 次 HEAD 请求，统计失败次数 | `0% (无丢包)` 或 `10% (1/10 丢失)` |
-| 带宽测速 | 依次下载 100KB、500KB、2MB，计算速度 | 显示各档位 Mbps 和平均速度 |
-| DNS 解析 | 使用 Image 对象加载 favicon，测量 DNS 时间（实际包含连接时间） | 各域名耗时（ms） |
-| CPU 性能 | 发送 `/cpu-test?n=500000` | ops/ms 和总耗时 |
-| WebSocket | 建立 WebSocket，进行 5 次 ping/pong | 平均、最小、最大延迟 |
-| 并发测试 | 请求 `/concurrent-test?count=4/6/8&size=2KB` | 各并发数的平均耗时 |
-| 流式传输 | 依次下载 128KB、512KB、2MB 流数据 | 各档位吞吐量（Mbps） |
-| 流媒体连通性 | 加载 Netflix/Disney+/YouTube/ChatGPT 的 favicon | 每个服务的可达性（✅/❌） |
-| 多节点对比 | 弹出对话框输入节点 URL，并行测试 `/speedtest?size=1` | 表格列出每个节点的延迟和状态 |
-| WebRTC 泄漏 | 创建 RTCPeerConnection，收集 ICE 候选 | 显示本地和公网 IP（如有） |
-| TTFB 分析 | 使用 PerformanceObserver 捕获 `/health` 请求的各阶段耗时 | 条形图显示 DNS/TCP/TLS/等待/下载 |
-| 上传测速 | 依次上传 256KB、1MB、2MB 随机数据 | 各档位上传速度（Mbps）和平均速度 |
-
-### 历史与统计
-- **测速历史**：从 `/api/speed-history` 获取数据，显示最近 5 条记录，用速度条直观展示。
-- **用量统计**：从 `/api/usage-stats` 获取总请求数和最常调用的端点（最多 8 个）。
-
-### 报告生成
-点击“复制报告”按钮，会生成一份包含以下内容的纯文本报告：
-- 诊断时间、边缘节点、客户端 IP、RAY ID
-- 当前 RTT、抖动、最低/最高 RTT、质量/稳定性/丢包率
-- 协议、TLS 版本、加密套件、ECH、压缩、HTTP/2、Bot 评分
-- 边缘位置、真实 IP 位置、ISP
-- IP 风险信息（若已加载）
-- 附带生成时间戳和来源声明。
+除主页面与 `/static/*` 外，所有端点受基础限流（默认 **60 次/分钟/IP**）保护。所有响应均携带安全头，敏感端点实施同源保护。
 
 ---
 
-## 🔒 安全机制
+## 🖱️ 前端功能与工具 · Frontend & Tools
 
-### 1. 请求来源限制
-- **同源导航检查**：所有敏感端点（`/speedtest`、`/upload-test`、`/cpu-test`、`/ws-test`、`/concurrent-test`、`/stream-test`、`/api/log-speed` 等）均通过 `isSameOriginNavigation` 验证，确保请求来自同一 Origin 或允许列表，防止 CSRF 和跨域滥用。
-- **CORS 白名单**：通过环境变量 `ALLOWED_ORIGINS` 控制，只有明确列出的 Origin 才能获得 CORS 响应。
+### 实时 RTT 监控 / Live RTT
+每 2s 向 `/health` 发一次 HEAD 请求（带缓存破坏参数），计算往返时间；保留最近 40 个样本绘制折线图。派生指标：抖动（移动平均窗口 10）、最低/最高 RTT、丢包率、质量等级（Excellent/Good/Fair/Poor/Very Poor）、稳定性等级。
 
-### 2. 输入校验
-- 所有数值参数（`size`、`count`、`n`、`limit`）均使用 `clampInt` 和 `safeNumber` 进行范围限制，防止拒绝服务攻击。
-- URL 参数（`dns-proxy` 的 `url`）强制校验协议（仅 http/https）和域名白名单。
-- 请求体大小限制（`/upload-test` 最大 10MB，`/api/log-speed` 最大 10KB）。
-- `escapeForJS` 和 `escapeHTML` 对输出进行转义，防止 XSS。
+### 13 个诊断工具 / 13 tools
 
-### 3. 限流
-- **通用限流**：每个 IP 每分钟最多 60 次请求（对非静态资源路径生效）。
-- **CPU 测试限流**：每个 IP 每分钟最多 3 次。
-- 限流数据存储在内存 Map 中，定期清理过期条目。
+| 工具 Tool | 测试内容 What it does |
+| --- | --- |
+| 丢包率 Packet Loss | 连续 10 次探测，统计失败率 |
+| 带宽测速 Bandwidth | 依次下载多档位，算各档与平均 Mbps |
+| DNS 解析 DNS | 加载 favicon 测解析耗时 |
+| CPU 性能 CPU | Worker 端计算基准（ops/ms） |
+| WebSocket | 建连后 5 次 ping/pong，算平均/最小/最大延迟 |
+| 并发测试 Concurrency | 4/6/8 路并发，观测平均耗时 |
+| 流式传输 Stream | 分块流式读取，算持续吞吐 |
+| 流媒体连通 Media | Netflix/Disney+/YouTube/ChatGPT 可达性 |
+| 多节点对比 Multi-node | 输入多节点 URL，并行测延迟 |
+| WebRTC 泄漏 Leak | 收集 ICE 候选，判断内网/公网 IP 泄露 |
+| TTFB 分析 | PerformanceObserver 拆解各阶段耗时 |
+| 上传测速 Upload | 多档位上传，算各档与平均 Mbps |
+| **站点体检 Audit** | **输入 URL，审计其 HTTP 安全响应头 + 响应性能** |
 
-### 4. 安全头部
-- `X-Content-Type-Options: nosniff`
-- `X-Frame-Options: DENY`
-- `Referrer-Policy: strict-origin-when-cross-origin`
-- `Strict-Transport-Security: max-age=31536000; includeSubDomains; preload`
-- **CSP（内容安全策略）**：
-  ```
-  default-src 'self';
-  script-src 'self' 'nonce-<random>' https://cdnjs.cloudflare.com https://fonts.googleapis.com;
-  style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com;
-  font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com;
-  connect-src 'self' https://ipapi.co https://api4.ipify.org https://api6.ipify.org ...;
-  img-src 'self' data: https://www.netflix.com ...;
-  ```
+### 站点体检 · Site Audit
+输入任意公网 URL，由 Worker 端发起请求并审计：
+- 指标：状态码、首字节（TTFB）、总耗时、重定向次数
+- 跟随重定向后的最终地址
+- 安全响应头清单：`Strict-Transport-Security` / `Content-Security-Policy` / `X-Frame-Options` / `X-Content-Type-Options` / `Referrer-Policy` / `Permissions-Policy`（有值显值，缺失标黄）
 
-### 5. 外部 API 超时
-- 所有外部 fetch 使用 `AbortController` 和超时（通常 4~5 秒），避免长时间阻塞。
+> 说明：Workers `fetch` 无法获取任意目标的 TLS 证书信息，因此体检覆盖 **HTTP 层**，不含证书链审计。
 
----
-
-## 🌐 国际化与主题
-
-### 语言支持
-- **支持语言**：English (en)、简体中文 (zh-CN)、繁體中文 (zh-TW)
-- **检测逻辑**：
-  1. 优先读取 `localStorage` 中 `pref-lang`。
-  2. 否则根据 `Accept-Language` 头部匹配（zh-CN/zh-SG/zh-MY → 简体，zh → 繁体，en → 英语）。
-  3. 若未匹配，使用 Worker 端默认语言（由 `defaultLang` 决定）。
-- **覆盖范围**：所有界面文本、按钮、标签、提示信息、报告模板、质量等级、风险标签等。
-
-### 主题模式
-- **支持**：浅色、深色、跟随系统。
-- **实现**：通过 CSS 变量和 `data-theme` 属性控制，所有颜色值自适应。
-- **切换**：点击头部月亮/太阳图标循环切换，偏好保存至 `localStorage`。
+### 报告 / Report
+点击「复制报告」生成纯文本报告：诊断时间、边缘节点、客户端 IP、RAY ID、RTT/抖动/丢包、协议/TLS/加密套件/指纹/评分、位置与 ISP、IP 风险信息等。
 
 ---
 
-## ⚡ 性能与可靠性
+## 🔒 安全机制 · Security
 
-### 缓存策略
-- **静态资源**（`/static/*`）：使用 Cache API 缓存 1 天，并支持 KV 存储（如配置 `CACHE_KV`）。
-- **主页面**：强制 `no-cache, no-store, must-revalidate`，确保每次获取最新版本。
-- **测速端点**：所有测试 API 均设置 `cache-control: no-store` 防止缓存干扰。
+1. **CSP（随机 nonce）**：`script-src` 仅 `'self' + 'nonce-<random>'`，页面内联脚本携带该 nonce；未使用 `'unsafe-inline'` 放行脚本。
+2. **安全响应头**：`X-Content-Type-Options: nosniff`、`X-Frame-Options: DENY`、`Referrer-Policy: strict-origin-when-cross-origin`、HSTS、`Permissions-Policy`。
+3. **同源校验**：写操作与敏感读取端点（含 `/api/speed-history`、`/api/usage-stats`、`/api/ip-fraud`、`/http2-test`、`/api/site-audit`）校验 `Origin`/`Referer`；同源放行、无头放行、跨域拒绝。
+4. **SSRF 防护**（`/dns-proxy`、`/api/site-audit`）：协议白名单 + 域名白名单 / 私网与保留地址拦截 + 重定向跳数上限 + 超时 + 只读响应头。
+5. **转义分层**：HTML 上下文 `escapeHtml`，JS 字符串上下文 `escapeForJS`，客户端渲染统一 `escapeHTML`。
+6. **输入约束**：所有数值参数经 `clampInt` / `safeNumber` 收敛；请求体大小限制。
+7. **资源保护**：CPU 迭代上限压到免费计划预算内；下载/上传/流式端点体积上限；通用限流 60/分钟 + CPU 端点 3/分钟。
 
-### 高效随机数据生成
-- 使用 `crypto.getRandomValues` 配合分块（64KB）填充，适合大块数据生成。
-- 流式传输使用 ReadableStream，逐块生成，内存友好。
-
-### 并发控制
-- 使用自定义 `pLimit` 函数限制并发数（如 `/concurrent-test` 内部并发为 4），避免 Worker 资源耗尽。
-
-### 内存管理
-- 限流 Map 定期清理（每次 check 有 5% 概率触发清理，或条目数 > 10000 时触发）。
-- 测速历史 KV 自动设置 TTL（7 天），用量统计 TTL 30 天。
-
-### 降级策略
-- 若 `SPEED_HISTORY` KV 未绑定，历史记录和统计功能将优雅降级，显示“暂无记录”或“等待首次请求”。
-- 外部 API 失败时，前端会显示“获取失败”或“无法获取风险数据”等友好提示。
+> English: CSP with random nonce (no unsafe-inline for scripts), strict security headers, same-origin checks on sensitive endpoints, SSRF guards on URL-accepting endpoints, layered escaping for HTML vs JS contexts, clamped numeric inputs, and resource caps (CPU iterations, transfer sizes) to survive the free-plan limits.
 
 ---
 
-## 🛠️ 自定义与扩展
+## 🌐 国际化与主题 · i18n & Theme
 
-### 添加新的测试工具
-1. 在前端 HTML 的 `.button-group` 中添加新按钮。
-2. 在 JavaScript 中编写对应的测试函数（通常为 `async function runXxxTest()`）。
-3. 绑定按钮点击事件，调用该函数，并使用 `showResult()` 显示结果。
+**语言 / Languages**：English (en)、简体中文 (zh-CN)、繁體中文 (zh-TW)。三个语言包**键集合完全一致**（各 160+ 键），切换时即时更新所有静态与动态内容（含已打开的结果弹层——会按新语言重跑）。语言偏好持久化到 `localStorage`（`pref-lang`），并按 `Accept-Language` 自动初选。通用缩写与单位（IPv4/TLS/ASN/JA3/JA4/ECH/ms/Mbps/KB 等）跨语言一致，不做翻译。
 
-### 修改国际化文本
-编辑前端 `i18n` 对象，按语言键值对更新文本。所有界面 ID 均以 `t-` 开头，对应 `map` 对象中的键。
-
-### 调整主题样式
-修改 `:root` 和 `[data-theme="light"]` 中的 CSS 变量即可全局更换配色。
-
-### 扩展后端 API
-在 `handleRequest` 主流程中添加新的 `if (url.pathname === '/your-endpoint')` 分支，实现自定义逻辑，并应用相同的安全措施（CORS、限流、同源检查）。
-
-### 集成更多欺诈评分源
-当前使用 Scamalytics，如需替换，修改 `getIpFraudScore` 函数，调用其他服务（如 IPQS、MaxMind）即可。
+**主题 / Theme**：深色 / 浅色 / 跟随系统。通过 CSS 变量与 `data-theme` 属性控制，切换按钮循环切换，偏好保存到 `localStorage`。
 
 ---
 
-## ❓ 常见问题与故障排查
+## ⚡ 性能与可靠性 · Performance
 
-**Q：部署后页面显示空白或加载失败？**  
-A：检查 Worker 日志（Cloudflare Dashboard → Workers → 选择 Worker → “日志”），查看是否有 JavaScript 错误。确保代码完整复制，且无语法错误。
-
-**Q：测速历史显示“暂无记录”？**  
-A：请确认已正确绑定 `SPEED_HISTORY` KV，并且 Worker 代码中的 binding 名称与 `wrangler.toml` 或 Dashboard 设置完全一致（区分大小写）。部署后首次测速会创建记录，稍等片刻刷新。
-
-**Q：部分测试（如 WebSocket）失败？**  
-A：检查浏览器是否支持 WebSocket，以及 Worker 是否正常响应升级请求。某些企业网络或浏览器插件可能拦截 WebSocket 连接。可尝试使用 Chrome 无痕模式测试。
-
-**Q：IP 欺诈评分一直显示“获取失败”？**  
-A：Scamalytics API 可能有访问限制或网络问题。可尝试在浏览器中直接访问 `https://scamalytics.com/api/ip/你的IP` 测试是否可达。若不可达，可考虑替换为其他 API。
-
-**Q：主题切换不生效？**  
-A：确保浏览器未禁用 localStorage，且 `data-theme` 属性正确设置。可尝试清除缓存后重新加载。
-
-**Q：如何限制仅自己使用？**  
-A：在 `ALLOWED_ORIGINS` 中填入自己部署的域名，并确保 Worker 路由仅允许该域名访问。此外，也可在 Worker 中添加 IP 白名单（需自行实现，例如检查 `cf-connecting-ip` 头部）。
-
-**Q：能否将报告保存为文件？**  
-A：复制报告后，可粘贴到文本编辑器中保存为 `.md` 或 `.txt` 文件。
-
-**Q：Worker 每日请求限额不足？**  
-A：Cloudflare Workers 免费计划每天有 10 万次请求限额，个人使用通常足够。如需更多，可升级至付费计划。
-
-**Q：如何更新到最新版本？**  
-A：拉取仓库最新代码，重新部署即可。若使用 Wrangler，`wrangler publish` 会自动更新。
+- **缓存**：静态资源缓存 1 天并支持 KV；主页面 `no-store`；测速端点均 `no-store`。
+- **高效随机数据**：`crypto.getRandomValues` 分块（64KB）填充；流式传输用 `ReadableStream` 逐块生成，内存友好。
+- **不阻塞渲染**：主页面不做同步外呼——客户端地理信息由前端**异步**获取，避免第三方接口拖慢首屏。
+- **并发控制**：`pLimit` 限制并发数，避免资源耗尽。
+- **内存管理**：限流 Map 定期清理；KV 记录带 TTL（测速历史 7 天、用量统计 30 天）。
+- **降级**：KV 未绑定或外部接口失败时给出友好提示，不抛异常。
 
 ---
 
-## 📄 许可证与贡献
+## 🔀 相较上游的改动 · Changes vs Upstream
 
-本项目基于 **AGPL-3.0 许可证** 开源，欢迎任何形式的贡献（Issue、PR、Star）。
+> 本仓库在上游 `CF-workers-netdiag` 基础上做了界面重做与稳定性/安全加固。This fork reworked the UI and hardened reliability/security on top of the upstream project.
 
-- **作者**：[BlueDriftHK](https://github.com/BlueDriftHK)
-- **项目仓库**：[https://github.com/BlueDriftHK/CF-workers-netdiag](https://github.com/BlueDriftHK/CF-workers-netdiag)
-- **反馈与建议**：请提交 GitHub Issue，或通过邮件联系（详见个人主页）。
+- **界面**：极光毛玻璃 → **灰度 HUD + 网格背景**；单页长滚动 → **4 个标签页**。
+- **工具交互**：12 个按钮堆叠 → **13 张卡片网格 + 结果弹层**（指标卡/进度条 + 「重新运行」）。
+- **新增**：**站点体检**（HTTP 安全头审计端点 `/api/site-audit`）。
+- **稳定性**：`/cpu-test` 迭代上限下调至免费计划 CPU 预算内（避免 1102 超时）；带宽端点体积上限收敛；移除主页阻塞式服务端地理查询。
+- **安全**：CSP `script-src` 收紧为 `'self' + nonce`；补齐多个 API 端点的同源校验；新增 SSRF 防护；新增 `Permissions-Policy`；HTML/JS 转义彻底分离；修复 WebRTC IP 匹配正则的模板字符串转义 bug。
+- **i18n**：三语言全量对齐并覆盖所有动态内容。
 
 ---
 
-**NetSight Pro – 让网络诊断如极光般绚丽而高效。** 🌌
+## 🛠️ 自定义与扩展 · Customization
+
+**加一个诊断工具**：在客户端 `TOOL_LIST` 增加一项（`key / icon / nameKey`），在 `TOOL_RUNNERS` 注册对应函数，结果用 `metricCard()` / `resultTitle()` / `result-rows` 渲染；如需要输入，参考「站点体检」的 `runSiteAudit()`。三语言需在 `i18n` 与 `toolDesc` 中补齐。
+
+**加一个后端端点**：在 `handleRequest` 主流程添加 `if (url.pathname === '/your-endpoint')` 分支，并沿用相同的安全措施（CORS、限流、同源检查、输入收敛）。
+
+**改配色 / 改主题**：只改 `:root` 与 `[data-theme="light"]` 的 CSS 变量即可全局换色。
+
+**改文案**：编辑客户端 `i18n` 对象（三语言同步）。界面文本 ID 以 `t-` 开头，对应 `updateUI` 里的映射表。
+
+> ⚠️ **踩坑提醒 · Pitfall**：内嵌客户端代码里的正则反斜杠必须写**双份**（如 `/^https?:\/\//`），否则会被外层模板字符串"吃掉"，导致客户端脚本解析失败。改动客户端正则后，务必验证渲染出的 `<script>` 能被解析（`node --check` 只校验 Worker 本身，不会校验内嵌脚本）。
+
+---
+
+## ❓ 常见问题 · FAQ
+
+**Q：部署后页面空白 / 加载失败？**
+A：检查 Worker 日志（Dashboard → Workers → 选择 Worker → 日志），确认代码完整粘贴、无语法错误。
+
+**Q：测速历史显示「暂无记录」？**
+A：确认已绑定 `SPEED_HISTORY` KV，且绑定名与代码完全一致（区分大小写）。首次测速后刷新即可。
+
+**Q：WebSocket / 部分测试失败？**
+A：检查浏览器是否支持 WebSocket，某些企业网络或插件会拦截；可尝试无痕模式。
+
+**Q：IP 风险评分显示「获取失败」？**
+A：该评分依赖第三方免费接口（`ip-api.com`，免费版为 HTTP），可能受可用性波动影响。
+
+**Q：主题 / 语言切换不生效？**
+A：确认浏览器未禁用 `localStorage`；`data-theme` 与 `pref-lang` 是否正确写入。
+
+**Q：如何限制仅自己使用？**
+A：在 `ALLOWED_ORIGINS` 填入自己的域名；如需更强限制，可自行增加基于 `cf-connecting-ip` 的 IP 白名单。
+
+**Q：CPU 压测报错 1102？**
+A：免费计划单请求 CPU 时间有限，`/cpu-test` 迭代上限已刻意压低；如需更高可选付费计划。
+
+**Q：报告能存成文件吗？**
+A：复制报告后粘贴到文本编辑器另存为 `.md` / `.txt` 即可。
+
+**Q：请求限额不够？**
+A：Workers 免费计划每天约 10 万次请求，个人使用通常足够；可升级付费计划。
+
+---
+
+## 📄 许可证与贡献 · License & Contributing
+
+本项目基于 **AGPL-3.0** 许可证开源，欢迎任何形式的贡献（Issue / PR / Star）。
+
+- **作者 Author**：BlueDriftHK
+- **上游仓库 Repository**：https://github.com/BlueDriftHK/CF-workers-netdiag
+- **反馈 Feedback**：请提交 GitHub Issue
+
+本项目为网络诊断用途。对目标站点发起探测前，请确保你**有权**对该目标进行测试，并遵守目标站点服务条款与所在地法律法规。
+This tool is for network diagnostics. Ensure you are **authorized** to probe any target site and comply with the target's terms of service and applicable laws.
+
+> NetSight Pro – 让网络诊断既克制又高效。 🌌
