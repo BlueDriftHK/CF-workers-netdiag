@@ -16,8 +16,6 @@ NetSight Pro is an all-in-one **network diagnostics tool** that runs on Cloudfla
 - **版本 / Version**：`4.1-security`（在本仓库基础上做了界面重做与稳定性/安全加固）
 - **运行平台 / Runtime**：Cloudflare Workers（V8, ES2020）
 - **存储 / Storage**：KV（绑定 `SPEED_HISTORY`，用于测速历史与用量统计）
-- **上游 / Upstream**：基于 [`BlueDriftHK/CF-workers-netdiag`](https://github.com/BlueDriftHK/CF-workers-netdiag) 的增强版
-
 ---
 
 ## 📋 目录 · Table of Contents
