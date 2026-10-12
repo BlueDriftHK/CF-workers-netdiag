@@ -24,6 +24,7 @@ NetSight Pro is an all-in-one **network diagnostics platform** that runs on Clou
 ## 📋 目录 · Table of Contents
 
 - [✨ 特性总览 · Features](#-特性总览--features)
+- [🎯 观测点与数据来源 · Vantage Points](#-观测点与数据来源--vantage-points)
 - [🎨 界面 · UI](#-界面--ui)
 - [🧱 技术架构 · Architecture](#-技术架构--architecture)
 - [🚀 快速部署 · Quick Deploy](#-快速部署--quick-deploy)
@@ -78,6 +79,33 @@ NetSight Pro is an all-in-one **network diagnostics platform** that runs on Clou
 | | 主题 / Theme | 深色 / 浅色 / 跟随系统 |
 | | 语言 / Language | English / 简体中文 / 繁體中文，全量覆盖 |
 | | PWA | 可安装到桌面 / 主屏，具备离线外壳 |
+
+---
+
+## 🎯 观测点与数据来源 · Vantage Points
+
+**本工具以「用户端（你的浏览器 / 本机网络）」为第一观测视角。** 绝大多数测量都在你的浏览器里发起，反映的是**你的链路**；只有需要「公网视角」的检查才由 **Cloudflare 边缘**发起——它们描述的是**目标站点**或边缘侧能力，**不代表你的网络**。
+
+> This tool is **client-first**: most measurements are initiated by your browser and describe **your own network**. Only checks that need a public vantage point are issued by the **Cloudflare edge** — they describe the **target site**, not your network.
+
+| 观测点 Vantage | 工具 Tools | 说明 Description |
+| --- | --- | --- |
+| 🖥️ 你的浏览器 Your browser | 实时 RTT 监控、丢包率、带宽测速、上传测速、缓冲膨胀、DNS 解析、TTFB、WebRTC、多节点对比、流媒体连通、WebSocket、并发测试、流式传输、一键体检 | 从你的设备发起，反映你的链路质量 |
+| 🛰️ 双侧对照 Both sides | 网络可达性 | 边缘侧与浏览器侧**同时**探测并对照，用于识别「本地被阻断」 |
+| ☁️ Cloudflare 边缘 Edge | DNS 工具箱、多解析器对比、域名安全体检、站点安全评分、CPU 基准、站点监控 | 由边缘发起；描述**目标站点**或边缘侧能力 |
+
+**判读建议**：判断「我的网络好不好」请以 **🖥️ 浏览器侧**数据为准；边缘侧结果仅作对照参考。
+
+### 请求来源说明 · Who calls the Worker
+
+| 来源 | 是否用户端 | 会产生什么 |
+| --- | --- | --- |
+| 你的浏览器 | ✅ 是 | 页面/资源加载、每 2s 的 `/health`（仅前台轮询）、点击工具时的 API 调用 |
+| 第三方 / 爬虫 / 外部探针 | ❌ 否 | 可直接访问 `/` 与 `/health`（这两者不做同源校验）；敏感 API 会被同源校验拒绝（403） |
+| Cloudflare Cron Triggers | ❌ 否 | 服务端定时触发 `scheduled` 处理器执行站点巡检（探测目标 + 发 Webhook），**不经过 fetch 处理器**，故不计入用量统计 |
+| Worker 自己发起的出站请求 | ❌ 否 | DoH 解析、`proxycheck.io`、站点评分目标抓取、可达性探测、监控目标探测与 Webhook 告警 |
+
+> 因此，「默认策略下不写 KV」这一结论**与调用方无关**：无论请求来自你的浏览器、爬虫还是别的来源，默认都不会产生 KV 写入。另注：用量统计是 **per-isolate 内存**，不同边缘节点各算各的，并非全站总数。
 
 ---
 
@@ -275,28 +303,28 @@ curl https://your-worker.workers.dev/health
 
 ### 20 个诊断工具 / 20 tools
 
-| 工具 Tool | 测试内容 What it does |
-| --- | --- |
-| 一键体检 Quick check | 运行全部检测并生成评分报告 |
-| 丢包率 Packet Loss | 连续探测，统计失败率与质量 |
-| 带宽测速 Bandwidth | 依次下载多档位，算各档与平均 Mbps |
-| 上传测速 Upload | 多档位上传，算各档与平均 Mbps |
-| 缓冲膨胀 Bufferbloat | 负载下延迟，A–F 评级 |
-| DNS 解析 DNS | 解析主流站点，测量解析耗时 |
-| DNS 工具箱 DNS Toolbox | DoH 记录查询 + IP 黑名单检测 |
-| 多解析器对比 DNS Compare | 4 个公共解析器并发对比 |
-| 域名安全体检 Domain Check | MX / SPF / DMARC / DKIM 与声誉 |
-| 站点安全评分 Site Audit | HTTP 安全响应头审计 + A–F 评级 |
-| 网络可达性 Reachability | 边缘侧与浏览器侧对照探测 |
-| WebRTC 泄漏 Leak | 判断内网/公网 IP 泄露 |
-| TTFB 分析 | 拆解请求各阶段耗时 |
-| 多节点对比 Multi-node | 输入多节点 URL，并行测延迟 |
-| 流媒体连通 Media | Netflix/Disney+/YouTube/ChatGPT 可达性 |
-| CPU 性能 CPU | Worker 端计算基准 |
-| WebSocket | 建连后往返延迟测量 |
-| 并发测试 Concurrency | 多路并发，观测平均耗时 |
-| 流式传输 Stream | 分块流式读取，算持续吞吐 |
-| 站点监控 Monitor | 定时巡检 + Webhook 告警 |
+| 工具 Tool | 数据来源 Source | 测试内容 What it does |
+| --- | --- | --- |
+| 一键体检 Quick check | 🖥️ 本机 | 运行全部检测并生成评分报告 |
+| 丢包率 Packet Loss | 🖥️ 本机 | 连续探测，统计失败率与质量 |
+| 带宽测速 Bandwidth | 🖥️ 本机 | 依次下载多档位，算各档与平均 Mbps |
+| 上传测速 Upload | 🖥️ 本机 | 多档位上传，算各档与平均 Mbps |
+| 缓冲膨胀 Bufferbloat | 🖥️ 本机 | 负载下延迟，A–F 评级 |
+| DNS 解析 DNS | 🖥️ 本机 | 解析主流站点，测量解析耗时 |
+| TTFB 分析 TTFB | 🖥️ 本机 | 拆解请求各阶段耗时 |
+| WebRTC 泄漏 Leak | 🖥️ 本机 | 判断内网/公网 IP 泄露 |
+| 多节点对比 Multi-node | 🖥️ 本机 | 输入多节点 URL，并行测延迟 |
+| 流媒体连通 Media | 🖥️ 本机 | Netflix/Disney+/YouTube/ChatGPT 可达性 |
+| WebSocket | 🖥️ 本机 | 建连后往返延迟测量 |
+| 并发测试 Concurrency | 🖥️ 本机 | 多路并发，观测平均耗时 |
+| 流式传输 Stream | 🖥️ 本机 | 分块流式读取，算持续吞吐 |
+| 网络可达性 Reachability | 🛰️ 双侧 | 边缘侧与浏览器侧**同时**探测并对照 |
+| DNS 工具箱 DNS Toolbox | ☁️ 边缘 | DoH 记录查询 + IP 黑名单检测 |
+| 多解析器对比 DNS Compare | ☁️ 边缘 | 4 个公共解析器并发对比 |
+| 域名安全体检 Domain Check | ☁️ 边缘 | MX / SPF / DMARC / DKIM 与声誉 |
+| 站点安全评分 Site Audit | ☁️ 边缘 | HTTP 安全响应头审计 + A–F 评级 |
+| CPU 性能 CPU | ☁️ 边缘 | Worker 端计算基准 |
+| 站点监控 Monitor | ☁️ 边缘 | 定时巡检 + Webhook 告警 |
 
 ### 站点安全评分 · Site Audit
 输入任意公网 URL，由 Worker 端发起请求并审计：状态码、首字节（TTFB）、总耗时、重定向次数、跟随重定向后的最终地址，并逐项检查安全响应头：
