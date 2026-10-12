@@ -1,7 +1,7 @@
 // ============================================================
 // NetSight Pro - Apple 极简网络诊断工具
 // Cloudflare Worker 完整优化版 | 全界面国际化 + 深色/浅色切换
-// 版本: 4.6.0 | 新增：DNS 多解析器对比 · 网络可达性检测 · 安全响应头评分
+// 版本: 4.6.2 | 新增：DNS 多解析器对比 · 网络可达性检测 · 安全响应头评分；/health 同源校验 · RTT 5s · 可达性/IP 风险去 Worker 出站
 // ============================================================
 
 // ==================== 常量定义 ====================
@@ -77,7 +77,7 @@ function forbiddenResponse(request) {
 // 简单的限流实现（注意：Map 为 per-isolate 内存，非全局共享；高并发场景如需全局限流应使用 KV 或 Durable Object）
 const rateLimit = new Map();
 const healthRateLimit = new Map(); // /health 独立配额：RTT/丢包轮询频繁，避免挤占工具请求额度
-const HEALTH_RATE_MAX = 180;       // /health 每 IP 每分钟上限（RTT 轮询约 30 次/分）
+const HEALTH_RATE_MAX = 180;       // /health 每 IP 每分钟上限（RTT 轮询约 12 次/分，5s 间隔）
 const largeDlRateLimit = new Map(); // 大响应下载（缓冲膨胀/长时测速）独立配额，防放大
 const LARGE_DL_MAX = 30;            // 每 IP 每分钟大响应次数上限（单次最大 64MB）
 const cpuRateLimit = new Map();
@@ -304,43 +304,14 @@ function handleOptions(request) {
   });
 }
 
-// ==================== IP 欺诈评分函数 ====================
-// 数据源: proxycheck.io（HTTPS）。原先使用明文 HTTP 的 ip-api.com，导致客户端 IP 被明文传输，已修复。
-// 说明: 依据 proxy/vpn/tor/hosting 标记派生风险分（0-100）；免费额度有限，可选配置 PROXYCHECK_KEY 提升配额。
+// ==================== IP 风险评分函数（已停用外部调用，零出站） ====================
+// 说明: 原先调用 proxycheck.io 判断 proxy/vpn/tor/hosting，每次页面加载都会产生一次 Worker 出站请求。
+//       为「以用户网络为主、尽量不用 Worker 的网络和请求」，改为不再调用任何外部服务（零出站）。
+//       代价: /api/ip-fraud 返回 503，前端据此不显示 proxy/vpn/tor 判定；地理位置信息不受影响，
+//       仍由 request.cf 提供。如需恢复，还原本函数并配置 PROXYCHECK_KEY 即可。
 async function getIpFraudScore(ip) {
-  if (!ip || ip === 'unknown') return null;
-  try {
-    const key = (typeof PROXYCHECK_KEY !== 'undefined' && PROXYCHECK_KEY) ? '&key=' + encodeURIComponent(PROXYCHECK_KEY) : '';
-    const url = `https://proxycheck.io/v2/${encodeURIComponent(ip)}?vpn=1&asn=1${key}`;
-    const resp = await fetch(url, { signal: AbortSignal.timeout(4000) });
-    if (!resp.ok) return null;
-    const data = await resp.json();
-    if (!data || data.status !== 'ok') return null;
-    const info = data[ip] || Object.values(data).find(v => v && typeof v === 'object') || null;
-    if (!info) return null;
-    const type = String(info.type || '').toLowerCase();
-    const proxyFlag = String(info.proxy || '').toLowerCase() === 'yes';
-    const isTor = type.includes('tor');
-    const isVpn = type.includes('vpn');
-    const isHosting = type.includes('hosting') || type.includes('ddos') || type.includes('compromised');
-    const isProxy = proxyFlag || isTor || isVpn;
-    let score = 0;
-    if (isTor) score += 90;
-    else if (isVpn) score += 70;
-    else if (proxyFlag) score += 60;
-    if (isHosting) score += 30;
-    score = Math.min(score, 100);
-    return {
-      score,
-      isProxy,
-      isVpn,
-      isTor,
-      isHosting,
-      riskLevel: score >= 80 ? 'high' : (score >= 50 ? 'medium' : 'low')
-    };
-  } catch (e) {
-    return null;
-  }
+  // 外部风险检测已停用（省 Worker 出站请求）
+  return null;
 }
 
 // 允许计入用量统计的端点白名单（避免任意路径撑爆 KV）
@@ -525,7 +496,7 @@ async function handleMonitorCheck() {
 }
 
 // ==================== 前端静态资源（外置 /app.css 与 /app.js，可长缓存） ====================
-const ASSET_VER = '4.6.0';
+const ASSET_VER = '4.6.2';
 const UNLIMITED_PATHS = new Set(['/app.js', '/app.css', '/sw.js', '/manifest.webmanifest', '/icon.svg', '/icon-192.png', '/icon-512.png']);
 
 const APP_CSS = `
@@ -1566,7 +1537,7 @@ const APP_JS = `
                     reachLikelyBlocked: 'Likely blocked for you',
                     reachEdgeBlocked: 'Unreachable from edge',
                     reachFailed: 'Probe failed',
-                    reachNote: 'Compares reachability from the Cloudflare edge and from your browser. Edge OK plus browser fail usually means local blocking.',
+                    reachNote: 'Probes target sites directly from your browser (no Cloudflare edge request), reflecting your local network reachability.',
                     auditScore: 'Security Score',
                     auditChecks: 'Header Checks',
                     auditIssues: 'Issues',
@@ -1879,7 +1850,7 @@ const APP_JS = `
                     reachLikelyBlocked: '疑似被阻断',
                     reachEdgeBlocked: '边缘侧不可达',
                     reachFailed: '探测失败',
-                    reachNote: '同时从 Cloudflare 边缘与你的浏览器探测目标站点；边缘可达而浏览器不可达，通常说明本地网络存在阻断。',
+                    reachNote: '直接从你的浏览器探测目标站点（不经 Cloudflare 边缘），反映你本地网络的可达性。',
                     auditScore: '安全评分',
                     auditChecks: '响应头检查',
                     auditIssues: '问题',
@@ -2192,7 +2163,7 @@ const APP_JS = `
                     reachLikelyBlocked: '疑似被阻斷',
                     reachEdgeBlocked: '邊緣側不可達',
                     reachFailed: '探測失敗',
-                    reachNote: '同時從 Cloudflare 邊緣與你的瀏覽器探測目標站點；邊緣可達而瀏覽器不可達，通常說明本地網路存在阻斷。',
+                    reachNote: '直接從你的瀏覽器探測目標站點（不經 Cloudflare 邊緣），反映你本地網路的可達性。',
                     auditScore: '安全評分',
                     auditChecks: '回應標頭檢查',
                     auditIssues: '問題',
@@ -2674,7 +2645,7 @@ const APP_JS = `
                         { method: 'HEAD', cache: 'no-store' }, 2000);
                     if (rttRes && rttRes.status === 429) {
                         // 健康检查命中独立限流：跳过本次采样，不计丢包
-                        setTimeout(testRtt, 2000);
+                        setTimeout(testRtt, 5000);
                         return;
                     }
                     const diff = Math.round(performance.now() - start);
@@ -2709,7 +2680,7 @@ const APP_JS = `
                     if (elements.rttNum) elements.rttNum.textContent = 'ERR';
                     updateQuality(999);
                 }
-                setTimeout(testRtt, 2000);
+                setTimeout(testRtt, 5000);
             }
 
             // ==================== HTTP/2 检测 ====================
@@ -3617,7 +3588,19 @@ const APP_JS = `
             async function runReachCheck() {
                 const t = i18n[currentLang];
                 showResult(null, '<div class="tool-loading"><span class="loading"></span> ' + escapeHTML(t.running) + '</div>');
-                const edgeP = fetch('/api/reach-check', { cache: 'no-store' }).then(r => r.json()).catch(() => null);
+                // 纯浏览器侧探测：以用户网络为主，Worker 零出站请求
+                const REACH_TARGETS = [
+                    { id: 'baidu', label: '百度', url: 'https://www.baidu.com/favicon.ico' },
+                    { id: 'qq', label: '腾讯', url: 'https://www.qq.com/favicon.ico' },
+                    { id: 'taobao', label: '淘宝', url: 'https://www.taobao.com/favicon.ico' },
+                    { id: 'bilibili', label: '哔哩哔哩', url: 'https://www.bilibili.com/favicon.ico' },
+                    { id: 'github', label: 'GitHub', url: 'https://github.com/favicon.ico' },
+                    { id: 'cloudflare', label: 'Cloudflare', url: 'https://www.cloudflare.com/favicon.ico' },
+                    { id: 'google', label: 'Google', url: 'https://www.google.com/favicon.ico' },
+                    { id: 'youtube', label: 'YouTube', url: 'https://www.youtube.com/favicon.ico' },
+                    { id: 'x', label: 'X (Twitter)', url: 'https://abs.twimg.com/favicon.ico' },
+                    { id: 'duckduckgo', label: 'DuckDuckGo', url: 'https://duckduckgo.com/favicon.ico' }
+                ];
                 const probe = async (url) => {
                     const t0 = performance.now();
                     try {
@@ -3627,31 +3610,24 @@ const APP_JS = `
                         return { ok: false, time: Math.round(performance.now() - t0) };
                     }
                 };
-                const edgeData = await edgeP;
-                if (!edgeData || !edgeData.targets) {
-                    showResult(null, '<div class="no-data"><i class="fas fa-exclamation-circle"></i> ' + escapeHTML(t.reachFailed) + '</div>', true);
-                    return;
-                }
-                const browser = await Promise.all(edgeData.targets.map(async (tg) => {
+                const results = await Promise.all(REACH_TARGETS.map(async (tg) => {
                     const r = await probe(tg.url);
-                    return { id: tg.id, ok: r.ok, time: r.time };
+                    return { id: tg.id, label: tg.label, ok: r.ok, time: r.time };
                 }));
-                renderReachCheck(edgeData, browser);
+                renderReachCheck(results);
             }
 
-            function renderReachCheck(edgeData, browser) {
+            function renderReachCheck(results) {
                 const t = i18n[currentLang];
-                const bMap = {};
-                (browser || []).forEach(b => { bMap[b.id] = b; });
-                const rows = (edgeData.edge || []).map(e => {
-                    const b = bMap[e.id] || { ok: false, time: 0 };
-                    const verdict = (e.ok && b.ok) ? t.reachOk : (e.ok && !b.ok) ? t.reachLikelyBlocked : (!e.ok && b.ok) ? t.reachEdgeBlocked : t.reachBlocked;
-                    const bad = !(e.ok && b.ok);
-                    return '<div class="result-row' + (bad ? ' is-warn' : '') + '"><span class="rr-name">' + escapeHTML(e.label) + '</span>' +
-                        '<span class="rr-val">' + escapeHTML(verdict) + ' · ' + escapeHTML(t.reachEdge) + ' ' + (e.ok ? '✓' : '×') + ' ' + escapeHTML(String(e.time || 0)) + 'ms' +
-                        ' · ' + escapeHTML(t.reachBrowser) + ' ' + (b.ok ? '✓' : '×') + ' ' + escapeHTML(String(b.time || 0)) + 'ms</span></div>';
+                const okCount = results.filter(r => r.ok).length;
+                const rows = results.map(r => {
+                    const bad = !r.ok;
+                    return '<div class="result-row' + (bad ? ' is-warn' : '') + '"><span class="rr-name">' + escapeHTML(r.label) + '</span>' +
+                        '<span class="rr-val">' + (r.ok ? '✅ ' + escapeHTML(t.reachOk) : '❌ ' + escapeHTML(t.reachBlocked)) + ' · ' + escapeHTML(String(r.time || 0)) + 'ms</span></div>';
                 }).join('');
-                showResult(null, resultTitle(t.reachTitle) + '<div class="result-rows">' + rows + '</div>' +
+                showResult(null, resultTitle(t.reachTitle) +
+                    '<div style="margin:6px 0 10px;font-size:12px;color:var(--text-secondary)">' + escapeHTML(t.reachBrowser) + ': ' + okCount + '/' + results.length + '</div>' +
+                    '<div class="result-rows">' + rows + '</div>' +
                     '<div style="margin-top:10px;font-size:11px;color:var(--text-tertiary)">' + escapeHTML(t.reachNote) + '</div>');
             }
 
@@ -4756,10 +4732,12 @@ async function handleRequest(event) {
   
   // ==================== 健康检查端点 ====================
   if (url.pathname === '/health') {
+    // 同源校验：/health 被 RTT 轮询高频调用且此前不设防，外部爬虫/扫描器可无限打——现拦掉非浏览器流量
+    if (!isSameOriginNavigation(request)) return forbiddenResponse(request);
     return new Response(JSON.stringify({
       status: 'ok',
       timestamp: Date.now(),
-      version: '4.6.0',
+      version: '4.6.2',
       storage: { usageBackend: USAGE_BACKEND, speedHistoryKv: SPEED_HISTORY_KV_ENABLED },
       note: 'Cloudflare Workers are stateless; per-request context only'
     }), {
@@ -5204,49 +5182,9 @@ async function handleRequest(event) {
   }
 
   // ==================== 网络可达性探测端点（边缘侧） ====================
-  if (url.pathname === '/api/reach-check') {
-    if (!isSameOriginNavigation(request)) return forbiddenResponse(request);
-    const REACH_TARGETS = [
-      { id: 'baidu', label: '百度', url: 'https://www.baidu.com/favicon.ico' },
-      { id: 'qq', label: '腾讯', url: 'https://www.qq.com/favicon.ico' },
-      { id: 'taobao', label: '淘宝', url: 'https://www.taobao.com/favicon.ico' },
-      { id: 'bilibili', label: '哔哩哔哩', url: 'https://www.bilibili.com/favicon.ico' },
-      { id: 'github', label: 'GitHub', url: 'https://github.com/favicon.ico' },
-      { id: 'cloudflare', label: 'Cloudflare', url: 'https://www.cloudflare.com/favicon.ico' },
-      { id: 'google', label: 'Google', url: 'https://www.google.com/favicon.ico' },
-      { id: 'youtube', label: 'YouTube', url: 'https://www.youtube.com/favicon.ico' },
-      { id: 'x', label: 'X (Twitter)', url: 'https://abs.twimg.com/favicon.ico' },
-      { id: 'duckduckgo', label: 'DuckDuckGo', url: 'https://duckduckgo.com/favicon.ico' }
-    ];
-    const reachKey = 'reach:v1';
-    const nowReach = Date.now();
-    const reachHit = dnsLookupCache.get(reachKey);
-    if (reachHit && nowReach - reachHit.at < 60000) {
-      return new Response(JSON.stringify(reachHit.data), {
-        headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...corsHeaders(request), ...SECURITY_HEADERS }
-      });
-    }
-    const edge = await Promise.all(REACH_TARGETS.map(async (tg) => {
-      const t0 = Date.now();
-      const out = { id: tg.id, label: tg.label, ok: false, status: null, time: 0 };
-      try {
-        const r = await fetch(tg.url, { method: 'GET', redirect: 'follow', headers: { 'user-agent': 'NetSight-Pro/1.0' }, signal: AbortSignal.timeout(6000) });
-        out.status = r.status;
-        out.ok = r.status > 0 && r.status < 500;
-        try { if (r.body) await r.body.cancel(); } catch (e) {}
-      } catch (e) {
-        out.status = null;
-      }
-      out.time = Date.now() - t0;
-      return out;
-    }));
-    const reachPayload = { targets: REACH_TARGETS.map(t => ({ id: t.id, label: t.label, url: t.url })), edge: edge, checkedAt: nowReach };
-    if (dnsLookupCache.size > 300) dnsLookupCache.clear();
-    dnsLookupCache.set(reachKey, { at: nowReach, data: reachPayload });
-    return new Response(JSON.stringify(reachPayload), {
-      headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...corsHeaders(request), ...SECURITY_HEADERS }
-    });
-  }
+  // ==================== 网络可达性（已改为纯浏览器侧探测） ====================
+  // 原 /api/reach-check 边缘侧探测已移除：为「以用户网络为主、少用 Worker 网络」，
+  // 可达性检测现在完全由浏览器对目标站点发起 no-cors 探测，Worker 不再产生任何出站请求。
 
   // ==================== 域名安全体检端点（MX/SPF/DMARC/DKIM + 声誉） ====================
   if (url.pathname === '/api/domain-check') {
