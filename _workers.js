@@ -1,7 +1,7 @@
 // ============================================================
 // NetSight Pro - Apple 极简网络诊断工具
 // Cloudflare Worker 完整优化版 | 全界面国际化 + 深色/浅色切换
-// 版本: 4.6.2 | 新增：DNS 多解析器对比 · 网络可达性检测 · 安全响应头评分；/health 同源校验 · RTT 5s · 可达性/IP 风险去 Worker 出站
+// 版本: 4.7.1 | UI 重构：工具按 6 类分组 + 紧凑卡片(tooltip 展示说明) · 结果弹层改宽屏两栏(左说明/参数/操作，右结果) · 按钮统一三级(主/次/幽灵) · 安全卡分「传输与协议」「来源与指纹」
 // ============================================================
 
 // ==================== 常量定义 ====================
@@ -40,6 +40,14 @@ function isAllowedOrigin(request, origin) {
   }
 }
 
+function resolveDefaultLang(acceptLanguage) {
+  const al = acceptLanguage || '';
+  if (al.match(/zh-(CN|SG|MY)/i)) return 'zh-CN';
+  if (al.match(/zh/i)) return 'zh-TW';
+  if (al.match(/en/i)) return 'en';
+  return 'en';
+}
+
 function corsHeaders(request, methods = 'GET, HEAD, OPTIONS') {
   const origin = request.headers.get('Origin');
   const headers = {
@@ -52,22 +60,22 @@ function corsHeaders(request, methods = 'GET, HEAD, OPTIONS') {
   return headers;
 }
 
+// 同源校验升级：Origin/Referer 均可被 curl 等脚本随意伪造，不再作为放行依据。
+// 现在要求请求携带主页面颁发的会话令牌（HttpOnly Cookie 或 x-ns-token 头），
+// 未访问过页面的爬虫/扫描器一律 403；显式配置的跨域白名单（ALLOWED_ORIGINS）除外。
 function isSameOriginNavigation(request) {
   const origin = request.headers.get('Origin');
-  if (origin) return isAllowedOrigin(request, origin);
-  const referer = request.headers.get('Referer');
-  if (!referer) return false; // fail-closed：无 Origin 且无 Referer 时拒绝，防止非浏览器客户端绕过同源校验
-  try {
-    return new URL(referer).origin === new URL(request.url).origin;
-  } catch (e) {
-    return false;
+  if (origin) {
+    const allowed = getConfiguredOrigins();
+    if (allowed.includes('*') || allowed.includes(origin)) return true;
   }
+  return isValidPageToken(getRequestToken(request));
 }
 
 function forbiddenResponse(request) {
   return new Response(JSON.stringify({
     error: 'forbidden',
-    message: 'Origin is not allowed'
+    message: 'Invalid session token or origin not allowed'
   }), {
     status: 403,
     headers: { 'content-type': 'application/json', ...corsHeaders(request), ...SECURITY_HEADERS }
@@ -84,6 +92,24 @@ const cpuRateLimit = new Map();
 // 测速历史写入节流：同一客户端最小落盘间隔（限制 KV 写入）
 const SPEED_LOG_MIN_INTERVAL_MS = 15000;
 const speedLogThrottle = new Map();
+// ===== KV 防爆：测速历史改为固定单键环形缓冲（speed:history） =====
+// 旧实现每条记录一个键，且每次写入后 list 全部键并逐个 delete（list/delete 均按量计费），
+// 多用户并发或 isolate 轮换时会放大为 O(键数) 的读写/删除费用，极易打爆 KV 配额。
+// 现改为单键 JSON 数组：每次落盘 = 1 get + 1 put，全程无 list、无 delete；
+// 并发写「后写覆盖先写」对诊断历史可接受。写入受三重限制：按 IP 15s 节流 +
+// 单 isolate 全局 30 次/分上限 + 功能默认关闭（SPEED_HISTORY_KV_ENABLED=false）。
+const SPEED_HISTORY_MAX = 10;               // 单键最多保留条数
+const SPEED_HISTORY_GLOBAL_MAX_PER_MIN = 30; // 单 isolate 每分钟全局写上限（防多 IP 并发写爆）
+const speedHistoryGlobalThrottle = { count: 0, resetAt: 0 };
+function isSpeedLogGloballyAllowed() {
+  const now = Date.now();
+  if (now >= speedHistoryGlobalThrottle.resetAt) {
+    speedHistoryGlobalThrottle.count = 0;
+    speedHistoryGlobalThrottle.resetAt = now + 60000;
+  }
+  speedHistoryGlobalThrottle.count += 1;
+  return speedHistoryGlobalThrottle.count <= SPEED_HISTORY_GLOBAL_MAX_PER_MIN;
+}
 // DNS 工具箱内存缓存（per-isolate，不占用 KV）
 const DNS_LOOKUP_CACHE_MS = 60000;
 const dnsLookupCache = new Map();
@@ -94,6 +120,47 @@ const ICON_192_B64 = 'iVBORw0KGgoAAAANSUhEUgAAAMAAAADACAYAAABS3GwHAAAAAXNSR0IArs
 const ICON_512_B64 = 'iVBORw0KGgoAAAANSUhEUgAAAgAAAAIACAYAAAD0eNT6AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAABcDSURBVHhe7d29q2VVmsDhiWeYYIYJFAPFQBGKooJuOlAEEQM16aaDAkHEQDFoJhAxkE4Kg6ZpUEwKBNGgmw6qoAI1UAy66aQwUBBmmEAxmGGCGeZ/qOEt3Vi11r23zrnn7L0+3id4Ej/uXedU3bt/a5+93/13f/8P/3gLAMjl78p/AADMTwAAQEICAAASEgAAkJAAAICEBAAAJCQAACAhAQAACQkAAEhIAABAQgIAABISAACQkAAAgIQEAAAkJAAAICEBAAAJCQAASEgAAEBCAgAAEhIAAJCQAACAhAQAACQkAAAgIQEAAAkJAABISAAAQEICAAASEgAAkJAAAICEBAAAJCQAACAhAQAACQkAAEhIAABAQgIAABISAACQkAAAgIQEAAAkJAAAICEBAAAJCQAASEgAAEBCAgAAEhIAAJCQAACAhAQAACQkAAAgIQEAAAkJAABISAAAQEICAAASEgAAkJAAAICEBAAAJCQAACAhAQAACQkAAEhIAABAQgIAABISAACQkAAAgIQEAAAkJAAAICEBAAAJCQAASEgAAEBCAgAAEhIAAJCQAACAhAQAACQkAAAgIQEAAAkJAABISAAAQEICAAASEgAAkJAAAICEBAAAJCQAACAhAQAACQkAAEhIAABAQgIAABISAACQkAAAgIQEAAAkJAAAICEBAAAJCQAASEgAAEBCAgAAEhIAAJCQAACAhAQAACQkAAAgIQEAAAkJAABISAAAQEICAAASEgAAkJAAAICEBAAAJCQAACAhAQAACQkAAEhIAABAQgIAABISAACQkAAAgIQEAAAkJAAAICEBAAAJCQAASEgAAEBCAgAAEhIAAJCQAACAhAQAACQkAAAgIQEAAAkJAABISAAAQEICAAASEgAAkJAAAICEBAAAJCQAACAhAQAACQkAAEhIAABAQgIAABISAACQkAAAgIQEAAAkJAAAICEBAAAJCQAASEgAAEBCAgAAEhIAAJCQAACAhAQAACQkAAAgIQEAAAkJAABISAAAQEICAAASEgAAkJAAAICEBAAAJCQAACAhAQAACQkAAEhIAABAQgIAABISAACQkAAAgIQEAAAkJAAAICEBAAAJCQAASEgAAEBCAgAAEhIAAJCQAACAhAQAACQkAAAgIQEAAAkJAABISAAAQEICAAASEgAAkJAAAICEBAAAJCQAACAhAQAACQkAAEhIAABAQgIAABISAACQkAAAgIQEAAAkJAAAICEBAAAJCQAASEgAAEBCAgAAEhIAAJCQAACAhAQADOS++x+49eJLL9+6cuXtWx9/8uldrl59/9Yrr75268LFS9X/B1ASADCAp55+5vYB/j//679v/c///t89ffvd97cj4Z/++V+qrwUQBAB07MGHHr712edfVAf4Xf3bv//HrV/+6tfV1wUQANCp2PXHTr48qJ/Htes3bn98UH4PIC8BAB36zW/+tTqIHyquE/CRALAQANCZuMivPHgfS5wJEAFAEADQkUcefexop/1PExcTlt8XyEcAQEfiNH15wF6DCwMBAQCdWONz/9PEnQXl9wdyEQDQgfhcPm7ZKw/Ua/rZz39RrQPIQwBAB7bc/S/++Kc/V+sA8hAA0FiL3f8iLjos1wPkIACgsRa7/0U8O6BcD5CDAICGWu7+Q8wFKNcE5CAAoKGWu/8QDxcyIhhyEgDQSOvd/+Ly5ReqtQHzEwDQSOvd/8JkQMhJAEADvez+Q4weLtcHzE8AQAO97P4X8ejhco3A3AQAbKyn3f/id7//Q7VOYG4CADbW2+4/fPX1N9U6gbkJANhQj7v/xYWLl6r1AvMSALChHnf/i9ffeLNaLzAvAQAb6Xn3HzwiGHIRALCRnnf/iwcferhaNzAnAQAb6H33v3jxpZertQNzEgCwgRF2/+GPf/pztXZgTgIAVjbK7j/Ew4FiveVrAOYjAGBlo+z+F88+93z1GoD5CABY0Ui7/4WHA0EOAgBWNNruP0SwlK8DmI8AgJWMuPtfPP7Ek9XrAeYiAGAlI+7+F2+99dvq9QBzEQCwgpF3/+HmzS+r1wTMRQDACkbe/S8eefSx6nUB8xAAcGSj7/4XETHlawPmIQDgyGbY/YePP/m0em3APAQAHNEsu/8QUwHvu/+B6jUCcxAAcESz7P4XHg4E8xIAcCQz7f4XH3z4UfU6gTkIADiS2Xb/4dvvvvdwIJiUAIAjmHH3v3jq6Weq1wuMTwDAEcy4+1+88+571esFxicA4EAz7/7DV19/U71mYHwCAA408+5/8bOf/6J63cDYBAAcYPbd/8LDgWA+AgAOkGH3Hz77/IvqtQNjEwBwTll2/wsPB4K5CAA4pyy7/8Urr75WvQfAuAQAnEO23X+4dv1G9T4A4xIAcA7Zdv8hHg5kKiDMQwDAnjLu/heXL79QvR/AmAQA7Cnj7n9x9er71fsBjEkAwB4y7/5DPByofE+AMQkA2EPm3f/Cw4FgDgIAdpR997+4cuXt6r0BxiMAYEe97P7javzyn23Jw4FgDgIAdtDT7v/1N968/Vl8+c+3dOHipeo9AsYiAGAHvez+I0IiRj748KPq320pIqR8j4CxCAC4h552/xEisaa4H7/8d1v6+JNPq/cJGIsAgHvobfcfa7rv/geaXwvw4EMPV+8VMA4BAGfocfe/iF14+d9s6cWXXq7eL2AcAgDO0OPuv5e1/fFPf67eL2AcAgBO0fPuPzzy6GPVf7clDweCsQkAOEXrHfbipN3/4i9//Vv132/p2eeer9YEjEEAwAl63/0v3nrrt9V/vyUPB4JxCQA4wQi7//D4E09W/8+WYn3lmoAxCAAojLL7X7Rea0RIuSagfwIACqPs/hfvvPte9f9uKT6GKNcE9E8AwB1G2/2HuBCv/H+3dPPml9WagP4JALjDaLv/EP9d66mAcUtiuS6gbwIAfjTi7n8RQ3nKr7GlfdebUfz9eurpZ1hZ+b5zOgEAPxpx97+Isbzl19mShwPV4uLIeGpjvDetz9BkFO97/Ew7O3U6AQCD7/5DPByo/DpbigNcrKFcV0a//NWvmz+ngbtFiAmBmgCAwXf/i9YHnewPB4oDzGeff1G9L/QhItUdK3cTAKQ3+u5/8fobb1Zfb0uxyyrXlMXPfv6LW199/U31ntCfuF7mvJE9GwFAejPs/sOFi5eqr7mlb7/7/qD1jypuw4zXXr4f9CvO1GT8u1oSAKQ2y+5/Effkl193S9muwo6dvwv8xpT5jNVCAJDaLLv/xZUrb1dfe0u/+/0fqjXNzGf+Y4uPzco/00wEAGnNtvsPsQMvv/aW4nPwck2z6iUeOb84e/PgQw9Xf7ZZCADS6uUX+LF2/4vWn0fHafFyTbOJg4ZT/3PIdtbqTgKAlGbc/S+uXn2/+h5bynCrVRw0ytfNmDLPsBAApDTr7j9cvvxC9X22FJ+Ll2uaid3/fLLOsBAApDPz7j/E62t9gJr5c9U4w1G+XsaW9Y4AAUA6M+/+F9eu36i+35ZeefW1ak0z6CkeOZ5MF6/eSQCQSk+/wNfY/S/iAFx+vy1FgJRrmkEv8chxxRmz8s86AwFAKr38Al9z9x9iLn35PbcUv1DXfH2ttB60xHoyXggoAEgjy+5/0XpITTwVr1zTyOL1lK+Recx83cppBABpZNn9L1pfrBa3I5ZrGtlf/vq36jUyj/LPOwMBQArZdv8hBvKU33tLMZCoXNOoWr+XrMtFgDCxbLv/RetH1M7ycKB4hGz52pjHx598Wv2ZZyAAmF7G3f/inXffq9awpXg4Ubmm0bR+zDLr2/rnshcCgOll3f2H1g8HiqvmyzWNxtjf+cVdM+WfewYCgKll3v2HeP2tHw4UO+hyXaMw9nd+8fFO+eeehQBgapl3/4sYc1quZ0sjP3O99Z0UrC/D0ytPIwCYVvbd/yIedFKuZ0ujXmDV098f1pH1GQALAcC07P5/EBPOWp/GHnHKWi9/f1hHzHVo+XPZAwHAlHravbXc/S9iF16ua0sjPm7V2N95xe+GrBf+3UkAMKVedm+td/+L1u/HaBdaGfs7r5iNMfKFqcckAJiO3X/Nw4H20/o5CqwjzoSN+HHUWgQA02m92130svtftD6l/exzz1dr6pGxv/OJXf/lyy9Uf9bZCQCmYvd/uta3tMVUwnJNPTL2dw5x1in+LOP6k55CvCcCYEePP/Hk7alqcU9z/CKlT63veV/0tvsP8Xe4XOeW4j0p19Sb1h+VLOIjiPLvNruJ39Oht5+/HgmAM8SFQPFI09aT1BhPb7v/ReuzIxEh5Zp60svY38zDadiOADhB1KNnf3NePe7+FxG05Xq3FDu0ck296GXs76iDkxiPALhD/NJu/QuS8fW6+w9xIV653i1FWJdr6kV8vFeut4U481iuDdYgAH4Ut4a49YdD9bz7D7G21rvcHgew9HLxaM+BxHwEwI8//E75cww97/4Xra9y7/E96uXW0Vdefa1aG6xFAHTwC5E59L77X3g4UK2HDcAof3+YR/oA6KX8GV+PO9uTxMVu5dq3FB9B9DSNrZexv6P8/WEeqQMgfhH28Lkf4xtt99b64UA9TWXr4dqfiKL4fVSuDdaUOgB6ueeX8Y22e2t9xXsvz2HvZexv/C4q1wZrSx0ABvxwDKPt/kM8Da18HVuKn70e3rNerv+x+6eFtAEQw37KH0I4j9F2/4t4QEr5WrYUP4PlmrbUy9jf0R6VzDzSBsCVK29XP4iwrxF3/4vWPwOtT3v38hGgsb+0kjYArl2/Uf0gwr5G3f2H1mfB4gxEuaatGPsLiQOgh/t+GdvIu/9F6+tgWu1+W18EuTD2l5bSBoDb/zjUyLv/RetnX7R4OJCxv/CDtAHQ+gIoxjbD7j/E/fjla9tS3INfrmltvQz/MvaX1tIGQOtBKIxtht1/6OHhQFvfAtfDx3+zBCRjSxsAMYik/KGEXcz2y7v1BbFb7oSN/YWfpA2AXi4CYjyz/fKOA3D5GrcUAVKuaS3G/sJP0gZA60lojGm23X9oPRAnDohbvKfG/sLd0gZAuHnzy+qHE84y2+5/0XpnvMXtcMb+wt1SB0Dr56IzlrhzZIudagtxO175ercUtyOWazqm1mc5Fsb+0pPUARB6uCKYMbSeXb+m1qfHYyBRuaZjMvYXaukDoPU4VMaQ4XPb1rMx1gosY3/hZOkDIPQyGIQ+xbUis576v9M7775XvfYtxcOJyjUdQy93/GxxnQPsQwD8qPUvP/oUu+Isp21bnw2L0CrXdChjf+F0AuAOvewU6ENcGZ/piu04WLZ+OFBcrFeu6xC9nN3bctgR7EoAFOI0XQ87BtqKq9IznPYvtZ6QGRFerukQPVzkO+PsCOYgAE4QP6xxW1Tr3RDbiwPg4088Wf2dyKL1rbHHvFDO2F84mwA4Q4RAPC0tdoNiYE7xuXMcdOICtGOffh7Rffc/0PyK+VhDua7zaD3cKBj7S88EwJ7il1NcLMXYHOxP1/pJmXEWolzTvlrPNVhkuH2UcQkA4C6tL5yLj2HKNe3L2F+4NwEA3KX12NxDHw7Uev0LY3/pnQAAKq0flPXsc89Xa9qVsb+wGwEAVFo/HCgGc5Vr2oWxv7A7AQBU4lbI8qC2pZjAWK5pF62vX1gY+8sIBABwotYDsfadx2DsL+xHAAAnivkX5cFtS/ExRLmms8S43fJrtGDsL6MQAMCJ4kK88uC2pX130sb+wn4EAHCiOJC1vqBu14FNxv7C/gQAcKrWA3V2PZ3eenphMPaX0QgA4FQjPBzI2F84HwEAnCp2tOWBbkuxq77Xw4Fan6VY2P0zGgEAnKn16fV4Ime5pkXrQFkY+8uIBABwptffeLM64G0pbkcs17Qw9hfOTwAAZ7pw8VJ1wNvSt999f+Ktdcb+wmEEAHBPMZq3PPBt6amnn6nWZOwvHEYAAPd05crb1YFvS+UV9sb+wuEEAHBPsQMvD35bKh8OZOwvHE4AADuJz+LLA+CW4lqEZS3G/sLhBACwk14eDmTsLxyHAAB2EvfjlwfBLX32+Re319F6LkEw9pcZCABgJz08HKj1EwoX5UWJMCIBAOzs2vUb1cFwS62vQ1jY/TMDAQDsrJer71sy9pdZCABgZ488+lh1QMzG2F9mIQCAvcTFeOVBMQtjf5mJAAD2ErfjlQfGLIz9ZSYCANhLnAIvD4wZGPvLbAQAsLfWDwdqwdhfZiMAgL298+571QFyZsb+MiMBAOyt9cOBtmbsLzMSAMDeYjfcy1CetRn7y6wEAHAuH3z4UXWwnJGxv8xKAADn8uJLL1cHyxnZ/TMrAQCcy333P9D84UBrM/aXmQkA4Nx6eDTvmoz9ZWYCADi3uDq+PGjOwthfZicAgHOb+eFAxv4yOwEAHOTmzS+rg+fojP0lAwEAHGTGhwMZ+0sGAgA4yONPPFkdQEdm7C9ZCADgYHHQLA+kozL2lywEAHCwq1ffrw6kIzL2l0wEAHCwZ597vjqYjsjYXzIRAMDB4jPzGaYC2v2TiQAAjiLG5pYH1JEY+0s2AgA4itEfDmTsL9kIAOAo4vR5eVAdhbG/ZCQAgKMZ9eFAxv6SkQAAjub1N96sDq69M/aXrAQAcDQXLl6qDrC9M/aXrAQAcFRfff1NdZDtlbG/ZCYAgKO6cuXt6kDbK2N/yUwAAEf11NPPVAfaHhn7S3YCADi6b7/7vjrg9sbYX7ITAMDRjfBwILt/shMAwNFdvvxCdcDtibG/IACAFfT+cCBjf0EAACu5dv1GdeDtgbG/8AMBAKwiBuyUB98eGPsLPxAAwCoeefSx6uDbmrG/8BMBAKzms8+/qA7CLRn7Cz8RAMBq3nrrt9VBuBVjf+FuAgBYTVxtXx6IWzH2F+4mAIBV9fBwIGN/oSYAgFW98+571QF5a8b+Qk0AAKvq4eFAdv9QEwDAquLCu5YPBzL2F04mAIDVffDhR9WBeSvG/sLJBACwuhdferk6MG/B2F84nQAAVnff/Q80eTiQsb9wOgEAbCKuxC8P0Gsy9hfOJgCATcSV+FueBbD7h7MJAGAzW50FiIsOy+8N3E0AAJuJswBr3xIYM//d9w/3JgCATcVteWtGQNxxUH5PoCYAgM1FBKxxPYAH/sDuBADQxLPPPX+0CIgzCvH1yu8BnE4AAM3EZ/WHTgm8efPLWxcuXqq+NnA2AQA0Fw8Mivv2y4P7Wa5dv3Hr8uUXqq8F7EYAAN2IEHj9jTdvP8Anrua/84AfgRCjfePxwo88+lj1/wL7EQAAkJAAAICEBAAAJCQAACAhAQAACQkAAEhIAABAQgIAABISAACQkAAAgIQEAAAkJAAAICEBAAAJCQAASEgAAEBCAgAAEhIAAJCQAACAhAQAACQkAAAgIQEAAAkJAABISAAAQEICAAASEgAAkJAAAICEBAAAJCQAACAhAQAACQkAAEhIAABAQgIAABISAACQkAAAgIQEAAAkJAAAICEBAAAJCQAASEgAAEBCAgAAEhIAAJCQAACAhAQAACQkAAAgIQEAAAkJAABISAAAQEICAAASEgAAkJAAAICEBAAAJCQAACAhAQAACQkAAEhIAABAQgIAABISAACQkAAAgIQEAAAkJAAAICEBAAAJCQAASEgAAEBCAgAAEhIAAJCQAACAhAQAACQkAAAgIQEAAAkJAABISAAAQEICAAASEgAAkJAAAICEBAAAJCQAACAhAQAACQkAAEhIAABAQgIAABISAACQkAAAgIQEAAAkJAAAICEBAAAJCQAASEgAAEBCAgAAEhIAAJCQAACAhAQAACQkAAAgIQEAAAkJAABISAAAQEICAAASEgAAkJAAAICEBAAAJCQAACAhAQAACQkAAEhIAABAQgIAABISAACQkAAAgIQEAAAk9P9evaHuMZSyXwAAAABJRU5ErkJggg==';
 let _icon192Bytes = null;
 let _icon512Bytes = null;
+
+// ==================== 页面会话令牌（防伪造 Origin/Referer 绕过同源校验） ====================
+// Origin/Referer 都来自客户端、可任意伪造；改为「页面颁发令牌」机制：
+// 访问主页面时签发随机令牌（HttpOnly Cookie + 注入页面由 JS 经 x-ns-token 头携带），
+// 之后 /health、/speedtest、/api/* 必须持有有效令牌。令牌存 per-isolate 内存（与限流
+// Map 一致），TTL 1 小时；isolate 重建导致令牌失效时前端检测 403 自动刷新页面重新领取。
+const pageTokens = new Map();
+const PAGE_TOKEN_TTL_MS = 3600000;
+const PAGE_TOKEN_MAX = 8000;
+
+function issuePageToken() {
+  const tok = crypto.randomUUID() + '.' + Date.now().toString(36) + '.' + Math.random().toString(36).slice(2, 10);
+  pageTokens.set(tok, Date.now() + PAGE_TOKEN_TTL_MS);
+  if (pageTokens.size > PAGE_TOKEN_MAX) {
+    const now = Date.now();
+    for (const [t, exp] of pageTokens) {
+      if (now > exp) pageTokens.delete(t);
+    }
+    if (pageTokens.size > PAGE_TOKEN_MAX) pageTokens.clear();
+  }
+  return tok;
+}
+
+function getRequestToken(request) {
+  const header = request.headers.get('x-ns-token');
+  if (header) return String(header).slice(0, 160);
+  const cookie = request.headers.get('cookie') || '';
+  const m = cookie.match(/(?:^|;\s*)__ns_t=([^;]+)/);
+  return m ? m[1].slice(0, 160) : '';
+}
+
+function isValidPageToken(token) {
+  if (!token) return false;
+  const exp = pageTokens.get(token);
+  if (!exp) return false;
+  if (Date.now() > exp) {
+    pageTokens.delete(token);
+    return false;
+  }
+  return true;
+}
 
 function cleanupRateLimit() {
   const now = Date.now();
@@ -174,15 +241,52 @@ function isIpLiteral(host) {
   return h.includes(':');
 }
 
+// 将 IPv6 文本解析为 8 组 16 位数值（含 :: 压缩与 IPv4 尾段）；非法返回 null
+function parseIPv6ToGroups(input) {
+  const h = String(input || '').toLowerCase();
+  if (!h.includes(':')) return null;
+  let addr = h;
+  let ipv4Groups = null;
+  const m4 = addr.match(/:(\d{1,3}(?:\.\d{1,3}){3})$/);
+  if (m4) {
+    const p = m4[1].split('.').map(Number);
+    if (p.length !== 4 || p.some(n => !Number.isInteger(n) || n < 0 || n > 255)) return null;
+    ipv4Groups = [(p[0] << 8) | p[1], (p[2] << 8) | p[3]];
+    addr = addr.slice(0, m4.index + 1);
+  }
+  const halves = addr.split('::');
+  if (halves.length > 2) return null;
+  const parseHalf = (s) => s ? s.split(':').map(g => parseInt(g || '0', 16)) : [];
+  const head = parseHalf(halves[0]);
+  const tail = halves.length === 2 ? parseHalf(halves[1]) : [];
+  if ([...head, ...tail].some(n => !Number.isFinite(n) || n < 0 || n > 0xffff)) return null;
+  const used = head.length + tail.length + (ipv4Groups ? 2 : 0);
+  if (used > 8 || (halves.length === 1 && used !== 8)) return null;
+  const zeros = 8 - used;
+  return head.concat(new Array(zeros).fill(0), tail, ipv4Groups || []);
+}
+
 function isPrivateIp(ip) {
   const h = String(ip || '').replace(/^\[|\]$/g, '').toLowerCase();
   if (!h) return true;
   if (h.includes(':')) {
-    if (h === '::1' || h === '::') return true;
-    if (h.startsWith('fe80') || h.startsWith('fc') || h.startsWith('fd') || h.startsWith('ff')) return true;
-    if (h.startsWith('2002:') || h.startsWith('2001:0')) return true;
-    const m = h.match(/^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/);
-    if (m) return isPrivateIp(m[1]);
+    const g = parseIPv6ToGroups(h);
+    if (!g) return true; // 无法解析视为不安全（fail-closed）
+    if (g.every(x => x === 0)) return true; // ::
+    if (g[7] === 1 && g.slice(0, 7).every(x => x === 0)) return true; // ::1
+    if ((g[0] & 0xfe00) === 0xfc00) return true; // 唯一本地 fc00::/7
+    if ((g[0] & 0xffc0) === 0xfe80) return true; // 链路本地 fe80::/10
+    if ((g[0] & 0xff00) === 0xff00) return true; // 组播 ff00::/8
+    if (g[0] === 0x2002) return true; // 6to4 2002::/16
+    if (g[0] === 0x2001 && g[1] === 0) return true; // Teredo 2001::/32
+    if (g[0] === 0x2001 && g[1] === 0x0db8) return true; // 文档前缀 2001:db8::/32（非公网）
+    // IPv4 映射 ::ffff:0:0/96 与 NAT64 64:ff9b::/96：末 32 位还原为 IPv4 再判断
+    const isMapped = g[0] === 0 && g[1] === 0 && g[2] === 0 && g[3] === 0 && g[4] === 0 && g[5] === 0xffff;
+    const isNat64 = g[0] === 0x0064 && g[1] === 0xff9b && g[2] === 0 && g[3] === 0 && g[4] === 0 && g[5] === 0;
+    if (isMapped || isNat64) {
+      const v4 = ((g[6] >> 8) & 0xff) + '.' + (g[6] & 0xff) + '.' + ((g[7] >> 8) & 0xff) + '.' + (g[7] & 0xff);
+      return isPrivateIp(v4);
+    }
     return false;
   }
   const p = h.split('.').map(Number);
@@ -207,14 +311,28 @@ function isPrivateHost(host) {
   return !h.includes('.');
 }
 
-// DNS 解析缓存（per-isolate，仅用于站点体检的 SSRF 校验）
+// 出站目标端口白名单：只放行 HTTP/HTTPS 常用端口（80/443）。
+// URL 解析会自动归一化默认端口（http 的 :80、https 的 :443 会变成空串），因此集合保留空串。
+// 目的：不给 Worker 留下用任意端口探测第三方服务（SSRF 端口扫描）的能力。
+const ALLOWED_TARGET_PORTS = new Set(['', '80', '443']);
+function isAllowedTargetPort(u) {
+  try {
+    return ALLOWED_TARGET_PORTS.has(String((u && u.port) || ''));
+  } catch (e) {
+    return false;
+  }
+}
+
+// DNS 解析缓存（per-isolate，仅用于站点体检的 SSRF 校验；带 TTL，防止域名改解析到内网后仍被永久放行）
+const DNS_CHECK_CACHE_MS = 60000;
 const dnsCheckCache = new Map();
 
 // 通过 DoH(cloudflare-dns.com) 解析域名，确认所有解析结果均为公网地址；解析不到结果时按不安全处理
 async function resolvesToPublicOnly(hostname) {
   const h = String(hostname || '').toLowerCase().replace(/^\[|\]$/g, '');
   if (isIpLiteral(h)) return !isPrivateIp(h);
-  if (dnsCheckCache.has(h)) return dnsCheckCache.get(h);
+  const cached = dnsCheckCache.get(h);
+  if (cached && Date.now() - cached.at < DNS_CHECK_CACHE_MS) return cached.value;
   const ips = [];
   for (const type of ['A', 'AAAA']) {
     try {
@@ -230,8 +348,57 @@ async function resolvesToPublicOnly(hostname) {
     } catch (e) {}
   }
   const safe = ips.length > 0 && ips.every(ip => !isPrivateIp(ip));
-  if (dnsCheckCache.size < 500) dnsCheckCache.set(h, safe);
+  if (dnsCheckCache.size < 500) dnsCheckCache.set(h, { at: Date.now(), value: safe });
   return safe;
+}
+
+// ==================== 证书到期查询（CT 日志 / crt.sh；可选，仅在 ?cert=1 时产生 1 次出站） ====================
+// Workers fetch 不暴露对端证书、浏览器也无法跨域读取证书链，故用 CT 日志间接获取签发与到期时间。
+const CERT_CACHE_MS = 1800000; // 30 分钟内存缓存，避免重复查询 crt.sh
+const certCache = new Map();
+
+async function fetchCertInfo(domain) {
+  const d = String(domain || '').toLowerCase();
+  if (!d) return null;
+  const hit = certCache.get(d);
+  if (hit && Date.now() - hit.at < CERT_CACHE_MS) return hit.value;
+  let info = null;
+  try {
+    const r = await fetch('https://crt.sh/?q=' + encodeURIComponent(d) + '&output=json&exclude=expired&deduplicate=Y', {
+      headers: { accept: 'application/json' },
+      signal: AbortSignal.timeout(8000)
+    });
+    if (r.ok) {
+      const txt = await r.text();
+      if (txt.length > 1200000) throw new Error('ct response too large'); // 大域名会返回巨大 JSON：直接放弃，防 CPU/内存放大
+      const arr = JSON.parse(txt);
+      if (Array.isArray(arr) && arr.length) {
+        let best = null;
+        for (const c of arr) {
+          if (!c || !c.not_after) continue;
+          const s0 = String(c.not_after).trim();
+          const iso = /[zZ]$|[+-]\d{2}:?\d{2}$/.test(s0) ? s0 : (s0.replace(' ', 'T') + 'Z');
+          const ts = Date.parse(iso);
+          if (!Number.isFinite(ts)) continue;
+          if (!best || ts > best.ts) best = { ts: ts, issuer: c.issuer_name || '', name: c.common_name || '' };
+        }
+        if (best) {
+          info = {
+            notAfter: new Date(best.ts).toISOString(),
+            daysLeft: Math.floor((best.ts - Date.now()) / 86400000),
+            issuer: String(best.issuer).slice(0, 160),
+            commonName: String(best.name).slice(0, 160),
+            source: 'crt.sh'
+          };
+        }
+      }
+    }
+  } catch (e) {
+    info = null;
+  }
+  if (certCache.size > 200) certCache.clear();
+  certCache.set(d, { at: Date.now(), value: info });
+  return info;
 }
 
 function clampInt(value, fallback, min, max) {
@@ -316,11 +483,30 @@ async function getIpFraudScore(ip) {
 
 // 允许计入用量统计的端点白名单（避免任意路径撑爆 KV）
 const COUNTED_ENDPOINTS = new Set([
-  '/health', '/speedtest', '/upload-test', '/cpu-test', '/dns-proxy',
+  '/health', '/node-ping', '/speedtest', '/upload-test', '/cpu-test', '/dns-proxy',
   '/api/site-audit', '/ws-test', '/http2-test', '/concurrent-test', '/stream-test',
   '/api/log-speed', '/api/speed-history', '/api/usage-stats', '/api/ip-fraud',
   '/api/dns-lookup', '/api/dnsbl', '/api/domain-check', '/api/monitor', '/api/monitor-run'
 ]);
+
+// ==================== 端点开关（停用无引用/已废弃端点，缩小攻击面） ====================
+// 停用后统一返回 410 Gone，且在限流、用量统计、令牌校验之前短路——不消耗任何 KV/出站/CPU 资源。
+// 实现代码全部保留，恢复只需把路径从这里移除（或把前缀从 DISABLED_PATH_PREFIXES 删除）。
+const DISABLED_ENDPOINTS = new Set([
+  '/dns-proxy',      // 前端从未调用：DNS 探测已由浏览器侧 Image/DoH 实现，此端点可直接下线
+  '/api/ip-fraud',   // 外部风险评分已停用（零出站设计），此前恒定 503，现正式下线
+  '/api/reach-check' // 边缘侧可达性探测已移除（改为纯浏览器侧 no-cors 探测）
+]);
+// 前缀停用：遗留的 KV 静态托管（无任何静态文件、前端未引用；如需恢复请移除本项）
+const DISABLED_PATH_PREFIXES = ['/static/'];
+
+function isDisabledEndpoint(pathname) {
+  if (DISABLED_ENDPOINTS.has(pathname)) return true;
+  for (const prefix of DISABLED_PATH_PREFIXES) {
+    if (pathname.startsWith(prefix)) return true;
+  }
+  return false;
+}
 
 // ==================== KV 用量策略（防止 KV 额度被写爆/读爆）====================
 // USAGE_BACKEND:
@@ -328,7 +514,8 @@ const COUNTED_ENDPOINTS = new Set([
 //   'kv'：聚合后落盘到 SPEED_HISTORY（跨 isolate 持久），会消耗 KV 写额度。
 const USAGE_BACKEND = 'memory';
 const USAGE_FLUSH_MS = 3600000;   // kv 模式下最长 1 小时落盘一次
-const USAGE_MAX_PENDING = 2000;   // kv 模式下待写条数达阈值时立即落盘
+const USAGE_MAX_PENDING = 2000;   // kv 模式下待写条数达阈值时提前落盘（受最小间隔约束）
+const USAGE_FLUSH_MIN_MS = 60000; // kv 模式下两次落盘的最小间隔：即使高流量也最多 1 次写/分，防写爆 KV
 const SPEED_HISTORY_KV_ENABLED = false; // 默认关闭：测速历史不写 KV；改回 true 可恢复（仍限 15s/客户端）
 
 // 只读接口内存缓存：降低前端 30s 轮询造成的 KV 读放大
@@ -347,6 +534,60 @@ function invalidateStatsCache() {
   statsCache.clear();
 }
 
+// ==================== KV 写入总闸（防写爆） ====================
+// 所有对 KV 的写入都必须经 kvPut()：超预算或同键抖动时直接跳过写入并计数。
+// 设计取舍：宁可丢少量非关键数据（测速历史、监控心跳），也不让任何异常循环
+// （cron 配得过密 / 目标状态抖动风暴 / isolate 反复重建）打爆 KV 写入额度。
+// 计数为 per-isolate 内存，与限流 Map 同一取舍；跨 isolate 的精确总量需 Durable Object。
+const KV_WRITE_MAX_PER_MIN = 20;            // 单 isolate 每分钟写入上限
+const KV_WRITE_MAX_PER_DAY = 600;           // 单 isolate 每日写入上限（免费额度 1000/天，留 40% 余量）
+const KV_WRITE_MIN_KEY_INTERVAL_MS = 10000; // 同一 key 的最小写入间隔（防热键抖动写）
+const kvWriteStats = { day: '', dayCount: 0, minStart: 0, minCount: 0, blocked: 0 };
+const kvKeyLastWrite = new Map();
+
+function kvWriteGateOk(key, skipDebounce) {
+  const now = Date.now();
+  const day = new Date(now).toISOString().slice(0, 10);
+  if (kvWriteStats.day !== day) {
+    kvWriteStats.day = day;
+    kvWriteStats.dayCount = 0;
+  }
+  if (now - kvWriteStats.minStart >= 60000) {
+    kvWriteStats.minStart = now;
+    kvWriteStats.minCount = 0;
+  }
+  const lastKeyAt = kvKeyLastWrite.get(key) || 0;
+  const blocked = kvWriteStats.dayCount >= KV_WRITE_MAX_PER_DAY
+    || kvWriteStats.minCount >= KV_WRITE_MAX_PER_MIN
+    || (!skipDebounce && (now - lastKeyAt) < KV_WRITE_MIN_KEY_INTERVAL_MS);
+  if (blocked) {
+    kvWriteStats.blocked += 1;
+    return false;
+  }
+  kvWriteStats.dayCount += 1;
+  kvWriteStats.minCount += 1;
+  kvKeyLastWrite.set(key, now);
+  if (kvKeyLastWrite.size > 200) {
+    for (const [k, t] of kvKeyLastWrite) {
+      if (now - t > KV_WRITE_MIN_KEY_INTERVAL_MS) kvKeyLastWrite.delete(k);
+    }
+  }
+  return true;
+}
+
+// 统一写入入口：返回 true=已写入，false=被预算拦截或写入失败（调用方自行决定是否回滚/提示）
+async function kvPut(ns, key, value, options, opts) {
+  if (!ns) return false;
+  const skipDebounce = !!(opts && opts.skipDebounce);
+  if (!kvWriteGateOk(key, skipDebounce)) return false;
+  try {
+    await ns.put(key, value, options);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
 let liveUsage = { totalRequests: 0, endpoints: {}, lastReset: Date.now() };
 let usagePending = { total: 0, endpoints: {} };
 let usageLastFlush = 0;
@@ -363,7 +604,8 @@ function recordUsage(pathname) {
   usagePending.total += 1;
   usagePending.endpoints[pathname] = (usagePending.endpoints[pathname] || 0) + 1;
   const now = Date.now();
-  const due = (now - usageLastFlush >= USAGE_FLUSH_MS) || (usagePending.total >= USAGE_MAX_PENDING);
+  const due = (now - usageLastFlush >= USAGE_FLUSH_MS)
+    || (usagePending.total >= USAGE_MAX_PENDING && now - usageLastFlush >= USAGE_FLUSH_MIN_MS);
   if (!due || usageFlushInFlight) return Promise.resolve();
   usageLastFlush = now;
   usageFlushInFlight = true;
@@ -382,23 +624,27 @@ function recordUsage(pathname) {
         }
       }
       if (!stats.lastReset) stats.lastReset = Date.now();
-      await SPEED_HISTORY.put('usage:stats', JSON.stringify(stats), { expirationTtl: 86400 * 30 });
+      const usageWrote = await kvPut(SPEED_HISTORY, 'usage:stats', JSON.stringify(stats), { expirationTtl: 86400 * 30 });
+      if (!usageWrote) throw new Error('kv write blocked'); // 交给下面的 catch：计数回滚 + 退避重试
       invalidateStatsCache();
     } catch (e) {
-      // 落盘失败则把计数还回缓冲，避免丢失，并允许尽快重试
+      // 落盘失败则把计数还回缓冲避免丢失；把 lastFlush 置为当前时间，
+      // 按 USAGE_FLUSH_MIN_MS 退避重试——KV 故障期间不再每个请求都触发一次写尝试（防写爆）
       usagePending.total += snapshot.total;
       for (const [ep, count] of Object.entries(snapshot.endpoints)) {
         usagePending.endpoints[ep] = (usagePending.endpoints[ep] || 0) + count;
       }
-      usageLastFlush = 0;
+      usageLastFlush = now;
     } finally {
       usageFlushInFlight = false;
     }
   })();
 }
 
-// ==================== 站点监控（Cron 巡检 + Webhook 告警；仅状态变化/每小时时写 KV） ====================
-const MONITOR_STATE_REFRESH_MS = 3600000;
+// ==================== 站点监控（Cron 巡检 + Webhook 告警；仅状态变化/心跳到期时写 KV） ====================
+// 无状态变化时的「心跳写」间隔：1 小时 → 6 小时（基线写量 720/月 → 120/月）。
+// 状态变化（up/down 切换、URL 增删）仍会立即写入，因此不影响告警与 since 语义。
+const MONITOR_STATE_REFRESH_MS = 6 * 3600000;
 const MONITOR_LOG_MAX = 20;
 
 function monitorKv() {
@@ -413,6 +659,13 @@ function buildNotifyPayload(format, text) {
 }
 
 async function postMonitorWebhook(webhook, format, text) {
+  // 历史配置可能含内网地址（修复前允许保存）：运行时兜底拦截
+  try {
+    const p = new URL(webhook);
+    if (isPrivateHost(p.hostname) || !isAllowedTargetPort(p)) return;
+  } catch (e) {
+    return;
+  }
   try {
     await fetch(webhook, {
       method: 'POST',
@@ -429,9 +682,9 @@ async function runMonitorChecks(urls) {
     const started = Date.now();
     let status = 'down', code = null, error = '';
     try {
-      let hostname = '';
-      try { hostname = new URL(target).hostname; } catch (e) { throw new Error('invalid url'); }
-      if (isPrivateHost(hostname) || !(await resolvesToPublicOnly(hostname))) throw new Error('blocked target');
+      let targetUrl = null;
+      try { targetUrl = new URL(target); } catch (e) { throw new Error('invalid url'); }
+      if (isPrivateHost(targetUrl.hostname) || !isAllowedTargetPort(targetUrl) || !(await resolvesToPublicOnly(targetUrl.hostname))) throw new Error('blocked target');
       const res = await fetch(target, {
         method: 'GET',
         redirect: 'follow',
@@ -454,9 +707,11 @@ async function handleMonitorCheck() {
   if (!kv) return { skipped: 'kv_missing' };
   let cfg = null, prevState = {}, log = [];
   try { const raw = await kv.get('monitor:config'); if (raw) cfg = JSON.parse(raw); } catch (e) {}
-  if (!cfg || !Array.isArray(cfg.urls) || cfg.urls.length === 0) return { skipped: 'no_config' };
+  if (!cfg || typeof cfg !== 'object' || Array.isArray(cfg) || !Array.isArray(cfg.urls) || cfg.urls.length === 0) return { skipped: 'no_config' };
   try { const raw = await kv.get('monitor:state'); if (raw) prevState = JSON.parse(raw); } catch (e) {}
+  if (!prevState || typeof prevState !== 'object' || Array.isArray(prevState)) prevState = {};
   try { const raw = await kv.get('monitor:log'); if (raw) log = JSON.parse(raw); } catch (e) {}
+  if (!Array.isArray(log)) log = [];
 
   const now = Date.now();
   const results = await runMonitorChecks(cfg.urls.slice(0, 10));
@@ -487,16 +742,16 @@ async function handleMonitorCheck() {
   const lastWrite = (prevState.__meta && prevState.__meta.writtenAt) ? prevState.__meta.writtenAt : 0;
   if (changed || (now - lastWrite) > MONITOR_STATE_REFRESH_MS) {
     nextState.__meta = { writtenAt: now };
-    try { await kv.put('monitor:state', JSON.stringify(nextState)); } catch (e) {}
+    await kvPut(kv, 'monitor:state', JSON.stringify(nextState));
   }
   if (events.length) {
-    try { await kv.put('monitor:log', JSON.stringify(events.concat(log).slice(0, MONITOR_LOG_MAX))); } catch (e) {}
+    await kvPut(kv, 'monitor:log', JSON.stringify(events.concat(log).slice(0, MONITOR_LOG_MAX)));
   }
   return { results: results, changed: changed, notified: events.length };
 }
 
 // ==================== 前端静态资源（外置 /app.css 与 /app.js，可长缓存） ====================
-const ASSET_VER = '4.6.2';
+const ASSET_VER = '4.7.1';
 const UNLIMITED_PATHS = new Set(['/app.js', '/app.css', '/sw.js', '/manifest.webmanifest', '/icon.svg', '/icon-192.png', '/icon-512.png']);
 
 const APP_CSS = `
@@ -736,7 +991,7 @@ const APP_CSS = `
         }
         .ip-val-small { font-size: 16px; color: var(--text-secondary); }
 
-        .stats-row { display: flex; gap: 10px; margin-top: 22px; flex-wrap: wrap; }
+        .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); gap: 10px; margin-top: 22px; }
         .stat-item {
             display: flex; align-items: center; gap: 8px; font-size: 12px;
             padding: 7px 16px; background: var(--glass-bg); border-radius: 50px;
@@ -756,6 +1011,11 @@ const APP_CSS = `
         .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-bottom: 28px; }
         .grid-2col { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-bottom: 28px; }
         .info-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0 32px; }
+        .info-section-label {
+            font-size: 10px; text-transform: uppercase; letter-spacing: 1.1px;
+            color: var(--text-quaternary); margin: 2px 0 8px;
+        }
+        .info-grid + .info-section-label { margin-top: 20px; }
 
         .card {
             background: var(--glass-bg);
@@ -863,6 +1123,20 @@ const APP_CSS = `
         .btn-outline { background: var(--glass-bg); border: 1px solid var(--glass-border); color: var(--text-primary); }
         .btn-outline:hover { background: var(--glass-bg-hover); border-color: var(--glass-border-hover); }
 
+        /* ==================== 按钮三级（主 / 次 / 幽灵）+ 尺寸 ==================== */
+        /* 主：.btn.btn-primary（实心）  次：.btn / .btn-outline（描边）  幽灵：.btn.btn-ghost（无边框文字） */
+        .btn-ghost {
+            background: transparent; border-color: transparent; color: var(--text-secondary);
+            box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none;
+        }
+        .btn-ghost:hover { background: var(--glass-bg-hover); border-color: var(--glass-border); color: var(--text-primary); }
+        .btn-block { width: 100%; justify-content: center; }
+        .btn-sm { height: 32px; padding: 0 13px; font-size: 12px; }
+        .btn-xs { height: 28px; padding: 0 10px; font-size: 11px; border-radius: 50px; }
+        .btn-icon { width: 30px; height: 30px; padding: 0; justify-content: center; border-radius: var(--radius-sm); }
+        .btn[disabled], .btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+        .btn[disabled]:hover { background: var(--glass-bg); border-color: var(--glass-border); transform: none; }
+
         .btn-cyan {
             background: linear-gradient(135deg, rgba(34, 211, 238, 0.15), rgba(99, 102, 241, 0.15));
             border: 1px solid rgba(34, 211, 238, 0.2); color: var(--chart-cyan);
@@ -922,11 +1196,12 @@ const APP_CSS = `
             box-shadow: var(--glass-shadow), var(--glass-highlight);
         }
         .copy-btn {
-            background: var(--accent-light); padding: 6px 16px; border-radius: 50px;
+            background: transparent; padding: 7px 14px; border-radius: 50px;
             font-size: 12px; cursor: pointer; transition: all var(--transition-fast);
-            border: 1px solid var(--border-accent); color: var(--accent); font-weight: 500;
+            border: 1px solid var(--glass-border); color: var(--text-secondary); font-weight: 500;
+            display: inline-flex; align-items: center; gap: 6px;
         }
-        .copy-btn:hover { background: rgba(129, 140, 248, 0.15); box-shadow: var(--accent-glow); }
+        .copy-btn:hover { background: var(--glass-bg-hover); border-color: var(--glass-border-hover); color: var(--text-primary); }
 
         .driver-badge {
             width: 100%; text-align: center; padding: 12px 20px; margin-top: 16px;
@@ -946,7 +1221,7 @@ const APP_CSS = `
             margin-right: 8px; vertical-align: middle;
         }
 
-        .stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-bottom: 28px; }
+        .stats-grid { display: grid; grid-template-columns: 1.35fr 1fr; gap: 20px; margin-bottom: 28px; }
         .stats-card {
             background: var(--glass-bg);
             backdrop-filter: var(--glass-blur);
@@ -1171,32 +1446,47 @@ const APP_CSS = `
             .tab-btn i { display: none; }
         }
 
-        /* ==================== 工具卡片网格 ==================== */
-        .tool-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
+        /* ==================== 工具卡片：按类别分组 + 紧凑卡片 ==================== */
+        .tool-grid { display: flex; flex-direction: column; gap: 20px; }
+        .tool-group-head {
+            display: flex; align-items: center; gap: 8px; margin-bottom: 9px;
+            font-size: 10.5px; text-transform: uppercase; letter-spacing: 1.2px; color: var(--text-tertiary);
+        }
+        .tool-group-head i { color: var(--accent); opacity: 0.65; font-size: 11px; }
+        .tool-group-head .tg-count {
+            margin-left: auto; font-family: var(--font-mono); font-size: 10px;
+            padding: 1px 7px; border: 1px solid var(--glass-border); border-radius: 50px; color: var(--text-quaternary);
+        }
+        .tool-group-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(178px, 1fr)); gap: 8px; }
         .tool-card {
-            display: flex; align-items: center; gap: 14px; text-align: left; width: 100%;
-            padding: 15px; border: 1px solid var(--glass-border); border-radius: var(--radius-md);
+            display: flex; align-items: center; gap: 11px; text-align: left; width: 100%;
+            padding: 10px 12px; border: 1px solid var(--glass-border); border-radius: var(--radius-md);
             background: var(--glass-bg); cursor: pointer; color: var(--text-primary);
             font-family: var(--font); transition: var(--transition-fast);
         }
         .tool-card:hover { background: var(--glass-bg-hover); border-color: var(--glass-border-hover); }
         .tool-card .tc-icon {
-            width: 38px; height: 38px; flex: 0 0 38px; display: flex; align-items: center; justify-content: center;
+            width: 30px; height: 30px; flex: 0 0 30px; display: flex; align-items: center; justify-content: center;
             border: 1px solid var(--glass-border); border-radius: var(--radius-sm);
-            color: var(--text-secondary); font-size: 15px; background: var(--glass-heavy);
+            color: var(--text-secondary); font-size: 13px; background: var(--glass-heavy);
         }
         .tool-card:hover .tc-icon { color: var(--text-primary); border-color: var(--glass-border-hover); }
         .tool-card .tc-text { flex: 1; min-width: 0; }
-        .tool-card .tc-name { display: block; font-size: 13px; font-weight: 600; letter-spacing: 0.3px; }
-        .tool-card .tc-desc { display: block; font-size: 11px; color: var(--text-tertiary); margin-top: 3px; line-height: 1.35; }
+        .tool-card .tc-name { display: block; font-size: 12.5px; font-weight: 600; letter-spacing: 0.2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .tool-card .tc-go { color: var(--text-quaternary); font-size: 10px; transition: var(--transition-fast); }
         .tool-card:hover .tc-go { color: var(--text-secondary); }
+        @media (max-width: 480px) {
+            .tool-group-grid { grid-template-columns: 1fr 1fr; gap: 6px; }
+            .tool-card { padding: 9px 10px; gap: 8px; }
+            .tool-card .tc-icon { width: 26px; height: 26px; flex-basis: 26px; font-size: 12px; }
+            .tool-card .tc-name { font-size: 11.5px; }
+        }
 
-        /* ==================== 工具结果弹层 ==================== */
-        .tool-modal-box { max-width: 620px; width: 92%; max-height: 84vh; display: flex; flex-direction: column; }
+        /* ==================== 工具弹层：宽屏两栏（左参数 / 右结果） ==================== */
+        .tool-modal-box { max-width: 1040px; width: 94%; max-height: 86vh; display: flex; flex-direction: column; }
         .tool-modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding-bottom: 14px; border-bottom: 1px solid var(--divider); margin-bottom: 16px; }
         .tool-modal-head h3 { font-size: 16px; font-weight: 600; letter-spacing: 0.3px; }
-        .tool-modal-head p { font-size: 12px; color: var(--text-tertiary); margin-top: 4px; }
+        .tool-modal-head p { font-size: 12px; color: var(--text-tertiary); margin-top: 4px; max-width: 640px; }
         .tool-close { flex: 0 0 auto; width: 30px; height: 30px; background: var(--glass-bg); border: 1px solid var(--glass-border); color: var(--text-secondary); border-radius: var(--radius-sm); cursor: pointer; transition: var(--transition-fast); }
         .tool-close:hover { color: var(--text-primary); border-color: var(--glass-border-hover); }
         .tool-modal-actions { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
@@ -1204,7 +1494,29 @@ const APP_CSS = `
         .tool-rerun:hover { color: var(--text-primary); border-color: var(--glass-border-hover); background: var(--glass-bg-hover); }
         .tool-rerun i { font-size: 11px; }
         @media (max-width: 520px) { .tool-rerun span { display: none; } .tool-rerun { padding: 0 9px; } }
-        .tool-modal-body { overflow-y: auto; min-height: 80px; }
+
+        .tool-modal-main { display: grid; grid-template-columns: 300px 1fr; gap: 20px; flex: 1 1 auto; min-height: 0; }
+        .tool-modal-side { border-right: 1px solid var(--divider); padding-right: 18px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+        .side-desc { font-size: 12px; color: var(--text-tertiary); line-height: 1.55; }
+        .side-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-quaternary); }
+        .side-params { display: flex; flex-direction: column; gap: 8px; }
+        .side-actions { display: flex; flex-direction: column; gap: 8px; margin-top: auto; padding-top: 6px; }
+        .side-actions .btn { width: 100%; justify-content: center; }
+        /* 左栏内的表单一律竖排，避免 300px 宽度下输入框被压扁 */
+        .tool-modal-side .tool-field { flex-direction: column; align-items: stretch; gap: 8px; }
+        .tool-modal-side .tool-field .btn { width: 100%; height: 38px; }
+        .tool-modal-side .tool-input, .tool-modal-side select.tool-input { width: 100%; max-width: none !important; }
+        .tool-modal-side textarea.tool-input { height: 86px !important; }
+        .tool-modal-side label { font-size: 12px; }
+        .tool-modal-body { overflow-y: auto; min-height: 140px; padding-right: 2px; }
+
+        @media (max-width: 860px) {
+            .tool-modal-box { max-width: 96%; width: 96%; max-height: 90vh; }
+            .tool-modal-main { grid-template-columns: 1fr; gap: 14px; }
+            .tool-modal-side { border-right: none; border-bottom: 1px solid var(--divider); padding-right: 0; padding-bottom: 14px; overflow: visible; }
+            .side-actions { margin-top: 0; }
+            .tool-modal-body { min-height: 80px; max-height: 46vh; }
+        }
 
         .tool-loading { display: flex; align-items: center; gap: 8px; color: var(--text-secondary); font-size: 13px; padding: 14px 0; }
         .tool-error { display: flex; align-items: center; gap: 9px; color: var(--danger); font-size: 13px; padding: 13px 14px; border: 1px solid var(--danger-light); border-radius: var(--radius-sm); }
@@ -1271,6 +1583,8 @@ const APP_JS = `
                     // 卡片标题
                     sec: 'Security & Protocol',
                     secSub: 'TLS · Encryption · Authentication',
+                    secGroupTransport: 'Transport & Protocol',
+                    secGroupOrigin: 'Origin & Fingerprint',
                     geo: 'Edge Location',
                     geoSub: 'Cloudflare Data Center',
                     userGeo: 'Client Location',
@@ -1458,6 +1772,8 @@ const APP_JS = `
                     bbDelta: 'Increase',
                     bbGrade: 'Grade',
                     bbFailed: 'Test failed',
+                    bbNoSamples: 'Not enough valid samples (rate limited or network issue)',
+                    bbLimited: 'Rate limit hit during load phase - results may be inaccurate',
                     bbNote: 'Traffic usage scales with bandwidth (up to hundreds of MB on fast links).',
                     dnsQueryBtn: 'Query',
                     dnsInvalidDomain: 'Enter a valid domain (e.g. example.com)',
@@ -1519,6 +1835,8 @@ const APP_JS = `
                     monKvMissing: 'KV (SPEED_HISTORY) is not bound',
                     monBadUrl: 'Contains an invalid URL',
                     monMax: 'Up to 10 URLs',
+                    monKvWriteLimit: 'KV write budget for today is exhausted - config not saved, please retry later',
+                    monBadPort: 'Only ports 80/443 are allowed - remove the custom port or use a reverse proxy',
                     shareImg: 'Share Image',
                     shareLink: 'Copy Share Link',
                     shareBanner: 'Shared health check result',
@@ -1538,6 +1856,61 @@ const APP_JS = `
                     reachEdgeBlocked: 'Unreachable from edge',
                     reachFailed: 'Probe failed',
                     reachNote: 'Probes target sites directly from your browser (no Cloudflare edge request), reflecting your local network reachability.',
+                    proxyBtn: 'Proxy / VPN Check',
+                    proxyEgressIp: 'HTTP Egress IP',
+                    proxyWebrtcPublic: 'WebRTC Public IP',
+                    proxyConsistent: 'Consistent - no proxy/VPN mismatch detected',
+                    proxyMismatch: 'Mismatch - WebRTC public IP differs from HTTP egress IP',
+                    proxyUndetermined: 'Undetermined - browser exposed no public WebRTC candidate',
+                    proxyNote: 'Compares the IP your HTTP traffic exits from with the IP visible via WebRTC. A mismatch usually means a proxy/VPN, split tunnelling, or a leaky browser configuration.',
+                    qualityBtn: 'Quality Monitor',
+                    qualityIntro: 'Probes once per second for the selected duration and reports latency percentiles (p50/p95/p99), jitter, loss and a stall timeline. Uses lightweight HEAD requests only.',
+                    qualityStart: 'Start Monitoring',
+                    qualityStop: 'Stop',
+                    qualityRunning: 'Monitoring',
+                    qualityP50: 'p50 (median)',
+                    qualityP95: 'p95',
+                    qualityP99: 'p99',
+                    qualityLoss: 'Loss',
+                    qualitySamples: 'Samples',
+                    qualityTimeline: 'Timeline (worst per 5s bucket)',
+                    qualityStalls: 'Stalls (>2x median)',
+                    qualityDone: 'Monitoring finished',
+                    qualityStopped: 'Monitoring stopped',
+                    qualityNote: 'Long runs use the /health quota: one sample per second stays well inside the 180/min per-IP limit.',
+                    multispeedBtn: 'Multi-Stream Speed',
+                    multispeedIntro: 'Downloads with 4 parallel streams (about 64 MB in total) and plots the instantaneous rate, which is far closer to real bandwidth than a single-stream test.',
+                    multispeedStreams: 'Streams',
+                    multispeedTotal: 'Transferred',
+                    multispeedAvg: 'Average',
+                    multispeedP95: 'Peak (p95)',
+                    multispeedStability: 'Stability',
+                    multispeedRate: 'Rate (Mbps)',
+                    multispeedFailed: 'Multi-stream test failed',
+                    multispeedNote: 'Traffic usage scales with bandwidth; stop the test if you are on a metered connection.',
+                    grpQuality: 'Network Quality & Latency',
+                    grpBandwidth: 'Bandwidth & Throughput',
+                    grpDns: 'DNS',
+                    grpSecurity: 'Security & Compliance',
+                    grpReach: 'Reachability & Nodes',
+                    grpMonitor: 'Monitoring & System',
+                    adviceTitle: 'Diagnosis & Advice',
+                    adviceCause: 'Likely cause',
+                    adviceAction: 'Suggested action',
+                    historyLocalTitle: 'Test History (local)',
+                    historyLocalSub: 'Last 20 results - stored in this browser only',
+                    historyEmpty: 'No local records yet - run a test to start collecting',
+                    historyClear: 'Clear local history',
+                    historyCleared: 'Cleared',
+                    histQuickcheck: 'Health check',
+                    histSpeed: 'Speed test',
+                    histMultispeed: 'Multi-stream',
+                    histQuality: 'Quality monitor',
+                    histAudit: 'Site audit',
+                    auditCertLabel: 'Also check certificate expiry (+1 outbound request)',
+                    certSkipped: 'Certificate check skipped',
+                    certExpiring: 'TLS certificate expires soon',
+                    certExpired: 'TLS certificate has expired',
                     auditScore: 'Security Score',
                     auditChecks: 'Header Checks',
                     auditIssues: 'Issues',
@@ -1554,7 +1927,9 @@ const APP_JS = `
                         xcto_missing: 'X-Content-Type-Options is missing',
                         refpol_missing: 'Referrer-Policy is missing',
                         server_leak: 'Server header reveals software info',
-                        no_https: 'Final page is not HTTPS'
+                        no_https: 'Final page is not HTTPS',
+                        cert_expiring: 'TLS certificate expires within 14 days',
+                        cert_expired: 'TLS certificate has already expired'
                     },
                     toolDesc: {
                         loss: 'Probe the endpoint repeatedly and measure packet loss',
@@ -1576,7 +1951,23 @@ const APP_JS = `
                         domaincheck: 'MX/SPF/DMARC/DKIM and reputation check for a domain',
                         monitor: 'Scheduled uptime checks with webhook alerts',
                         dnscompare: 'Query the same name on 4 public resolvers and compare answers',
-                        reach: 'Probe CN and global sites from the edge and your browser'
+                        reach: 'Probe CN and global sites from the edge and your browser',
+                        proxy: 'Compare HTTP egress IP with the WebRTC-exposed IP to spot proxy/VPN',
+                        quality: 'Long-running latency monitoring with p50/p95/p99 and a stall timeline',
+                        multispeed: 'Parallel multi-stream download with a live rate curve'
+                    },
+                    advice: {
+                        rtt_fail: { cause: 'Probes never completed: the edge is unreachable from this network or requests are being blocked.', action: 'Check local firewall/VPN rules, try another network, then re-run the health check.' },
+                        rtt_high: { cause: 'Long round-trip time: distant edge, congested path, or a slow local link.', action: 'Compare against another network; if only this network is slow, report it to your ISP.' },
+                        jitter_high: { cause: 'Unstable latency: Wi-Fi interference, bufferbloat, or a congested uplink.', action: 'Prefer wired/5 GHz Wi-Fi, stop background transfers, and re-test.' },
+                        loss: { cause: 'Packet loss on the path: wireless interference, congestion, or a faulty link.', action: 'Re-test on a wired connection; if loss persists, contact your ISP.' },
+                        rate_limited: { cause: 'Some probes were rate limited, so those samples were dropped.', action: 'Wait a minute and re-run, or avoid running several tools at once.' },
+                        down_low: { cause: 'Low download throughput: weak signal, busy link, or server-side throttling.', action: 'Re-test with other traffic stopped and compare Wi-Fi against wired.' },
+                        up_low: { cause: 'Low upload throughput: common on asymmetric links or under congestion.', action: 'Avoid uploading during the test and check router QoS settings.' },
+                        proto_old: { cause: 'The connection is not using HTTP/2 or HTTP/3.', action: 'Usually a proxy or middlebox limit; try a modern browser or another network.' },
+                        dns_fail: { cause: 'DNS resolution failed for the edge hostname.', action: 'Check DNS settings, try 1.1.1.1 or 8.8.8.8, and re-run.' },
+                        stall: { cause: 'Repeated latency spikes above twice the median.', action: 'Look for periodic background traffic (backups, updates) or wireless roaming.' },
+                        proxy_mismatch: { cause: 'HTTP egress IP and WebRTC-exposed IP differ, which indicates a proxy/VPN or split tunnelling.', action: 'If that is not expected, disable the proxy/VPN extension or tighten WebRTC policies.' }
                     }
                 },
                 'zh-CN': {
@@ -1596,6 +1987,8 @@ const APP_JS = `
                     loss: '丢包率',
                     sec: '安全与协议',
                     secSub: 'TLS · 加密 · 身份验证',
+                    secGroupTransport: '传输与协议',
+                    secGroupOrigin: '来源与指纹',
                     geo: '边缘节点位置',
                     geoSub: 'Cloudflare 数据中心',
                     userGeo: '真实 IP 位置',
@@ -1771,6 +2164,8 @@ const APP_JS = `
                     bbDelta: '延迟增幅',
                     bbGrade: '评级',
                     bbFailed: '测试失败',
+                    bbNoSamples: '有效样本不足（可能触发限流或网络异常）',
+                    bbLimited: '负载阶段触发限流，结果可能不准确',
                     bbNote: '流量消耗随带宽增加（高速线路可达数百 MB）。',
                     dnsQueryBtn: '查询',
                     dnsInvalidDomain: '请输入有效域名（如 example.com）',
@@ -1832,6 +2227,8 @@ const APP_JS = `
                     monKvMissing: '未绑定 KV（SPEED_HISTORY）',
                     monBadUrl: '包含无效 URL',
                     monMax: '最多 10 个 URL',
+                    monKvWriteLimit: 'KV 今日写入预算已用尽，配置未保存，请稍后重试',
+                    monBadPort: '仅允许 80/443 端口（请去掉自定义端口或改用反向代理）',
                     shareImg: '生成分享图',
                     shareLink: '复制分享链接',
                     shareBanner: '来自分享的体检结果',
@@ -1851,6 +2248,61 @@ const APP_JS = `
                     reachEdgeBlocked: '边缘侧不可达',
                     reachFailed: '探测失败',
                     reachNote: '直接从你的浏览器探测目标站点（不经 Cloudflare 边缘），反映你本地网络的可达性。',
+                    proxyBtn: '代理/VPN 检测',
+                    proxyEgressIp: 'HTTP 出口 IP',
+                    proxyWebrtcPublic: 'WebRTC 公网 IP',
+                    proxyConsistent: '一致 · 未发现代理/VPN 迹象',
+                    proxyMismatch: '不一致 · WebRTC 公网 IP 与 HTTP 出口 IP 不同',
+                    proxyUndetermined: '无法判定 · 浏览器未暴露公网 WebRTC 候选',
+                    proxyNote: '对比「HTTP 流量出口 IP」与「WebRTC 暴露的 IP」。两者不一致通常意味着使用了代理/VPN、分流（split tunnel），或浏览器 WebRTC 策略过于宽松。',
+                    qualityBtn: '长时质量监控',
+                    qualityIntro: '按所选时长每秒探测一次，输出延迟分位（p50/p95/p99）、抖动、丢包与卡顿时间线。仅使用轻量 HEAD 请求。',
+                    qualityStart: '开始监控',
+                    qualityStop: '停止',
+                    qualityRunning: '监控中',
+                    qualityP50: 'p50（中位）',
+                    qualityP95: 'p95',
+                    qualityP99: 'p99',
+                    qualityLoss: '丢包率',
+                    qualitySamples: '样本数',
+                    qualityTimeline: '时间线（每 5 秒取最差值）',
+                    qualityStalls: '卡顿次数（>2 倍中位）',
+                    qualityDone: '监控结束',
+                    qualityStopped: '已停止监控',
+                    qualityNote: '长时间监控走 /health 配额：每秒 1 次远低于每 IP 180 次/分的上限。',
+                    multispeedBtn: '多流并发测速',
+                    multispeedIntro: '以 4 条并行流下载（合计约 64 MB），绘制瞬时速率曲线，比单流测试更接近真实带宽。',
+                    multispeedStreams: '并发流',
+                    multispeedTotal: '传输量',
+                    multispeedAvg: '平均',
+                    multispeedP95: '峰值(p95)',
+                    multispeedStability: '稳定性',
+                    multispeedRate: '速率 (Mbps)',
+                    multispeedFailed: '多流测速失败',
+                    multispeedNote: '流量消耗随带宽增加；若使用流量套餐请谨慎运行。',
+                    grpQuality: '网络质量与延迟',
+                    grpBandwidth: '带宽与吞吐',
+                    grpDns: 'DNS',
+                    grpSecurity: '安全与合规',
+                    grpReach: '可达性与多节点',
+                    grpMonitor: '监控与系统',
+                    adviceTitle: '诊断与建议',
+                    adviceCause: '可能原因',
+                    adviceAction: '建议动作',
+                    historyLocalTitle: '测试历史（本地）',
+                    historyLocalSub: '最近 20 条记录 · 仅保存在本机浏览器',
+                    historyEmpty: '暂无本地记录，运行一次测试即可开始收集',
+                    historyClear: '清空本地记录',
+                    historyCleared: '已清空',
+                    histQuickcheck: '一键体检',
+                    histSpeed: '带宽测速',
+                    histMultispeed: '多流测速',
+                    histQuality: '质量监控',
+                    histAudit: '站点体检',
+                    auditCertLabel: '同时检查证书到期（+1 次出站请求）',
+                    certSkipped: '未检查证书',
+                    certExpiring: 'TLS 证书即将到期',
+                    certExpired: 'TLS 证书已过期',
                     auditScore: '安全评分',
                     auditChecks: '响应头检查',
                     auditIssues: '问题',
@@ -1867,7 +2319,9 @@ const APP_JS = `
                         xcto_missing: '缺少 X-Content-Type-Options',
                         refpol_missing: '缺少 Referrer-Policy',
                         server_leak: 'Server 头暴露软件信息',
-                        no_https: '最终页面未使用 HTTPS'
+                        no_https: '最终页面未使用 HTTPS',
+                        cert_expiring: 'TLS 证书将在 14 天内到期',
+                        cert_expired: 'TLS 证书已过期'
                     },
                     toolDesc: {
                         loss: '连续探测端点，统计丢包率',
@@ -1889,7 +2343,23 @@ const APP_JS = `
                         domaincheck: '域名邮件安全（MX/SPF/DMARC/DKIM）与声誉体检',
                         monitor: '定时巡检站点，异常自动 Webhook 告警',
                         dnscompare: '同一域名并发查询 4 个公共解析器并对比结果',
-                        reach: '边缘侧与浏览器侧同时探测境内外站点，识别本地阻断'
+                        reach: '边缘侧与浏览器侧同时探测境内外站点，识别本地阻断',
+                        proxy: '对比 HTTP 出口 IP 与 WebRTC 暴露 IP，识别代理/VPN',
+                        quality: '长时延迟监控，输出 p50/p95/p99 与卡顿时间线',
+                        multispeed: '多流并行下载，绘制实时速率曲线'
+                    },
+                    advice: {
+                        rtt_fail: { cause: '探测全部失败：本网络无法到达边缘节点，或请求被拦截。', action: '检查本机防火墙/VPN 规则，换一个网络后重新体检。' },
+                        rtt_high: { cause: '往返延迟偏高：边缘节点较远、链路拥塞，或本地接入较慢。', action: '与其他网络对比；若仅此网络慢，可向运营商反馈。' },
+                        jitter_high: { cause: '延迟不稳定：Wi-Fi 干扰、缓冲膨胀（bufferbloat）或上行拥塞。', action: '优先使用有线/5GHz Wi-Fi，暂停后台传输后重测。' },
+                        loss: { cause: '链路上存在丢包：无线干扰、拥塞或线路质量差。', action: '改用有线重测；若仍丢包，联系运营商排查。' },
+                        rate_limited: { cause: '部分探测被限流，样本被丢弃。', action: '等 1 分钟后重跑，避免同时运行多个工具。' },
+                        down_low: { cause: '下行吞吐偏低：信号弱、链路繁忙或服务端限速。', action: '关闭其它流量后重测，并对比 Wi-Fi 与有线。' },
+                        up_low: { cause: '上行吞吐偏低：非对称带宽或上行拥塞时常见。', action: '测试期间避免上传，检查路由器 QoS 设置。' },
+                        proto_old: { cause: '当前连接未使用 HTTP/2 或 HTTP/3。', action: '通常是代理或中间设备限制；可换现代浏览器或其它网络。' },
+                        dns_fail: { cause: '边缘域名的 DNS 解析失败。', action: '检查 DNS 设置，可改用 1.1.1.1 或 8.8.8.8 后重试。' },
+                        stall: { cause: '延迟多次超过中位值 2 倍。', action: '排查周期性后台流量（备份、更新）或无线漫游。' },
+                        proxy_mismatch: { cause: 'HTTP 出口 IP 与 WebRTC 暴露 IP 不一致，说明存在代理/VPN 或分流。', action: '若非预期，请关闭代理/VPN 扩展或收紧浏览器的 WebRTC 策略。' }
                     }
                 },
                 'zh-TW': {
@@ -1909,6 +2379,8 @@ const APP_JS = `
                     loss: '丟包率',
                     sec: '安全與協議',
                     secSub: 'TLS · 加密 · 身份驗證',
+                    secGroupTransport: '傳輸與協議',
+                    secGroupOrigin: '來源與指紋',
                     geo: '邊緣節點位置',
                     geoSub: 'Cloudflare 資料中心',
                     userGeo: '真實 IP 位置',
@@ -2084,6 +2556,8 @@ const APP_JS = `
                     bbDelta: '延遲增幅',
                     bbGrade: '評級',
                     bbFailed: '測試失敗',
+                    bbNoSamples: '有效樣本不足（可能觸發限流或網路異常）',
+                    bbLimited: '負載階段觸發限流，結果可能不準確',
                     bbNote: '流量消耗隨頻寬增加（高速線路可達數百 MB）。',
                     dnsQueryBtn: '查詢',
                     dnsInvalidDomain: '請輸入有效網域（如 example.com）',
@@ -2145,6 +2619,8 @@ const APP_JS = `
                     monKvMissing: '未綁定 KV（SPEED_HISTORY）',
                     monBadUrl: '包含無效 URL',
                     monMax: '最多 10 個 URL',
+                    monKvWriteLimit: 'KV 今日寫入預算已用盡，設定未儲存，請稍後重試',
+                    monBadPort: '僅允許 80/443 連接埠（請移除自訂連接埠或改用反向代理）',
                     shareImg: '產生分享圖',
                     shareLink: '複製分享連結',
                     shareBanner: '來自分享的體檢結果',
@@ -2164,6 +2640,61 @@ const APP_JS = `
                     reachEdgeBlocked: '邊緣側不可達',
                     reachFailed: '探測失敗',
                     reachNote: '直接從你的瀏覽器探測目標站點（不經 Cloudflare 邊緣），反映你本地網路的可達性。',
+                    proxyBtn: '代理/VPN 檢測',
+                    proxyEgressIp: 'HTTP 出口 IP',
+                    proxyWebrtcPublic: 'WebRTC 公網 IP',
+                    proxyConsistent: '一致 · 未發現代理/VPN 跡象',
+                    proxyMismatch: '不一致 · WebRTC 公網 IP 與 HTTP 出口 IP 不同',
+                    proxyUndetermined: '無法判定 · 瀏覽器未暴露公網 WebRTC 候選',
+                    proxyNote: '比對「HTTP 流量出口 IP」與「WebRTC 暴露的 IP」。兩者不一致通常代表使用了代理/VPN、分流（split tunnel），或瀏覽器 WebRTC 策略過於寬鬆。',
+                    qualityBtn: '長時品質監控',
+                    qualityIntro: '依所選時長每秒探測一次，輸出延遲分位（p50/p95/p99）、抖動、丟包與卡頓時間線。僅使用輕量 HEAD 請求。',
+                    qualityStart: '開始監控',
+                    qualityStop: '停止',
+                    qualityRunning: '監控中',
+                    qualityP50: 'p50（中位）',
+                    qualityP95: 'p95',
+                    qualityP99: 'p99',
+                    qualityLoss: '丟包率',
+                    qualitySamples: '樣本數',
+                    qualityTimeline: '時間線（每 5 秒取最差值）',
+                    qualityStalls: '卡頓次數（>2 倍中位）',
+                    qualityDone: '監控結束',
+                    qualityStopped: '已停止監控',
+                    qualityNote: '長時間監控走 /health 配額：每秒 1 次遠低於每 IP 180 次/分的上限。',
+                    multispeedBtn: '多流併發測速',
+                    multispeedIntro: '以 4 條並行流下載（合計約 64 MB），繪製瞬時速率曲線，比單流測試更接近真實頻寬。',
+                    multispeedStreams: '並行流',
+                    multispeedTotal: '傳輸量',
+                    multispeedAvg: '平均',
+                    multispeedP95: '峰值(p95)',
+                    multispeedStability: '穩定性',
+                    multispeedRate: '速率 (Mbps)',
+                    multispeedFailed: '多流測速失敗',
+                    multispeedNote: '流量消耗隨頻寬增加；若使用計量網路請謹慎執行。',
+                    grpQuality: '網路品質與延遲',
+                    grpBandwidth: '頻寬與吞吐',
+                    grpDns: 'DNS',
+                    grpSecurity: '安全與合規',
+                    grpReach: '可達性與多節點',
+                    grpMonitor: '監控與系統',
+                    adviceTitle: '診斷與建議',
+                    adviceCause: '可能原因',
+                    adviceAction: '建議動作',
+                    historyLocalTitle: '測試歷史（本機）',
+                    historyLocalSub: '最近 20 筆記錄 · 僅儲存在本機瀏覽器',
+                    historyEmpty: '尚無本機記錄，執行一次測試即可開始收集',
+                    historyClear: '清除本機記錄',
+                    historyCleared: '已清除',
+                    histQuickcheck: '一鍵體檢',
+                    histSpeed: '頻寬測速',
+                    histMultispeed: '多流測速',
+                    histQuality: '品質監控',
+                    histAudit: '站點健檢',
+                    auditCertLabel: '同時檢查憑證到期（+1 次出站請求）',
+                    certSkipped: '未檢查憑證',
+                    certExpiring: 'TLS 憑證即將到期',
+                    certExpired: 'TLS 憑證已過期',
                     auditScore: '安全評分',
                     auditChecks: '回應標頭檢查',
                     auditIssues: '問題',
@@ -2180,7 +2711,9 @@ const APP_JS = `
                         xcto_missing: '缺少 X-Content-Type-Options',
                         refpol_missing: '缺少 Referrer-Policy',
                         server_leak: 'Server 標頭暴露軟體資訊',
-                        no_https: '最終頁面未使用 HTTPS'
+                        no_https: '最終頁面未使用 HTTPS',
+                        cert_expiring: 'TLS 憑證將在 14 天內到期',
+                        cert_expired: 'TLS 憑證已過期'
                     },
                     toolDesc: {
                         loss: '連續探測端點，統計丟包率',
@@ -2202,7 +2735,23 @@ const APP_JS = `
                         domaincheck: '網域郵件安全（MX/SPF/DMARC/DKIM）與聲譽檢查',
                         monitor: '定時巡檢站點，異常自動 Webhook 告警',
                         dnscompare: '同一網域併發查詢 4 個公共解析器並對比結果',
-                        reach: '邊緣側與瀏覽器側同時探測境內外站點，識別本地阻斷'
+                        reach: '邊緣側與瀏覽器側同時探測境內外站點，識別本地阻斷',
+                        proxy: '比對 HTTP 出口 IP 與 WebRTC 暴露 IP，識別代理/VPN',
+                        quality: '長時延遲監控，輸出 p50/p95/p99 與卡頓時間線',
+                        multispeed: '多流並行下載，繪製即時速率曲線'
+                    },
+                    advice: {
+                        rtt_fail: { cause: '探測全部失敗：本網路無法到達邊緣節點，或請求被封鎖。', action: '檢查本機防火牆/VPN 規則，換一個網路後重新體檢。' },
+                        rtt_high: { cause: '往返延遲偏高：邊緣節點較遠、鏈路壅塞，或本地接取較慢。', action: '與其他網路對比；若僅此網路慢，可向電信商反映。' },
+                        jitter_high: { cause: '延遲不穩定：Wi-Fi 干擾、緩衝膨脹（bufferbloat）或上行壅塞。', action: '優先使用有線/5GHz Wi-Fi，暫停背景傳輸後重測。' },
+                        loss: { cause: '鏈路上存在丟包：無線干擾、壅塞或線路品質不佳。', action: '改以有線重測；若仍丟包，請聯繫電信商排查。' },
+                        rate_limited: { cause: '部分探測被限流，樣本被丟棄。', action: '等 1 分鐘後重跑，避免同時執行多個工具。' },
+                        down_low: { cause: '下行吞吐偏低：訊號弱、鏈路繁忙或伺服端限速。', action: '關閉其它流量後重測，並比較 Wi-Fi 與有線。' },
+                        up_low: { cause: '上行吞吐偏低：非對稱頻寬或上行壅塞時常見。', action: '測試期間避免上傳，檢查路由器 QoS 設定。' },
+                        proto_old: { cause: '目前連線未使用 HTTP/2 或 HTTP/3。', action: '通常是代理或中介設備限制；可換現代瀏覽器或其它網路。' },
+                        dns_fail: { cause: '邊緣網域的 DNS 解析失敗。', action: '檢查 DNS 設定，可改用 1.1.1.1 或 8.8.8.8 後重試。' },
+                        stall: { cause: '延遲多次超過中位值 2 倍。', action: '排查週期性背景流量（備份、更新）或無線漫遊。' },
+                        proxy_mismatch: { cause: 'HTTP 出口 IP 與 WebRTC 暴露 IP 不一致，代表存在代理/VPN 或分流。', action: '若非預期，請關閉代理/VPN 擴充或收緊瀏覽器的 WebRTC 策略。' }
                     }
                 }
             };
@@ -2210,7 +2759,26 @@ const APP_JS = `
             // ==================== 后端数据 ====================
             const BACKEND_DATA = window.__BACKEND__ || {};
 
+            // ==================== 会话令牌注入 ====================
+            // 主页面签发令牌（window.__PAGE_KEY__）；禁用 Cookie 的浏览器靠请求头兜底。
+            // 仅对同源相对路径自动附加，跨域请求（ipapi.co、多节点等）不携带，避免令牌外泄。
+            const __PAGE_KEY__ = window.__PAGE_KEY__ || '';
+            if (__PAGE_KEY__ && typeof window.fetch === 'function') {
+                const __origFetch = window.fetch;
+                window.fetch = function (input, init) {
+                    if (typeof input === 'string' && input.charAt(0) === '/' && input.indexOf('//') !== 0) {
+                        init = init || {};
+                        const h = new Headers(init.headers || {});
+                        if (!h.has('x-ns-token')) h.set('x-ns-token', __PAGE_KEY__);
+                        init.headers = h;
+                    }
+                    return __origFetch.call(this, input, init);
+                };
+            }
+
             // ==================== DOM 引用 ====================
+            // 结果区元素：旧版独立展示位已移除，显式回退到工具弹层主体（toolModalBody）
+            const _toolModalBody = document.getElementById('toolModalBody');
             const elements = {
                 v4: document.getElementById('v4'), v6: document.getElementById('v6'),
                 rttNum: document.getElementById('rtt-num'), chart: document.getElementById('chart'),
@@ -2221,18 +2789,18 @@ const APP_JS = `
                 userGeoInfo: document.getElementById('user-geo-info'), echVal: document.getElementById('ech-val'),
                 botScoreVal: document.getElementById('bot-score-val'), compressVal: document.getElementById('compress-val'),
                 http2Val: document.getElementById('http2-val'), lossBtn: document.getElementById('btn-loss-test'),
-                lossResult: document.getElementById('loss-result'), speedBtn: document.getElementById('btn-speed-test'),
-                speedResult: document.getElementById('speed-result'), dnsBtn: document.getElementById('btn-dns-test'),
-                dnsResult: document.getElementById('dns-result'), cpuBtn: document.getElementById('btn-cpu-test'),
-                cpuResult: document.getElementById('cpu-result'), wsBtn: document.getElementById('btn-ws-test'),
-                wsResult: document.getElementById('ws-result'), concurrentBtn: document.getElementById('btn-concurrent-test'),
-                concurrentResult: document.getElementById('concurrent-result'), streamBtn: document.getElementById('btn-stream-test'),
-                streamResult: document.getElementById('stream-result'),
-                mediaBtn: document.getElementById('btn-media-unlock'), mediaResult: document.getElementById('media-result'),
-                multiBtn: document.getElementById('btn-multi-node'), multiResult: document.getElementById('multi-node-result'),
-                webrtcBtn: document.getElementById('btn-webrtc-test'), webrtcResult: document.getElementById('webrtc-result'),
-                ttfbBtn: document.getElementById('btn-ttfb-test'), ttfbResult: document.getElementById('ttfb-result'),
-                uploadBtn: document.getElementById('btn-upload-test'), uploadResult: document.getElementById('upload-result')
+                lossResult: document.getElementById('loss-result') || _toolModalBody, speedBtn: document.getElementById('btn-speed-test'),
+                speedResult: document.getElementById('speed-result') || _toolModalBody, dnsBtn: document.getElementById('btn-dns-test'),
+                dnsResult: document.getElementById('dns-result') || _toolModalBody, cpuBtn: document.getElementById('btn-cpu-test'),
+                cpuResult: document.getElementById('cpu-result') || _toolModalBody, wsBtn: document.getElementById('btn-ws-test'),
+                wsResult: document.getElementById('ws-result') || _toolModalBody, concurrentBtn: document.getElementById('btn-concurrent-test'),
+                concurrentResult: document.getElementById('concurrent-result') || _toolModalBody, streamBtn: document.getElementById('btn-stream-test'),
+                streamResult: document.getElementById('stream-result') || _toolModalBody,
+                mediaBtn: document.getElementById('btn-media-unlock'), mediaResult: document.getElementById('media-result') || _toolModalBody,
+                multiBtn: document.getElementById('btn-multi-node'), multiResult: document.getElementById('multi-node-result') || _toolModalBody,
+                webrtcBtn: document.getElementById('btn-webrtc-test'), webrtcResult: document.getElementById('webrtc-result') || _toolModalBody,
+                ttfbBtn: document.getElementById('btn-ttfb-test'), ttfbResult: document.getElementById('ttfb-result') || _toolModalBody,
+                uploadBtn: document.getElementById('btn-upload-test'), uploadResult: document.getElementById('upload-result') || _toolModalBody
             };
 
             function detectLang() {
@@ -2255,6 +2823,7 @@ const APP_JS = `
             const MAX_JITTER_HISTORY = 10;
             let geoRetryCount = 0;
             const MAX_GEO_RETRY = 5;
+            let _userGeoCache = null; // ipapi.co 结果缓存：切语言/重复调用时不重复请求第三方
             let consecutiveLoss = 0;
             let totalLoss = 0;
             let sampleCount = 0;
@@ -2319,11 +2888,28 @@ const APP_JS = `
                 return '<div class="metric-grid">' + cards.join('') + '</div>';
             }
 
+            // ---------- 弹层两栏：左「说明 + 参数 + 操作」 / 右「结果」 ----------
+            function toolParamsEl() { return document.getElementById('toolModalParams'); }
+            function toolSideActionsEl() { return document.getElementById('toolModalSideActions'); }
+            function setToolParams(html) { const el = toolParamsEl(); if (el) el.innerHTML = html || ''; }
+            function setToolActions(html) { const el = toolSideActionsEl(); if (el) el.innerHTML = html || ''; }
+            // 左栏操作按钮工厂：primary=实心主操作，secondary=描边次操作（事件由各工具在渲染后按 id 绑定）
+            function primaryAction(id, icon, label, extraClass) {
+                return '<button class="btn btn-primary ' + (extraClass || '') + '" id="' + id + '"><i class="fas ' + icon + '"></i> ' + escapeHTML(label) + '</button>';
+            }
+            function secondaryAction(id, icon, label, extraClass) {
+                return '<button class="btn ' + (extraClass || '') + '" id="' + id + '"><i class="fas ' + icon + '"></i> ' + escapeHTML(label) + '</button>';
+            }
+
             function openToolModal(title, desc) {
                 const mt = document.getElementById('toolModalTitle');
                 const md = document.getElementById('toolModalDesc');
                 if (mt) mt.textContent = title || '';
-                if (md) md.textContent = desc || '';
+                if (md) md.textContent = ''; // 说明文字改由左栏承载，头部只保留标题与操作
+                const sd = document.getElementById('toolModalSideDesc');
+                if (sd) sd.textContent = desc || '';
+                setToolParams('');
+                setToolActions('');
                 const body = document.getElementById('toolModalBody');
                 if (body) body.innerHTML = '<div class="tool-loading"><span class="loading"></span> ' + escapeHTML(i18n[currentLang].running) + '</div>';
                 const el = document.getElementById('toolModal');
@@ -2356,6 +2942,8 @@ const APP_JS = `
                     't-loss': t.loss,
                     't-sec': t.sec,
                     't-sec-sub': t.secSub,
+                    't-sec-group-transport': t.secGroupTransport,
+                    't-sec-group-origin': t.secGroupOrigin,
                     't-geo': t.geo,
                     't-geo-sub': t.geoSub,
                     't-user-geo': t.userGeo,
@@ -2393,8 +2981,8 @@ const APP_JS = `
                     't-user-org': t.userOrg,
                     't-user-ip': t.userIp,
                     't-hw': t.hw,
-                    't-history-title': t.historyTitle,
-                    't-history-sub': t.historySub,
+                    't-history-title': t.historyLocalTitle,
+                    't-history-sub': t.historyLocalSub,
                     't-no-records': t.noRecords,
                     't-usage-title': t.usageTitle,
                     't-usage-sub': t.usageSub,
@@ -2435,7 +3023,7 @@ const APP_JS = `
 
                 // 协议显示
                 if (elements.protoVal) {
-                    const rawProto = BACKEND_DATA.httpProtocolRaw;
+                    const rawProto = BACKEND_DATA.httpProtocolRaw || '';
                     let displayText = rawProto;
                     if (rawProto.toUpperCase().includes('HTTP/3')) {
                         displayText += ' <span class="badge badge-info">QUIC</span>';
@@ -2490,6 +3078,7 @@ const APP_JS = `
                 // 动态生成的文本也跟随语言刷新（刷新硬件信息、网络质量、真实IP位置）
                 updateHardwareInfo();
                 if (lastRtt !== null) updateQuality(lastRtt);
+                geoRetryCount = 0; // 重新允许地理定位重试
                 fetchUserGeo();
                 if (document.querySelector('.fraud-info')) loadFraudScore();
                 // 若工具结果弹层正打开，按新语言重新执行，保证结果正文也同步
@@ -2643,6 +3232,11 @@ const APP_JS = `
                 try {
                     const rttRes = await fetchWithTimeout(window.location.origin + '/health?_=' + Date.now(), 
                         { method: 'HEAD', cache: 'no-store' }, 2000);
+                    if (rttRes && rttRes.status === 403) {
+                        // 会话令牌失效（isolate 重建/令牌过期）：刷新页面重新领取令牌
+                        try { window.location.reload(); } catch (e) {}
+                        return;
+                    }
                     if (rttRes && rttRes.status === 429) {
                         // 健康检查命中独立限流：跳过本次采样，不计丢包
                         setTimeout(testRtt, 5000);
@@ -2788,11 +3382,16 @@ const APP_JS = `
                     }
                     return;
                 }
+                geoRetryCount = 0;
                 
                 try {
-                    const res = await fetch(\`https://ipapi.co/\${ip}/json/\`);
-                    const geoData = await res.json();
-                    if (geoData.error) throw new Error(geoData.reason);
+                    let geoData = _userGeoCache;
+                    if (!geoData) {
+                        const res = await fetch(\`https://ipapi.co/\${ip}/json/\`, { signal: AbortSignal.timeout(8000) });
+                        geoData = await res.json();
+                        if (geoData.error) throw new Error(geoData.reason);
+                        _userGeoCache = geoData;
+                    }
                     
                     const dist = calculateDistance(
                         BACKEND_DATA.latNum, BACKEND_DATA.lonNum,
@@ -2851,6 +3450,7 @@ const APP_JS = `
                 
                 try {
                     const res = await fetch('/cpu-test?n=20000');
+                    if (!res.ok) throw new Error('http ' + res.status);
                     const data = await res.json();
                     const tone = data.opsMs > 50 ? 'ok' : (data.opsMs > 20 ? 'warn' : 'bad');
                     showResult(elements.cpuResult, resultTitle(t.cpuPerf) + metricGrid([
@@ -3010,20 +3610,24 @@ const APP_JS = `
                 showResult(elements.lossResult, '<span class="loading"></span> ' + t.lossTesting);
                 
                 const total = 10;
+                let attempted = 0;
                 let failed = 0;
                 for (let i = 0; i < total; i++) {
                     try {
-                        await fetchWithTimeout(window.location.origin + '/health?_loss=' + Date.now() + i, 
+                        const res = await fetchWithTimeout(window.location.origin + '/health?_loss=' + Date.now() + i, 
                             { method: 'HEAD', cache: 'no-store' }, 3000);
+                        if (res.status === 429) continue; // 限流响应不算成功样本，也不计入分母
+                        attempted++;
                     } catch (e) {
+                        attempted++;
                         failed++;
                     }
                 }
-                const lossPercent = Math.round((failed / total) * 100);
+                const lossPercent = attempted > 0 ? Math.round((failed / attempted) * 100) : 0;
                 const tone = lossPercent === 0 ? 'ok' : (lossPercent < 5 ? 'warn' : 'bad');
                 showResult(elements.lossResult, resultTitle(t.lossResult) + metricGrid([
-                    metricCard(t.lossResult, lossPercent, '%', tone, lossPercent),
-                    metricCard(t.samples, total, '', null, null),
+                    metricCard(t.lossResult, attempted > 0 ? lossPercent : '--', '%', tone, lossPercent),
+                    metricCard(t.samples, attempted, '', null, null),
                     metricCard(t.lossPacketsLost, failed, '', null, null)
                 ]));
                 lossTestRunning = false;
@@ -3042,7 +3646,15 @@ const APP_JS = `
                 for (const size of sizes) {
                     const start = performance.now();
                     try {
-                        await fetchWithTimeout(\`/speedtest?size=\${size}\`, {}, 15000);
+                        const spRes = await fetchWithTimeout(\`/speedtest?size=\${size}\`, {}, 15000);
+                        if (spRes.body) {
+                            // 必须读完整响应体：fetch 在响应头到达即返回，不读完会把下载测速高估成 TTFB
+                            const rd = spRes.body.getReader();
+                            while (true) {
+                                const step = await rd.read();
+                                if (step.done) break;
+                            }
+                        }
                         const duration = performance.now() - start;
                         const speedMbps = ((size * 8) / (duration / 1000)) / 1000000;
                         results.push({ sizeKB: Math.round(size/1024), speed: speedMbps.toFixed(2) });
@@ -3061,6 +3673,7 @@ const APP_JS = `
                 cards.push(metricCard(t.speedAvg, avgSpeed.toFixed(2), 'Mbps', avgTone, Math.min(100, avgSpeed * 2)));
                 showResult(elements.speedResult, resultTitle(t.speedResultTitle) + metricGrid(cards));
                 logSpeedTest(avgSpeed, results);
+                pushLocalHistory({ type: 'speed', label: t.speedBtn, value: avgSpeed.toFixed(1), unit: ' Mbps', tone: avgTone });
                 speedTestRunning = false;
             }
 
@@ -3081,17 +3694,28 @@ const APP_JS = `
                 for (const domain of domains) {
                     const start = performance.now();
                     try {
-                        await new Promise((resolve, reject) => {
+                        const loadTime = await new Promise((resolve) => {
                             const img = new Image();
                             const timeout = setTimeout(() => {
                                 img.src = '';
-                                reject(new Error('timeout'));
+                                resolve(null);
                             }, 5000);
-                            img.onload = () => { clearTimeout(timeout); resolve(); };
-                            img.onerror = () => { clearTimeout(timeout); resolve(); };
+                            img.onload = () => { clearTimeout(timeout); resolve(Math.round(performance.now() - start)); };
+                            img.onerror = () => { clearTimeout(timeout); resolve(Math.round(performance.now() - start)); };
                             img.src = domain.url;
                         });
-                        const dnsTime = Math.round(performance.now() - start);
+                        // 优先取浏览器 Resource Timing 暴露的真实 DNS 解析耗时；
+                        // 跨域无 Timing-Allow-Origin 时该值为 0，退化为完整加载耗时
+                        let dnsTime = loadTime;
+                        try {
+                            const entries = performance.getEntriesByName(domain.url);
+                            if (entries.length > 0) {
+                                const e = entries[entries.length - 1];
+                                if (e.domainLookupEnd > 0 && e.domainLookupStart > 0 && e.domainLookupEnd >= e.domainLookupStart) {
+                                    dnsTime = Math.round(e.domainLookupEnd - e.domainLookupStart);
+                                }
+                            }
+                        } catch (e2) {}
                         results.push({ domain: domain.name, time: dnsTime });
                     } catch (e) {
                         results.push({ domain: domain.name, time: null });
@@ -3147,6 +3771,417 @@ const APP_JS = `
                 mediaTestRunning = false;
             }
 
+            // ==================================================================
+            // 4.7.0 新增：A1 代理检测 · A2 长时质量监控 · A3 多流并发测速
+            //            C1 本地历史 · E1 诊断结论可解释化
+            // ==================================================================
+
+            // ---------- 公用：结果行 ----------
+            function rowItem(name, val, bad) {
+                return '<div class="result-row' + (bad ? ' is-warn' : '') + '"><span class="rr-name">' + escapeHTML(String(name)) + '</span>' +
+                    '<span class="rr-val" style="word-break:break-all">' + escapeHTML(String(val)) + '</span></div>';
+            }
+
+            // ---------- E1：把 findings 的 code 映射为「可能原因 + 建议动作」 ----------
+            function adviceBlock(findings) {
+                const t = i18n[currentLang];
+                const table = t.advice || {};
+                const cards = [];
+                const seen = {};
+                for (const f of (findings || [])) {
+                    if (!f || !f.code || seen[f.code]) continue;
+                    seen[f.code] = 1;
+                    const a = table[f.code];
+                    if (!a) continue;
+                    cards.push('<div class="result-row" style="flex-direction:column;align-items:flex-start;gap:4px">' +
+                        '<span class="rr-name" style="font-size:11px;color:var(--text-tertiary)"><i class="fas fa-circle-question"></i> ' + escapeHTML(t.adviceCause) + '</span>' +
+                        '<span class="rr-val" style="font-weight:400;color:var(--text-secondary);white-space:normal;text-align:left">' + escapeHTML(a.cause) + '</span>' +
+                        '<span class="rr-name" style="font-size:11px;color:var(--text-tertiary);margin-top:4px"><i class="fas fa-screwdriver-wrench"></i> ' + escapeHTML(t.adviceAction) + '</span>' +
+                        '<span class="rr-val" style="font-weight:400;color:var(--text-primary);white-space:normal;text-align:left">' + escapeHTML(a.action) + '</span>' +
+                        '</div>');
+                }
+                if (!cards.length) return '';
+                return resultTitle(t.adviceTitle) + '<div class="result-rows">' + cards.join('') + '</div>';
+            }
+
+            // ---------- C1：本地历史（localStorage，零 KV 写入） ----------
+            const LS_HISTORY_KEY = 'netsight-local-history';
+            const LS_HISTORY_MAX = 20;
+            function loadLocalHistoryArr() {
+                try {
+                    const raw = localStorage.getItem(LS_HISTORY_KEY);
+                    const arr = raw ? JSON.parse(raw) : [];
+                    return Array.isArray(arr) ? arr : [];
+                } catch (e) { return []; }
+            }
+            function saveLocalHistoryArr(arr) {
+                try { localStorage.setItem(LS_HISTORY_KEY, JSON.stringify((arr || []).slice(0, LS_HISTORY_MAX))); } catch (e) {}
+            }
+            function pushLocalHistory(entry) {
+                try {
+                    if (!entry || !entry.type) return;
+                    const arr = loadLocalHistoryArr();
+                    arr.unshift({
+                        t: Date.now(),
+                        type: entry.type,
+                        label: entry.label || '',
+                        value: entry.value === undefined || entry.value === null ? '' : String(entry.value),
+                        unit: entry.unit || '',
+                        tone: entry.tone || ''
+                    });
+                    saveLocalHistoryArr(arr);
+                    renderLocalHistory();
+                } catch (e) {}
+            }
+            function renderLocalHistory() {
+                const panel = document.getElementById('speed-history-panel');
+                if (!panel) return;
+                const t = i18n[currentLang];
+                const arr = loadLocalHistoryArr();
+                if (!arr.length) {
+                    panel.innerHTML = '<div class="no-data"><i class="fas fa-inbox"></i> ' + escapeHTML(t.historyEmpty) + '</div>';
+                    return;
+                }
+                let html = '<table class="speed-history-table"><thead><tr><th>' + escapeHTML(t.historyLocalTitle) + '</th><th>' + escapeHTML(t.status) + '</th></tr></thead><tbody>';
+                for (const r of arr) {
+                    let time = '';
+                    try { time = new Date(r.t).toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }); } catch (e) {}
+                    const cls = r.tone === 'ok' ? 'speed-good' : (r.tone === 'warn' ? 'speed-mid' : (r.tone === 'bad' ? 'speed-low' : ''));
+                    html += '<tr><td><span style="color:var(--text-tertiary);font-size:11px">' + escapeHTML(time) + '</span></td>' +
+                        '<td><span style="color:var(--text-tertiary);font-size:11px">' + escapeHTML(r.label) + '</span> <span class="' + cls + '">' +
+                        escapeHTML(r.value) + escapeHTML(r.unit) + '</span></td></tr>';
+                }
+                html += '</tbody></table>' +
+                    '<div class="tool-field" style="margin-top:10px"><button class="btn btn-ghost btn-sm" id="clearLocalHistory"><i class="fas fa-trash-can"></i> ' + escapeHTML(t.historyClear) + '</button></div>';
+                panel.innerHTML = html;
+                const btn = document.getElementById('clearLocalHistory');
+                if (btn) btn.addEventListener('click', function () {
+                    saveLocalHistoryArr([]);
+                    renderLocalHistory();
+                });
+            }
+
+            // ---------- 公用：WebRTC 候选 IP 采集（浏览器直连，零 Worker 出站） ----------
+            function isLocalIp(ip) {
+                return /^(10\\.|172\\.(1[6-9]|2\\d|3[01])\\.|192\\.168\\.|169\\.254\\.|127\\.)/.test(String(ip));
+            }
+            function collectWebRtcIps(timeoutMs) {
+                return new Promise(function (resolve) {
+                    const found = new Set();
+                    let done = false;
+                    const finish = function () { if (!done) { done = true; resolve(found); } };
+                    const timeout = setTimeout(finish, timeoutMs || 5000);
+                    try {
+                        const pc = new RTCPeerConnection({ iceServers: [] });
+                        pc.createDataChannel('');
+                        pc.onicecandidate = function (e) {
+                            if (!e.candidate) {
+                                clearTimeout(timeout);
+                                try { pc.close(); } catch (e1) {}
+                                finish();
+                                return;
+                            }
+                            const match = e.candidate.candidate.match(/(\\d{1,3}\\.){3}\\d{1,3}/);
+                            if (match) found.add(match[0]);
+                        };
+                        pc.createOffer().then(function (offer) { return pc.setLocalDescription(offer); }).catch(function () {
+                            clearTimeout(timeout);
+                            finish();
+                        });
+                    } catch (e) {
+                        clearTimeout(timeout);
+                        finish();
+                    }
+                });
+            }
+
+            // ---------- A1：代理 / VPN 一致性检测 ----------
+            let proxyTestRunning = false;
+            async function runProxyCheckTool() {
+                if (proxyTestRunning) return;
+                proxyTestRunning = true;
+                const t = i18n[currentLang];
+                const out = document.getElementById('toolModalBody');
+                if (out) out.innerHTML = '<div class="tool-loading"><span class="loading"></span> ' + escapeHTML(t.running) + '</div>';
+                try {
+                    const ipSet = await collectWebRtcIps(5000);
+                    const ipList = Array.from(ipSet);
+                    const localIps = ipList.filter(isLocalIp);
+                    const publicIps = ipList.filter(function (ip) { return !isLocalIp(ip); });
+                    const httpIp = String(resolvedV4 || BACKEND_DATA.clientIp || '').trim();
+                    const mismatch = publicIps.length > 0 && (!httpIp || publicIps.indexOf(httpIp) === -1);
+                    const verdict = publicIps.length === 0 ? t.proxyUndetermined : (mismatch ? t.proxyMismatch : t.proxyConsistent);
+                    const badge = publicIps.length === 0 ? 'badge' : (mismatch ? 'badge-danger' : 'badge-success');
+                    let html = resultTitle(t.proxyBtn) + '<div class="result-rows">' +
+                        rowItem(t.proxyEgressIp, httpIp || 'N/A') +
+                        rowItem(t.proxyWebrtcPublic, publicIps.length ? publicIps.join(', ') : '—') +
+                        rowItem(t.proxyLocalIp, localIps.length ? localIps.join(', ') : '—') +
+                        '<div class="result-row"><span class="rr-name">' + escapeHTML(t.status) + '</span><span class="rr-val"><span class="badge ' + badge + '">' + escapeHTML(verdict) + '</span></span></div>' +
+                        '</div>' +
+                        '<div style="margin-top:10px;font-size:11px;color:var(--text-tertiary)">' + escapeHTML(t.proxyNote) + '</div>';
+                    if (mismatch) html += adviceBlock([{ code: 'proxy_mismatch' }]);
+                    if (out) out.innerHTML = html;
+                    pushLocalHistory({
+                        type: 'proxy',
+                        label: t.proxyBtn,
+                        value: publicIps.length === 0 ? 'N/A' : (mismatch ? 'MISMATCH' : 'OK'),
+                        tone: publicIps.length === 0 ? '' : (mismatch ? 'bad' : 'ok')
+                    });
+                } catch (e) {
+                    if (out) out.innerHTML = '<div class="tool-error"><i class="fas fa-exclamation-triangle"></i> ' + escapeHTML(t.proxyUndetermined) + '</div>';
+                }
+                proxyTestRunning = false;
+            }
+
+            // ---------- A2：长时网络质量监控（p50/p95/p99 + 卡顿时间线） ----------
+            let qualityRunning = false;
+            let qualityStopRequested = false;
+            function runQualityMonitorTool() {
+                const t = i18n[currentLang];
+                const out = document.getElementById('toolModalBody');
+                if (!out) return;
+                if (qualityRunning) {
+                    // 已有一轮监控在跑（可能被关掉弹层后重新打开）：提示并提供停止入口
+                    setToolParams('');
+                    setToolActions('<button class="btn" id="qmStop"><i class="fas fa-stop"></i> ' + escapeHTML(t.qualityStop) + '</button>');
+                    out.innerHTML = '<div class="no-data">' + escapeHTML(t.qualityRunning) + '...</div>';
+                    const stopOnly = document.getElementById('qmStop');
+                    if (stopOnly) stopOnly.addEventListener('click', function () { qualityStopRequested = true; });
+                    return;
+                }
+                setToolParams(
+                    '<span class="side-label">' + escapeHTML(t.qualityBtn) + '</span>' +
+                    '<select id="qmDuration" class="tool-input">' +
+                    [1, 5, 10].map(function (m) { return '<option value="' + m + '"' + (m === 1 ? ' selected' : '') + '>' + m + ' min</option>'; }).join('') +
+                    '</select>' +
+                    '<div class="side-desc" style="margin:0">' + escapeHTML(t.qualityNote) + '</div>');
+                setToolActions(
+                    primaryAction('qmStart', 'fa-play', t.qualityStart) +
+                    '<button class="btn" id="qmStop" style="display:none"><i class="fas fa-stop"></i> ' + escapeHTML(t.qualityStop) + '</button>');
+                out.innerHTML = '<div id="qmOut"><div class="no-data">' + escapeHTML(t.qualityIntro) + '</div></div>';
+                const startBtn = document.getElementById('qmStart');
+                const stopBtn = document.getElementById('qmStop');
+                if (startBtn) startBtn.addEventListener('click', function () {
+                    const sel = document.getElementById('qmDuration');
+                    startQualityMonitor(parseInt(sel && sel.value, 10) || 1);
+                });
+                if (stopBtn) stopBtn.addEventListener('click', function () { qualityStopRequested = true; });
+            }
+            async function startQualityMonitor(minutes) {
+                if (qualityRunning) return;
+                qualityRunning = true;
+                qualityStopRequested = false;
+                const t = i18n[currentLang];
+                const out = document.getElementById('qmOut');
+                const startBtn = document.getElementById('qmStart');
+                const stopBtn = document.getElementById('qmStop');
+                if (startBtn) startBtn.style.display = 'none';
+                if (stopBtn) stopBtn.style.display = '';
+                const points = [];
+                let lost = 0, limited = 0;
+                const totalMs = Math.max(1, minutes) * 60000;
+                const t0 = performance.now();
+                const outEl = function () { return document.getElementById('qmOut'); };
+                const showProgress = function () {
+                    const box = outEl();
+                    if (!box) return;
+                    const left = Math.max(0, Math.round((totalMs - (performance.now() - t0)) / 1000));
+                    box.innerHTML = '<div class="tool-loading"><span class="loading"></span> ' + escapeHTML(t.qualityRunning) +
+                        ' · ' + points.length + ' ' + escapeHTML(t.qualitySamples) + ' · ' + left + 's</div>';
+                };
+                showProgress();
+                let i = 0;
+                while (!qualityStopRequested && (performance.now() - t0) < totalMs) {
+                    const s = performance.now();
+                    try {
+                        const res = await fetchWithTimeout(window.location.origin + '/health?_qm=' + Date.now() + '_' + (i++), { method: 'HEAD', cache: 'no-store' }, 3000);
+                        if (res.status === 403) { try { window.location.reload(); } catch (e) {} return; }
+                        if (res.status === 429) limited++;
+                        else points.push({ v: Math.round(performance.now() - s), t: Math.round(performance.now() - t0) });
+                    } catch (e) { lost++; }
+                    if (points.length % 5 === 0) showProgress();
+                    await new Promise(function (r) { setTimeout(r, 1000); });
+                }
+                const values = points.map(function (p) { return p.v; });
+                const sorted = values.slice().sort(function (a, b) { return a - b; });
+                const pick = function (p) {
+                    if (!sorted.length) return 0;
+                    const idx = Math.min(sorted.length - 1, Math.max(0, Math.ceil(p * sorted.length) - 1));
+                    return sorted[idx];
+                };
+                const p50 = pick(0.5), p95 = pick(0.95), p99 = pick(0.99);
+                let jit = 0;
+                for (let k = 1; k < values.length; k++) jit += Math.abs(values[k] - values[k - 1]);
+                jit = values.length > 1 ? Math.round(jit / (values.length - 1)) : 0;
+                const attempted = values.length + lost;
+                const lossPct = attempted > 0 ? Math.round((lost / attempted) * 100) : 0;
+                const stallThreshold = Math.max(1, p50 * 2);
+                const stalls = values.filter(function (v) { return v > stallThreshold; }).length;
+                // 时间线：每 5 秒一个桶，取桶内最差延迟
+                const bucketMs = 5000;
+                const buckets = {};
+                for (const p of points) {
+                    const b = Math.floor(p.t / bucketMs);
+                    buckets[b] = Math.max(buckets[b] || 0, p.v);
+                }
+                const strip = Object.keys(buckets).map(Number).sort(function (a, b) { return a - b; }).map(function (k) {
+                    const v = buckets[k];
+                    const color = v <= p50 * 1.5 ? 'var(--success)' : (v <= p50 * 3 ? 'var(--warning)' : 'var(--danger)');
+                    return '<span title="' + escapeHTML(String(v)) + 'ms" style="flex:1 1 auto;min-width:3px;height:22px;background:' + color + ';border-radius:2px"></span>';
+                }).join('');
+                const tone = p95 === 0 ? 'bad' : (p95 <= 100 ? 'ok' : (p95 <= 200 ? 'warn' : 'bad'));
+                const cards = [
+                    metricCard(t.qualityP50, p50, 'ms', tone, Math.min(100, p50)),
+                    metricCard(t.qualityP95, p95, 'ms', tone, Math.min(100, p95)),
+                    metricCard(t.qualityP99, p99, 'ms', tone, Math.min(100, p99)),
+                    metricCard(t.qualityLoss, lossPct, '%', lossPct === 0 ? 'ok' : (lossPct < 5 ? 'warn' : 'bad'), lossPct),
+                    metricCard(t.qualitySamples, values.length, '', null, null),
+                    metricCard(t.qualityStalls, stalls, '', stalls === 0 ? 'ok' : 'warn', null)
+                ];
+                const findings = [];
+                if (!values.length) findings.push({ code: 'rtt_fail' });
+                if (values.length && lossPct > 0) findings.push({ code: 'loss' });
+                if (values.length && p95 > 150) findings.push({ code: 'rtt_high' });
+                if (values.length && jit > 30) findings.push({ code: 'jitter_high' });
+                if (stalls > 0) findings.push({ code: 'stall' });
+                if (limited > 0) findings.push({ code: 'rate_limited' });
+                const resultBox = outEl();
+                if (resultBox) {
+                    resultBox.innerHTML = resultTitle(t.qualityBtn) +
+                        metricGrid(cards) +
+                        resultTitle(t.qualityTimeline) +
+                        '<div style="display:flex;gap:2px;align-items:flex-end">' + (strip || '<span style="font-size:12px;color:var(--text-quaternary)">—</span>') + '</div>' +
+                        (qualityStopRequested ? '<div style="margin-top:8px;font-size:11px;color:var(--text-tertiary)">' + escapeHTML(t.qualityStopped) + '</div>' : '') +
+                        adviceBlock(findings);
+                }
+                pushLocalHistory({
+                    type: 'quality',
+                    label: t.qualityBtn,
+                    value: values.length ? ('p50 ' + p50 + '/p95 ' + p95 + ' ms') : 'N/A',
+                    tone: values.length ? tone : 'bad'
+                });
+                if (startBtn) startBtn.style.display = '';
+                if (stopBtn) stopBtn.style.display = 'none';
+                qualityRunning = false;
+            }
+
+            // ---------- A3：多流并发测速 + 实时速率曲线 ----------
+            let multiSpeedRunning = false;
+            function runMultiSpeedTool() {
+                const t = i18n[currentLang];
+                const out = document.getElementById('toolModalBody');
+                if (!out) return;
+                setToolParams('<div class="side-desc" style="margin:0">' + escapeHTML(t.multispeedNote) + '</div>');
+                setToolActions(primaryAction('msStart', 'fa-play', t.bbStart));
+                out.innerHTML = '<div class="no-data">' + escapeHTML(t.multispeedIntro) + '</div>';
+                const go = document.getElementById('msStart');
+                if (go) go.addEventListener('click', startMultiSpeedTest);
+            }
+            async function startMultiSpeedTest() {
+                if (multiSpeedRunning) return;
+                multiSpeedRunning = true;
+                const t = i18n[currentLang];
+                const STREAMS = 4;
+                const SIZE = 16777216; // 每流 16MB，合计约 64MB
+                const msOut = document.getElementById('msOut');
+                if (msOut) msOut.innerHTML = '<div class="tool-loading"><span class="loading"></span> ' + escapeHTML(t.running) + '</div>' +
+                    '<div class="chart-container" style="margin-top:10px"><canvas id="msChart"></canvas></div>';
+                const points = [];
+                let totalBytes = 0;
+                const t0 = performance.now();
+                const drawChartNow = function () {
+                    const cv = document.getElementById('msChart');
+                    if (!cv) return;
+                    const rect = cv.parentElement ? cv.parentElement.getBoundingClientRect() : { width: 320 };
+                    cv.width = Math.max(200, Math.round(rect.width || 320));
+                    cv.height = 160;
+                    const g = cv.getContext('2d');
+                    if (!g) return;
+                    g.clearRect(0, 0, cv.width, cv.height);
+                    if (points.length < 2) return;
+                    const maxV = Math.max.apply(null, points.map(function (p) { return p.v; })) || 1;
+                    g.beginPath();
+                    g.strokeStyle = '#c3c7cd';
+                    g.lineWidth = 2;
+                    points.forEach(function (p, idx) {
+                        const x = (idx / (points.length - 1)) * cv.width;
+                        const y = cv.height - (p.v / maxV) * (cv.height - 16) - 8;
+                        if (idx === 0) g.moveTo(x, y); else g.lineTo(x, y);
+                    });
+                    g.stroke();
+                    g.fillStyle = 'rgba(195,199,205,0.18)';
+                    g.lineTo(cv.width, cv.height);
+                    g.lineTo(0, cv.height);
+                    g.fill();
+                    g.fillStyle = '#9a9da3';
+                    g.font = '11px system-ui, sans-serif';
+                    g.fillText(maxV.toFixed(1) + ' Mbps', 6, 14);
+                };
+                const runStream = async function () {
+                    try {
+                        const res = await fetch('/speedtest?size=' + SIZE, { cache: 'no-store' });
+                        if (!res.ok || !res.body) return;
+                        const reader = res.body.getReader();
+                        while (true) {
+                            const step = await reader.read();
+                            if (step.done) break;
+                            totalBytes += step.value ? step.value.length : 0;
+                        }
+                    } catch (e) {}
+                };
+                let lastTick = performance.now();
+                let lastTickBytes = 0;
+                const ticker = setInterval(function () {
+                    const now = performance.now();
+                    const dt = now - lastTick;
+                    const db = totalBytes - lastTickBytes;
+                    lastTick = now;
+                    lastTickBytes = totalBytes;
+                    if (dt > 0) {
+                        points.push({ t: Math.round(now - t0), v: ((db * 8) / (dt / 1000)) / 1000000 });
+                        drawChartNow();
+                    }
+                }, 250);
+                try {
+                    const jobs = [];
+                    for (let s = 0; s < STREAMS; s++) jobs.push(runStream());
+                    await Promise.all(jobs);
+                } catch (e) {}
+                clearInterval(ticker);
+                const wall = Math.max(0.001, (performance.now() - t0) / 1000);
+                const avg = ((totalBytes * 8) / wall) / 1000000;
+                const vals = points.map(function (p) { return p.v; }).sort(function (a, b) { return a - b; });
+                const p95 = vals.length ? vals[Math.min(vals.length - 1, Math.ceil(0.95 * vals.length) - 1)] : 0;
+                const stability = avg > 0 ? Math.round((p95 / avg) * 100) : 0;
+                const avgTone = avg >= 50 ? 'ok' : (avg >= 10 ? 'warn' : 'bad');
+                const cards = [
+                    metricCard(t.multispeedAvg, avg.toFixed(2), 'Mbps', avgTone, Math.min(100, avg * 2)),
+                    metricCard(t.multispeedP95, p95.toFixed(2), 'Mbps', null, Math.min(100, p95 * 2)),
+                    metricCard(t.multispeedStability, stability, '%', stability > 0 && stability < 200 ? 'ok' : 'warn', null),
+                    metricCard(t.multispeedStreams, STREAMS, '', null, null),
+                    metricCard(t.multispeedTotal, (totalBytes / 1048576).toFixed(1), 'MB', null, null)
+                ];
+                const findings = [];
+                if (!totalBytes) findings.push({ code: 'down_low' });
+                else if (avg < 5) findings.push({ code: 'down_low' });
+                const msResultEl = document.getElementById('msOut');
+                if (msResultEl) {
+                    msResultEl.innerHTML = !totalBytes
+                        ? '<div class="tool-error"><i class="fas fa-exclamation-triangle"></i> ' + escapeHTML(t.multispeedFailed) + '</div>'
+                        : resultTitle(t.multispeedBtn) + metricGrid(cards) +
+                          '<div style="margin-top:10px;font-size:11px;color:var(--text-tertiary)">' + escapeHTML(t.multispeedRate) + ': ' + avg.toFixed(2) + ' Mbps</div>' +
+                          adviceBlock(findings);
+                }
+                pushLocalHistory({
+                    type: 'multispeed',
+                    label: t.multispeedBtn,
+                    value: totalBytes ? avg.toFixed(1) : 'N/A',
+                    unit: totalBytes ? ' Mbps' : '',
+                    tone: totalBytes ? avgTone : 'bad'
+                });
+                multiSpeedRunning = false;
+            }
+
             // ==================== 多节点对比 ====================
             const nodeModalEl = document.getElementById('nodeModal');
             const nodeUrlsInput = document.getElementById('nodeUrls');
@@ -3176,27 +4211,39 @@ const APP_JS = `
             });
 
             // ==================== 工具卡片 + 结果弹层 ====================
+            // 分组顺序与组内顺序即界面展示顺序
+            const TOOL_GROUPS = [
+                { key: 'quality', icon: 'fa-wave-square', nameKey: 'grpQuality' },
+                { key: 'bandwidth', icon: 'fa-gauge-high', nameKey: 'grpBandwidth' },
+                { key: 'dns', icon: 'fa-server', nameKey: 'grpDns' },
+                { key: 'security', icon: 'fa-shield-halved', nameKey: 'grpSecurity' },
+                { key: 'reach', icon: 'fa-tower-cell', nameKey: 'grpReach' },
+                { key: 'monitor', icon: 'fa-microchip', nameKey: 'grpMonitor' }
+            ];
             const TOOL_LIST = [
-                { key: 'quickcheck', icon: 'fa-heart-pulse', nameKey: 'quickcheckBtn' },
-                { key: 'loss', icon: 'fa-percent', nameKey: 'lossBtn' },
-                { key: 'speed', icon: 'fa-gauge-high', nameKey: 'speedBtn' },
-                { key: 'bufferbloat', icon: 'fa-wave-square', nameKey: 'bufferbloatBtn' },
-                { key: 'dns', icon: 'fa-server', nameKey: 'dnsBtn' },
-                { key: 'dnslookup', icon: 'fa-magnifying-glass-chart', nameKey: 'dnslookupBtn' },
-                { key: 'domaincheck', icon: 'fa-fingerprint', nameKey: 'domaincheckBtn' },
-                { key: 'monitor', icon: 'fa-tower-broadcast', nameKey: 'monitorBtn' },
-                { key: 'cpu', icon: 'fa-microchip', nameKey: 'cpuBtn' },
-                { key: 'ws', icon: 'fa-bolt', nameKey: 'wsBtn' },
-                { key: 'concurrent', icon: 'fa-layer-group', nameKey: 'concurrentBtn' },
-                { key: 'stream', icon: 'fa-stream', nameKey: 'streamBtn' },
-                { key: 'media', icon: 'fa-circle-play', nameKey: 'mediaBtn' },
-                { key: 'multi', icon: 'fa-diagram-project', nameKey: 'multiBtn' },
-                { key: 'webrtc', icon: 'fa-user-shield', nameKey: 'webrtcBtn' },
-                { key: 'ttfb', icon: 'fa-stopwatch', nameKey: 'ttfbBtn' },
-                { key: 'upload', icon: 'fa-upload', nameKey: 'uploadBtn' },
-                { key: 'audit', icon: 'fa-stethoscope', nameKey: 'auditBtn' },
-                { key: 'dnscompare', icon: 'fa-code-compare', nameKey: 'dnscompareBtn' },
-                { key: 'reach', icon: 'fa-tower-cell', nameKey: 'reachBtn' }
+                { key: 'quickcheck', group: 'quality', icon: 'fa-heart-pulse', nameKey: 'quickcheckBtn' },
+                { key: 'quality', group: 'quality', icon: 'fa-chart-line', nameKey: 'qualityBtn' },
+                { key: 'loss', group: 'quality', icon: 'fa-percent', nameKey: 'lossBtn' },
+                { key: 'ttfb', group: 'quality', icon: 'fa-stopwatch', nameKey: 'ttfbBtn' },
+                { key: 'ws', group: 'quality', icon: 'fa-bolt', nameKey: 'wsBtn' },
+                { key: 'proxy', group: 'quality', icon: 'fa-user-secret', nameKey: 'proxyBtn' },
+                { key: 'webrtc', group: 'quality', icon: 'fa-user-shield', nameKey: 'webrtcBtn' },
+                { key: 'speed', group: 'bandwidth', icon: 'fa-gauge-high', nameKey: 'speedBtn' },
+                { key: 'multispeed', group: 'bandwidth', icon: 'fa-gauge-simple-high', nameKey: 'multispeedBtn' },
+                { key: 'upload', group: 'bandwidth', icon: 'fa-upload', nameKey: 'uploadBtn' },
+                { key: 'bufferbloat', group: 'bandwidth', icon: 'fa-wave-square', nameKey: 'bufferbloatBtn' },
+                { key: 'stream', group: 'bandwidth', icon: 'fa-stream', nameKey: 'streamBtn' },
+                { key: 'concurrent', group: 'bandwidth', icon: 'fa-layer-group', nameKey: 'concurrentBtn' },
+                { key: 'dns', group: 'dns', icon: 'fa-server', nameKey: 'dnsBtn' },
+                { key: 'dnslookup', group: 'dns', icon: 'fa-magnifying-glass-chart', nameKey: 'dnslookupBtn' },
+                { key: 'dnscompare', group: 'dns', icon: 'fa-code-compare', nameKey: 'dnscompareBtn' },
+                { key: 'audit', group: 'security', icon: 'fa-stethoscope', nameKey: 'auditBtn' },
+                { key: 'domaincheck', group: 'security', icon: 'fa-fingerprint', nameKey: 'domaincheckBtn' },
+                { key: 'media', group: 'reach', icon: 'fa-circle-play', nameKey: 'mediaBtn' },
+                { key: 'reach', group: 'reach', icon: 'fa-tower-cell', nameKey: 'reachBtn' },
+                { key: 'multi', group: 'reach', icon: 'fa-diagram-project', nameKey: 'multiBtn' },
+                { key: 'monitor', group: 'monitor', icon: 'fa-tower-broadcast', nameKey: 'monitorBtn' },
+                { key: 'cpu', group: 'monitor', icon: 'fa-microchip', nameKey: 'cpuBtn' }
             ];
             let currentToolKey = null;
             const TOOL_RUNNERS = {
@@ -3204,21 +4251,32 @@ const APP_JS = `
                 concurrent: runConcurrentTest, stream: runStreamTest, media: runClientMediaTest,
                 webrtc: runWebRtcTest, ttfb: runTtfbTest, upload: runUploadTest, audit: runSiteAudit,
                 quickcheck: runQuickCheckTool, bufferbloat: runBufferbloatTool, dnslookup: runDnsLookupTool,
-                domaincheck: runDomainCheckTool, monitor: runMonitorTool, dnscompare: runDnsCompare, reach: runReachCheck
+                domaincheck: runDomainCheckTool, monitor: runMonitorTool, dnscompare: runDnsCompare, reach: runReachCheck,
+                proxy: runProxyCheckTool, quality: runQualityMonitorTool, multispeed: runMultiSpeedTool
             };
 
             function renderToolCards() {
                 const grid = document.getElementById('toolGrid');
                 if (!grid) return;
                 const t = i18n[currentLang];
-                grid.innerHTML = TOOL_LIST.map(item =>
-                    '<button class="tool-card" data-tool="' + item.key + '">' +
-                        '<span class="tc-icon"><i class="fas ' + item.icon + '"></i></span>' +
-                        '<span class="tc-text"><span class="tc-name">' + escapeHTML(t[item.nameKey] || item.key) + '</span>' +
-                        '<span class="tc-desc">' + escapeHTML((t.toolDesc && t.toolDesc[item.key]) || '') + '</span></span>' +
-                        '<i class="fas fa-chevron-right tc-go"></i>' +
-                    '</button>'
-                ).join('');
+                grid.innerHTML = TOOL_GROUPS.map(function (g) {
+                    const items = TOOL_LIST.filter(function (x) { return x.group === g.key; });
+                    if (!items.length) return '';
+                    const cards = items.map(function (item) {
+                        const name = t[item.nameKey] || item.key;
+                        const desc = (t.toolDesc && t.toolDesc[item.key]) || '';
+                        return '<button class="tool-card" data-tool="' + item.key + '" title="' + escapeHTML(name + (desc ? ' — ' + desc : '')) + '">' +
+                            '<span class="tc-icon"><i class="fas ' + item.icon + '"></i></span>' +
+                            '<span class="tc-text"><span class="tc-name">' + escapeHTML(name) + '</span></span>' +
+                            '<i class="fas fa-chevron-right tc-go"></i>' +
+                            '</button>';
+                    }).join('');
+                    return '<div class="tool-group">' +
+                        '<div class="tool-group-head"><i class="fas ' + g.icon + '"></i> <span>' + escapeHTML(t[g.nameKey] || g.key) + '</span>' +
+                        '<span class="tg-count">' + items.length + '</span></div>' +
+                        '<div class="tool-group-grid">' + cards + '</div>' +
+                        '</div>';
+                }).join('');
             }
 
             function handleToolClick(key) {
@@ -3279,7 +4337,7 @@ const APP_JS = `
                     let status = 'error';
                     let errorMsg = '';
                     try {
-                        const testUrl = node + '/speedtest?size=1';
+                        const testUrl = node + '/node-ping';
                         const res = await fetch(testUrl, { method: 'GET', cache: 'no-store', signal: AbortSignal.timeout(5000) });
                         if (res.ok) {
                             latency = Math.round(performance.now() - start);
@@ -3312,39 +4370,15 @@ const APP_JS = `
                 showResult(elements.webrtcResult, '<span class="loading"></span> ' + t.webrtcTesting);
 
                 try {
-                    const ips = await new Promise((resolve) => {
-                        const found = new Set();
-                        const timeout = setTimeout(() => resolve(found), 5000);
-                        try {
-                            const pc = new RTCPeerConnection({ iceServers: [] });
-                            pc.createDataChannel('');
-                            pc.onicecandidate = (e) => {
-                                if (!e.candidate) {
-                                    clearTimeout(timeout);
-                                    pc.close();
-                                    resolve(found);
-                                    return;
-                                }
-                                const match = e.candidate.candidate.match(/(\\d{1,3}\\.){3}\\d{1,3}/);
-                                if (match) found.add(match[0]);
-                            };
-                            pc.createOffer().then(offer => pc.setLocalDescription(offer)).catch(() => {
-                                clearTimeout(timeout);
-                                resolve(found);
-                            });
-                        } catch (e) {
-                            clearTimeout(timeout);
-                            resolve(found);
-                        }
-                    });
+                    // 复用 collectWebRtcIps：A1 代理检测与泄漏检测共用同一采集逻辑
+                    const ips = await collectWebRtcIps(5000);
 
                     if (ips.size === 0) {
                         showResult(elements.webrtcResult, resultTitle('WebRTC') + '<div class="result-row"><span class="rr-name">' + t.webrtcSafe + '</span><span class="rr-val">OK</span></div>');
                     } else {
-                        const ipList = [...ips];
-                        const localRe = /^(10\\.|172\\.(1[6-9]|2\\d|3[01])\\.|192\\.168\\.)/;
-                        const localIps = ipList.filter(ip => localRe.test(ip));
-                        const publicIps = ipList.filter(ip => !localRe.test(ip));
+                        const ipList = Array.from(ips);
+                        const localIps = ipList.filter(isLocalIp);
+                        const publicIps = ipList.filter(function (ip) { return !isLocalIp(ip); });
                         let rows = '';
                         localIps.forEach(ip => { rows += '<div class="result-row"><span class="rr-name">' + t.webrtcLocal + '</span><span class="rr-val">' + escapeHTML(ip) + '</span></div>'; });
                         publicIps.forEach(ip => { rows += '<div class="result-row is-bad"><span class="rr-name">' + t.webrtcPublic + '</span><span class="rr-val">' + escapeHTML(ip) + '</span></div>'; });
@@ -3459,21 +4493,24 @@ const APP_JS = `
                 const t = i18n[currentLang];
                 const body = document.getElementById('toolModalBody');
                 if (!body) return;
-                body.innerHTML = '<div class="tool-field">' +
+                setToolParams(
                     '<input type="url" id="auditUrl" class="tool-input" placeholder="' + escapeHTML(t.auditPrompt) + '" value="https://">' +
-                    '<button class="btn btn-primary" id="auditGo"><i class="fas fa-stethoscope"></i> ' + escapeHTML(t.auditRun) + '</button>' +
-                    '</div>';
+                    '<label style="display:flex;align-items:center;gap:8px;color:var(--text-secondary);cursor:pointer">' +
+                    '<input type="checkbox" id="auditCert"> ' + escapeHTML(t.auditCertLabel) + '</label>');
+                setToolActions(primaryAction('auditGo', 'fa-stethoscope', t.auditRun));
+                body.innerHTML = '<div class="no-data">' + escapeHTML(t.auditPrompt) + '</div>';
                 const input = document.getElementById('auditUrl');
                 const go = document.getElementById('auditGo');
+                const certBox = document.getElementById('auditCert');
                 if (input && go) {
-                    const submit = () => startSiteAudit(input.value);
+                    const submit = () => startSiteAudit(input.value, !!(certBox && certBox.checked));
                     go.addEventListener('click', submit);
                     input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
                     input.focus();
                 }
             }
 
-            async function startSiteAudit(rawUrl) {
+            async function startSiteAudit(rawUrl, checkCert) {
                 const t = i18n[currentLang];
                 let u = (rawUrl || '').trim();
                 if (!u) return;
@@ -3489,7 +4526,7 @@ const APP_JS = `
                 }
                 showResult(null, '<div class="tool-loading"><span class="loading"></span> ' + escapeHTML(t.running) + '</div>');
                 try {
-                    const res = await fetch('/api/site-audit?url=' + encodeURIComponent(u), { cache: 'no-store' });
+                    const res = await fetch('/api/site-audit?url=' + encodeURIComponent(u) + (checkCert ? '&cert=1' : ''), { cache: 'no-store' });
                     const data = await res.json();
                     if (!res.ok || data.error) throw new Error(data.error || 'failed');
                     renderSiteAudit(data);
@@ -3519,26 +4556,39 @@ const APP_JS = `
                 const issueRows = issues.length
                     ? issues.map(code => '<div class="result-row is-warn"><span class="rr-name">!</span><span class="rr-val">' + escapeHTML(issueMap[code] || code) + '</span></div>').join('')
                     : '<div class="result-row"><span class="rr-name">OK</span><span class="rr-val">' + escapeHTML(t.auditNoIssues) + '</span></div>';
+                const certRows = d.cert
+                    ? resultTitle('TLS Certificate') +
+                      '<div class="result-rows">' +
+                      rowItem('notAfter', d.cert.notAfter + ' · ' + d.cert.daysLeft + 'd') +
+                      rowItem('issuer', d.cert.issuer || '-') +
+                      rowItem('source', d.cert.source || '-') +
+                      '</div>'
+                    : '';
                 const html =
                     resultTitle(t.auditFinal) +
                     '<div class="result-rows" style="margin-bottom:16px;"><div class="result-row"><span class="rr-name">' + escapeHTML(d.finalUrl || '') + '</span><span class="rr-val">' + escapeHTML(String(d.status)) + '</span></div></div>' +
                     metricGrid(cards) +
+                    certRows +
                     resultTitle(t.auditChecks) +
                     '<div class="result-rows">' + checkRows + '</div>' +
                     resultTitle(t.auditIssues) +
                     '<div class="result-rows">' + issueRows + '</div>';
                 showResult(null, html);
+                pushLocalHistory({
+                    type: 'audit',
+                    label: t.auditBtn,
+                    value: (scoreVal === null ? '--' : scoreVal) + (d.grade ? '/' + d.grade : ''),
+                    tone: scoreVal !== null && scoreVal >= 75 ? 'ok' : (scoreVal !== null && scoreVal >= 55 ? 'warn' : 'bad')
+                });
             }
 
-            async function runDnsCompare() {
+            function runDnsCompare() {
                 const t = i18n[currentLang];
                 const body = document.getElementById('toolModalBody');
                 if (!body) return;
-                body.innerHTML =
-                    '<div class="tool-field">' +
-                    '<input type="text" id="dcNameInput" class="tool-input" placeholder="example.com" autocomplete="off" value="' + escapeHTML(window.location.hostname || 'example.com') + '">' +
-                    '<button class="btn btn-primary" id="dcGo"><i class="fas fa-code-compare"></i> ' + escapeHTML(t.dnsQueryBtn) + '</button>' +
-                    '</div><div id="dcOut"></div>';
+                setToolParams('<input type="text" id="dcNameInput" class="tool-input" placeholder="example.com" autocomplete="off" value="' + escapeHTML(window.location.hostname || 'example.com') + '">');
+                setToolActions(primaryAction('dcGo', 'fa-code-compare', t.dnsQueryBtn));
+                body.innerHTML = '<div id="dcOut"><div class="no-data">' + escapeHTML(t.dcPrompt) + '</div></div>';
                 const go = document.getElementById('dcGo');
                 const inp = document.getElementById('dcNameInput');
                 if (go) go.addEventListener('click', () => doDnsCompare());
@@ -3577,9 +4627,12 @@ const APP_JS = `
                     return '<div class="result-row' + (r.status === 'ok' ? '' : ' is-warn') + '"><span class="rr-name">' + escapeHTML(r.label) + '</span>' +
                         '<span class="rr-val" style="word-break:break-all">' + escapeHTML(String(val).slice(0, 200)) + ' · ' + escapeHTML(String(r.time || 0)) + 'ms</span></div>';
                 }).join('');
-                const verdict = d.consistent
-                    ? '<div class="result-row"><span class="rr-name">' + escapeHTML(t.dcConsistent) + '</span><span class="rr-val">OK</span></div>'
-                    : '<div class="result-row is-warn"><span class="rr-name">' + escapeHTML(t.dcInconsistent) + '</span><span class="rr-val">' + escapeHTML(String((d.groups || []).length)) + ' groups</span></div>';
+                const okCount = (d.resolvers || []).filter(r => r.status === 'ok').length;
+                const verdict = okCount === 0
+                    ? '<div class="result-row is-warn"><span class="rr-name">' + escapeHTML(t.dcFailed) + '</span><span class="rr-val">0/' + escapeHTML(String((d.resolvers || []).length)) + ' OK</span></div>'
+                    : (d.consistent
+                        ? '<div class="result-row"><span class="rr-name">' + escapeHTML(t.dcConsistent) + '</span><span class="rr-val">OK</span></div>'
+                        : '<div class="result-row is-warn"><span class="rr-name">' + escapeHTML(t.dcInconsistent) + '</span><span class="rr-val">' + escapeHTML(String((d.groups || []).length)) + ' groups</span></div>');
                 out.innerHTML = resultTitle(t.dcTitle + ' · ' + d.name + ' (' + d.type + ')') +
                     '<div class="result-rows">' + rows + '</div>' +
                     '<div style="margin-top:12px" class="result-rows">' + verdict + '</div>';
@@ -3737,11 +4790,9 @@ const APP_JS = `
                 const t = i18n[currentLang];
                 const body = document.getElementById('toolModalBody');
                 if (!body) return;
-                body.innerHTML = '<div class="result-rows"><div class="result-row"><span class="rr-name">' + escapeHTML(t.bbIntro) + '</span></div></div>' +
-                    '<div class="tool-field" style="margin-top:12px">' +
-                    '<button class="btn btn-primary" id="bbStart"><i class="fas fa-wave-square"></i> ' + escapeHTML(t.bbStart) + '</button>' +
-                    '</div><div id="bbResult"></div>' +
-                    '<div class="result-rows" style="margin-top:10px"><div class="result-row"><span class="rr-name" style="font-size:12px;color:var(--text-tertiary)">' + escapeHTML(t.bbNote) + '</span></div></div>';
+                setToolParams('<div class="side-desc" style="margin:0">' + escapeHTML(t.bbNote) + '</div>');
+                setToolActions(primaryAction('bbStart', 'fa-wave-square', t.bbStart));
+                body.innerHTML = '<div id="bbResult"><div class="no-data">' + escapeHTML(t.bbIntro) + '</div></div>';
                 const go = document.getElementById('bbStart');
                 if (go) go.addEventListener('click', startBufferbloatTest);
             }
@@ -3749,13 +4800,14 @@ const APP_JS = `
                 const samples = [];
                 const controller = new AbortController();
                 let running = true;
+                let limited = false;
                 const startLoop = () => (async () => {
                     while (running) {
                         try {
                             let r;
                             if (dir === 'down') {
                                 r = await fetch('/speedtest?size=67108864', { signal: controller.signal, cache: 'no-store' });
-                                if (r.status === 429) { running = false; break; }
+                                if (r.status === 429) { limited = true; running = false; break; }
                                 if (r.body) {
                                     const rd = r.body.getReader();
                                     while (true) {
@@ -3765,7 +4817,7 @@ const APP_JS = `
                                 }
                             } else {
                                 r = await fetch('/upload-test', { method: 'POST', body: getBbUploadPayload(), signal: controller.signal });
-                                if (r.status === 429) { running = false; break; }
+                                if (r.status === 429) { limited = true; running = false; break; }
                                 try { await r.arrayBuffer(); } catch (e0) {}
                             }
                         } catch (e) {
@@ -3778,15 +4830,15 @@ const APP_JS = `
                 while (performance.now() - t0 < seconds * 1000) {
                     const s = performance.now();
                     try {
-                        await fetchWithTimeout(window.location.origin + '/health?_bb=' + dir + Date.now(), { method: 'HEAD', cache: 'no-store' }, 2000);
-                        samples.push(performance.now() - s);
+                        const hres = await fetchWithTimeout(window.location.origin + '/health?_bb=' + dir + Date.now(), { method: 'HEAD', cache: 'no-store' }, 2000);
+                        if (hres.status !== 429) samples.push(performance.now() - s); // 429 是限流响应，不算有效样本
                     } catch (e) {}
                     await new Promise(r => setTimeout(r, 300));
                 }
                 running = false;
                 controller.abort();
                 try { await Promise.allSettled(loops); } catch (e) {}
-                return samples;
+                return { samples: samples, limited: limited };
             }
             async function startBufferbloatTest() {
                 if (bbRunning) return;
@@ -3802,34 +4854,50 @@ const APP_JS = `
                     for (let i = 0; i < 6; i++) {
                         const s = performance.now();
                         try {
-                            await fetchWithTimeout(window.location.origin + '/health?_bb=base' + i, { method: 'HEAD', cache: 'no-store' }, 3000);
-                            baseline.push(performance.now() - s);
+                            const bres = await fetchWithTimeout(window.location.origin + '/health?_bb=base' + i, { method: 'HEAD', cache: 'no-store' }, 3000);
+                            if (bres.status !== 429) baseline.push(performance.now() - s);
                         } catch (e) {}
                         await new Promise(r => setTimeout(r, 250));
                     }
-                    const baseMed = Math.round(medianValue(baseline));
-                    const downSamples = await bbLoadPhase('down', 8);
-                    const upSamples = await bbLoadPhase('up', 8);
-                    const downMed = Math.round(medianValue(downSamples)) || baseMed;
-                    const upMed = Math.round(medianValue(upSamples)) || baseMed;
-                    const downDelta = Math.max(0, downMed - baseMed);
-                    const upDelta = Math.max(0, upMed - baseMed);
+                    const hasBase = baseline.length > 0;
+                    const baseMed = hasBase ? Math.round(medianValue(baseline)) : 0;
+                    const downRes = await bbLoadPhase('down', 8);
+                    const upRes = await bbLoadPhase('up', 8);
+                    const downSamples = downRes.samples;
+                    const upSamples = upRes.samples;
+                    const downOk = downSamples.length > 0;
+                    const upOk = upSamples.length > 0;
+                    const downMed = downOk ? Math.round(medianValue(downSamples)) : 0;
+                    const upMed = upOk ? Math.round(medianValue(upSamples)) : 0;
+                    const canGrade = hasBase && (downOk || upOk);
+                    const downDelta = (hasBase && downOk) ? Math.max(0, downMed - baseMed) : 0;
+                    const upDelta = (hasBase && upOk) ? Math.max(0, upMed - baseMed) : 0;
                     const downGrade = bufferbloatGrade(downDelta);
                     const upGrade = bufferbloatGrade(upDelta);
                     const overall = downDelta > upDelta ? downGrade : upGrade;
                     const cards = [
-                        metricCard(t.bbBaseline, baseMed, 'ms', null, null),
-                        metricCard(t.bbLoadedDown, downMed, 'ms', null, Math.min(100, downDelta)),
-                        metricCard(t.bbLoadedUp, upMed, 'ms', null, Math.min(100, upDelta))
+                        metricCard(t.bbBaseline, hasBase ? baseMed : 'N/A', 'ms', null, null),
+                        metricCard(t.bbLoadedDown, downOk ? downMed : 'N/A', 'ms', null, Math.min(100, downDelta)),
+                        metricCard(t.bbLoadedUp, upOk ? upMed : 'N/A', 'ms', null, Math.min(100, upDelta))
                     ];
-                    const html =
-                        resultTitle(t.bufferbloatBtn) +
-                        metricGrid(cards) +
+                    const gradeRow = function(label, ok, grade, delta) {
+                        const val = ok
+                            ? '<span class="badge ' + gradeBadgeClass(grade) + '">' + grade + ' · +' + delta + ' ms</span>'
+                            : '<span class="badge">N/A</span>';
+                        return '<div class="result-row"><span class="rr-name">' + escapeHTML(label) + '</span><span class="rr-val">' + val + '</span></div>';
+                    };
+                    const rowsHtml =
                         '<div class="result-rows">' +
-                        '<div class="result-row"><span class="rr-name">' + escapeHTML(t.bbDelta) + ' (↓)</span><span class="rr-val"><span class="badge ' + gradeBadgeClass(downGrade) + '">' + downGrade + ' · +' + downDelta + ' ms</span></span></div>' +
-                        '<div class="result-row"><span class="rr-name">' + escapeHTML(t.bbDelta) + ' (↑)</span><span class="rr-val"><span class="badge ' + gradeBadgeClass(upGrade) + '">' + upGrade + ' · +' + upDelta + ' ms</span></span></div>' +
-                        '<div class="result-row"><span class="rr-name">' + escapeHTML(t.bbGrade) + '</span><span class="rr-val"><span class="badge ' + gradeBadgeClass(overall) + '">' + overall + '</span></span></div>' +
+                        gradeRow(t.bbDelta + ' (↓)', downOk, downGrade, downDelta) +
+                        gradeRow(t.bbDelta + ' (↑)', upOk, upGrade, upDelta) +
+                        (canGrade
+                            ? '<div class="result-row"><span class="rr-name">' + escapeHTML(t.bbGrade) + '</span><span class="rr-val"><span class="badge ' + gradeBadgeClass(overall) + '">' + overall + '</span></span></div>'
+                            : '<div class="result-row is-warn"><span class="rr-name">' + escapeHTML(t.bbGrade) + '</span><span class="rr-val">' + escapeHTML(t.bbNoSamples) + '</span></div>') +
                         '</div>';
+                    const limitedWarn = (downRes.limited || upRes.limited)
+                        ? '<div class="result-rows" style="margin-top:10px"><div class="result-row is-warn"><span class="rr-name">⚠ ' + escapeHTML(t.bbLimited) + '</span></div></div>'
+                        : '';
+                    const html = resultTitle(t.bufferbloatBtn) + metricGrid(cards) + rowsHtml + limitedWarn;
                     if (out) out.innerHTML = html;
                 } catch (e) {
                     if (out) out.innerHTML = '<div class="no-data"><i class="fas fa-exclamation-circle"></i> ' + escapeHTML(t.bbFailed) + '</div>';
@@ -3843,23 +4911,22 @@ const APP_JS = `
                 const t = i18n[currentLang];
                 const body = document.getElementById('toolModalBody');
                 if (!body) return;
-                body.innerHTML =
-                    '<div class="tool-field">' +
+                setToolParams(
+                    '<span class="side-label">' + escapeHTML(t.dnsBtn) + '</span>' +
                     '<input type="text" id="dnsNameInput" class="tool-input" placeholder="example.com" autocomplete="off">' +
-                    '<select id="dnsTypeSelect" class="tool-input" style="max-width:120px">' +
+                    '<select id="dnsTypeSelect" class="tool-input">' +
                     ['A', 'AAAA', 'CNAME', 'MX', 'TXT', 'NS', 'SOA', 'CAA'].map(x => '<option>' + x + '</option>').join('') +
                     '</select>' +
-                    '<button class="btn btn-primary" id="dnsGo"><i class="fas fa-magnifying-glass"></i> ' + escapeHTML(t.dnsQueryBtn) + '</button>' +
-                    '</div><div id="dnsLookupOut"></div>' +
-                    '<div class="result-rows" style="margin-top:16px"><div class="result-row"><span class="rr-name">' + escapeHTML(t.dnsblSection) + '</span></div></div>' +
-                    '<div class="tool-field" style="margin-top:8px">' +
+                    '<span class="side-label" style="margin-top:6px">' + escapeHTML(t.dnsblSection) + '</span>' +
                     '<input type="text" id="dnsblIpInput" class="tool-input" placeholder="1.2.3.4" autocomplete="off" value="' + escapeHTML(BACKEND_DATA.clientIp || '') + '">' +
-                    '<button class="btn btn-primary" id="dnsblGo"><i class="fas fa-shield-halved"></i> ' + escapeHTML(t.dnsblBtn) + '</button>' +
-                    '</div><div id="dnsblOut"></div>' +
-                    '<div class="result-rows" style="margin-top:10px"><div class="result-row"><span class="rr-name" style="font-size:12px;color:var(--text-tertiary)">' + escapeHTML(t.dnsblNotice) + '</span></div></div>';
+                    '<div class="side-desc" style="margin:0">' + escapeHTML(t.dnsblNotice) + '</div>');
+                setToolActions(
+                    primaryAction('dnsGo', 'fa-magnifying-glass', t.dnsQueryBtn) +
+                    secondaryAction('dnsblGo', 'fa-shield-halved', t.dnsblBtn));
+                body.innerHTML = '<div id="dnsLookupOut"><div class="no-data">' + escapeHTML(t.dnsResultTitle) + '</div></div>' +
+                    '<div id="dnsblOut" style="margin-top:14px"></div>';
                 const nameInput = document.getElementById('dnsNameInput');
                 const go = document.getElementById('dnsGo');
-                const blInput = document.getElementById('dnsblIpInput');
                 const blGo = document.getElementById('dnsblGo');
                 if (nameInput && go) {
                     const submit = () => { if (!dnsToolBusy) doDnsLookup(); };
@@ -3867,7 +4934,7 @@ const APP_JS = `
                     nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
                     nameInput.focus();
                 }
-                if (blInput && blGo) {
+                if (blGo) {
                     blGo.addEventListener('click', () => { doDnsblCheck(); });
                 }
             }
@@ -3962,10 +5029,9 @@ const APP_JS = `
                 const t = i18n[currentLang];
                 const body = document.getElementById('toolModalBody');
                 if (!body) return;
-                body.innerHTML = '<div class="result-rows"><div class="result-row"><span class="rr-name">' + escapeHTML(t.qcNote) + '</span></div></div>' +
-                    '<div class="tool-field" style="margin-top:12px">' +
-                    '<button class="btn btn-primary" id="qcStart"><i class="fas fa-heart-pulse"></i> ' + escapeHTML(t.qcStart) + '</button>' +
-                    '</div><div id="qcResult"></div>';
+                setToolParams('<div class="side-desc" style="margin:0">' + escapeHTML(t.qcNote) + '</div>');
+                setToolActions(primaryAction('qcStart', 'fa-heart-pulse', t.qcStart));
+                body.innerHTML = '<div id="qcResult"><div class="no-data">' + escapeHTML(t.qcNote) + '</div></div>';
                 const go = document.getElementById('qcStart');
                 if (go) go.addEventListener('click', startQuickCheck);
             }
@@ -3981,19 +5047,23 @@ const APP_JS = `
                     setProgress(t.qcRunning + ' [1/6] ' + t.qcItemRtt);
                     const rttSamples = [];
                     let rttLost = 0;
+                    let rttLimited = 0;
                     for (let i = 0; i < 8; i++) {
                         const s = performance.now();
                         try {
-                            await fetchWithTimeout(window.location.origin + '/health?_qc=' + i, { method: 'HEAD', cache: 'no-store' }, 3000);
-                            rttSamples.push(performance.now() - s);
+                            const res = await fetchWithTimeout(window.location.origin + '/health?_qc=' + i, { method: 'HEAD', cache: 'no-store' }, 3000);
+                            if (res.status === 429) { rttLimited++; }
+                            else { rttSamples.push(performance.now() - s); }
                         } catch (e) { rttLost++; }
                         await new Promise(r => setTimeout(r, 250));
                     }
-                    const rttAvg = Math.round(rttSamples.length ? rttSamples.reduce((a, b) => a + b, 0) / rttSamples.length : 0);
+                    const rttOk = rttSamples.length > 0;
+                    const rttAvg = rttOk ? Math.round(rttSamples.reduce((a, b) => a + b, 0) / rttSamples.length) : 0;
                     let jitter = 0;
                     for (let i = 1; i < rttSamples.length; i++) jitter += Math.abs(rttSamples[i] - rttSamples[i - 1]);
                     jitter = rttSamples.length > 1 ? Math.round(jitter / (rttSamples.length - 1)) : 0;
-                    const lossPct = Math.round((rttLost / 8) * 100);
+                    const rttAttempted = rttLost + rttSamples.length;
+                    const lossPct = rttAttempted > 0 ? Math.round((rttLost / rttAttempted) * 100) : 0;
 
                     setProgress(t.qcRunning + ' [2/6] ' + t.qcItemDown);
                     let downMbps = 0;
@@ -4062,8 +5132,8 @@ const APP_JS = `
                     } catch (e) {}
 
                     const score = {
-                        rtt: rttAvg <= 30 ? 25 : rttAvg <= 80 ? 20 : rttAvg <= 150 ? 14 : rttAvg <= 300 ? 8 : 3,
-                        jitter: jitter <= 5 ? 10 : jitter <= 15 ? 7 : jitter <= 30 ? 4 : 1,
+                        rtt: !rttOk ? 0 : (rttAvg <= 30 ? 25 : rttAvg <= 80 ? 20 : rttAvg <= 150 ? 14 : rttAvg <= 300 ? 8 : 3),
+                        jitter: !rttOk ? 0 : (jitter <= 5 ? 10 : jitter <= 15 ? 7 : jitter <= 30 ? 4 : 1),
                         loss: lossPct === 0 ? 10 : lossPct <= 2 ? 6 : lossPct <= 5 ? 3 : 0,
                         down: downMbps >= 100 ? 25 : downMbps >= 50 ? 20 : downMbps >= 20 ? 14 : downMbps >= 5 ? 8 : 3,
                         up: upMbps >= 50 ? 15 : upMbps >= 20 ? 11 : upMbps >= 5 ? 6 : 2,
@@ -4076,21 +5146,25 @@ const APP_JS = `
                     const upStr = upMbps > 0 ? upMbps.toFixed(1) + ' Mbps' : 'N/A';
                     const fraudStr = fraudScore === null ? 'N/A' : fraudScore + '/100';
 
-                    const issues = [];
-                    if (rttAvg > 150) issues.push(t.qcItemRtt + ': ' + rttAvg + ' ms');
-                    if (jitter > 30) issues.push(t.qcItemRtt + ': jitter ' + jitter + ' ms');
-                    if (lossPct > 0) issues.push(t.qcItemRtt + ': loss ' + lossPct + '%');
-                    if (downMbps < 20) issues.push(t.qcItemDown + ': ' + downMbps.toFixed(1) + ' Mbps');
-                    if (upMbps < 5) issues.push(t.qcItemUp + ': ' + upStr);
-                    if (protoLevel < 4) issues.push(t.qcItemProto + ': ' + protoText);
-                    if (!dnsOk) issues.push(t.qcItemDns + ': FAIL');
-                    if (fraudScore !== null && fraudScore > 50) issues.push(t.qcItemFraud + ': ' + fraudStr);
+                    // E1：findings 携带 code，既生成人类可读的 issues 文案，也驱动「原因 + 建议」规则表
+                    const findings = [];
+                    if (!rttOk) findings.push({ code: 'rtt_fail', text: t.qcItemRtt + ': FAIL (' + rttLost + ' lost, ' + rttLimited + ' limited)' });
+                    if (rttOk && rttAvg > 150) findings.push({ code: 'rtt_high', text: t.qcItemRtt + ': ' + rttAvg + ' ms' });
+                    if (rttOk && jitter > 30) findings.push({ code: 'jitter_high', text: t.qcItemRtt + ': jitter ' + jitter + ' ms' });
+                    if (lossPct > 0) findings.push({ code: 'loss', text: t.qcItemRtt + ': loss ' + lossPct + '%' });
+                    if (rttLimited > 0) findings.push({ code: 'rate_limited', text: t.qcItemRtt + ': rate limited (' + rttLimited + '/8)' });
+                    if (downMbps < 20) findings.push({ code: 'down_low', text: t.qcItemDown + ': ' + downMbps.toFixed(1) + ' Mbps' });
+                    if (upMbps < 5) findings.push({ code: 'up_low', text: t.qcItemUp + ': ' + upStr });
+                    if (protoLevel < 4) findings.push({ code: 'proto_old', text: t.qcItemProto + ': ' + protoText });
+                    if (!dnsOk) findings.push({ code: 'dns_fail', text: t.qcItemDns + ': FAIL' });
+                    if (fraudScore !== null && fraudScore > 50) findings.push({ code: 'fraud_high', text: t.qcItemFraud + ': ' + fraudStr });
+                    const issues = findings.map(f => f.text);
 
                     const qcRow = (label, val, pts, max) =>
                         '<div class="result-row' + (pts < max ? ' is-warn' : '') + '"><span class="rr-name">' + escapeHTML(label) + '</span>' +
                         '<span class="rr-val">' + escapeHTML(val) + ' <span class="badge ' + (pts < max ? 'badge-warning' : 'badge-success') + '">' + pts + '/' + max + '</span></span></div>';
                     const rowsHtml =
-                        qcRow(t.qcItemRtt, rttAvg + ' ms · ' + jitter + ' ms · ' + lossPct + '%', score.rtt + score.jitter + score.loss, 45) +
+                        qcRow(t.qcItemRtt, (rttOk ? rttAvg + ' ms' : 'N/A') + ' · jitter ' + jitter + ' ms · loss ' + lossPct + '%', score.rtt + score.jitter + score.loss, 45) +
                         qcRow(t.qcItemDown, downMbps.toFixed(1) + ' Mbps', score.down, 25) +
                         qcRow(t.qcItemUp, upStr, score.up, 15) +
                         qcRow(t.qcItemProto, protoText, score.proto, 5) +
@@ -4107,15 +5181,17 @@ const APP_JS = `
                         '<div class="result-rows" style="margin-top:12px">' + rowsHtml + '</div>' +
                         resultTitle(t.qcIssues) +
                         '<div class="result-rows">' + issueHtml + '</div>' +
+                        adviceBlock(findings) +
                         '<div class="tool-field" style="margin-top:12px"><button class="btn btn-primary" id="qcCopyBtn"><i class="fas fa-copy"></i> ' + escapeHTML(t.copy) + '</button>' +
                         '<button class="btn" id="qcShareImgBtn"><i class="fas fa-image"></i> ' + escapeHTML(t.shareImg) + '</button>' +
-                        '<button class="btn" id="qcShareLinkBtn"><i class="fas fa-link"></i> ' + escapeHTML(t.shareLink) + '</button></div>';
+                        '<button class="btn btn-ghost" id="qcShareLinkBtn"><i class="fas fa-link"></i> ' + escapeHTML(t.shareLink) + '</button></div>';
+                    pushLocalHistory({ type: 'quickcheck', label: t.quickcheckBtn, value: total + '/100 ' + grade, tone: total >= 75 ? 'ok' : (total >= 55 ? 'warn' : 'bad') });
 
                     const locale = { 'en': 'en-US', 'zh-CN': 'zh-CN', 'zh-TW': 'zh-TW' }[currentLang] || 'en-US';
                     qcLastReportText = 'NetSight Pro - ' + t.quickcheckBtn + '\\n' +
                         new Date().toLocaleString(locale, { timeZone: 'Asia/Shanghai' }) + '\\n' +
                         t.qcScore + ': ' + total + '/100 (' + grade + ')\\n' +
-                        t.qcItemRtt + ': ' + rttAvg + ' ms / jitter ' + jitter + ' ms / loss ' + lossPct + '%\\n' +
+                        t.qcItemRtt + ': ' + (rttOk ? rttAvg + ' ms' : 'N/A') + ' / jitter ' + jitter + ' ms / loss ' + lossPct + '%\\n' +
                         t.qcItemDown + ': ' + downMbps.toFixed(1) + ' Mbps\\n' +
                         t.qcItemUp + ': ' + upStr + '\\n' +
                         t.qcItemProto + ': ' + protoText + '\\n' +
@@ -4123,7 +5199,7 @@ const APP_JS = `
                         t.qcItemFraud + ': ' + fraudStr + '\\n' +
                         (issues.length ? t.qcIssues + ':\\n' + issues.map(x => ' - ' + x).join('\\n') + '\\n' : t.qcNoIssues + '\\n');
                     qcLastShare = { total: total, grade: grade, lines: [
-                        t.qcItemRtt + ': ' + rttAvg + ' ms / ' + jitter + ' ms / ' + lossPct + '%',
+                        t.qcItemRtt + ': ' + (rttOk ? rttAvg + ' ms' : 'N/A') + ' / ' + jitter + ' ms / ' + lossPct + '%',
                         t.qcItemDown + ': ' + downMbps.toFixed(1) + ' Mbps',
                         t.qcItemUp + ': ' + upStr,
                         t.qcItemProto + ': ' + protoText,
@@ -4279,6 +5355,11 @@ const APP_JS = `
                         if (!body || !modal) return;
                         if (titleEl) titleEl.textContent = i18n[currentLang].shareBanner || 'NetSight Pro';
                         if (descEl) descEl.textContent = '';
+                        // 分享结果没有参数可调：左栏只留说明，清空参数与操作区
+                        const sideDesc = document.getElementById('toolModalSideDesc');
+                        if (sideDesc) sideDesc.textContent = i18n[currentLang].shareBanner || '';
+                        setToolParams('');
+                        setToolActions('');
                         body.innerHTML = '<div class="usage-total" style="font-size:44px">' + escapeHTML(String(d.total)) + '</div>' +
                             '<div class="usage-total-label">' + escapeHTML((i18n[currentLang].qcScore || 'Score') + ' / 100 · ' + String(d.grade || '')) + '</div>' +
                             '<div class="result-rows" style="margin-top:12px">' + d.lines.map(function(x) { return '<div class="result-row"><span class="rr-name" style="word-break:break-all">' + escapeHTML(String(x)) + '</span></div>'; }).join('') + '</div>';
@@ -4293,12 +5374,11 @@ const APP_JS = `
                 const t = i18n[currentLang];
                 const body = document.getElementById('toolModalBody');
                 if (!body) return;
-                body.innerHTML =
-                    '<div class="tool-field">' +
+                setToolParams(
                     '<input type="text" id="dcDomain" class="tool-input" placeholder="example.com" autocomplete="off">' +
-                    '<input type="text" id="dcSelector" class="tool-input" style="max-width:200px" placeholder="' + escapeHTML(t.dcSelectorPh) + '" autocomplete="off">' +
-                    '<button class="btn btn-primary" id="dcGo"><i class="fas fa-fingerprint"></i> ' + escapeHTML(t.auditRun) + '</button>' +
-                    '</div><div id="dcOut"></div>';
+                    '<input type="text" id="dcSelector" class="tool-input" placeholder="' + escapeHTML(t.dcSelectorPh) + '" autocomplete="off">');
+                setToolActions(primaryAction('dcGo', 'fa-fingerprint', t.auditRun));
+                body.innerHTML = '<div id="dcOut"><div class="no-data">' + escapeHTML(t.domaincheckBtn) + '</div></div>';
                 const inp = document.getElementById('dcDomain');
                 const selEl = document.getElementById('dcSelector');
                 const go = document.getElementById('dcGo');
@@ -4411,15 +5491,17 @@ const APP_JS = `
                 const t = i18n[currentLang];
                 const body = document.getElementById('toolModalBody');
                 if (!body) return;
-                body.innerHTML =
-                    '<div class="tool-field"><input type="password" id="monKey" class="tool-input" placeholder="' + escapeHTML(t.monKeyPh) + '" autocomplete="off"></div>' +
-                    '<div class="result-rows" style="margin-top:8px"><div class="result-row"><span class="rr-name" style="font-size:12px;color:var(--text-tertiary)">' + escapeHTML(t.monNote) + '</span></div></div>' +
-                    '<div class="tool-field" style="margin-top:10px"><textarea id="monUrls" class="tool-input" style="height:96px;padding:8px 12px;resize:vertical" placeholder="' + escapeHTML(t.monUrlsPh) + '"></textarea></div>' +
-                    '<div class="tool-field" style="margin-top:8px"><input type="text" id="monHook" class="tool-input" placeholder="' + escapeHTML(t.monHookPh) + '" autocomplete="off">' +
-                    '<select id="monFmt" class="tool-input" style="max-width:150px"><option value="generic">Generic JSON</option><option value="dingtalk">DingTalk</option><option value="feishu">Feishu</option><option value="wecom">WeCom</option></select></div>' +
-                    '<div class="tool-field" style="margin-top:8px"><button class="btn btn-primary" id="monSave"><i class="fas fa-floppy-disk"></i> ' + escapeHTML(t.monSave) + '</button>' +
-                    '<button class="btn" id="monRun"><i class="fas fa-play"></i> ' + escapeHTML(t.monRun) + '</button></div>' +
-                    '<div id="monOut"></div>';
+                setToolParams(
+                    '<input type="password" id="monKey" class="tool-input" placeholder="' + escapeHTML(t.monKeyPh) + '" autocomplete="off">' +
+                    '<span class="side-label">' + escapeHTML(t.monUrlsPh) + '</span>' +
+                    '<textarea id="monUrls" class="tool-input" placeholder="' + escapeHTML(t.monUrlsPh) + '"></textarea>' +
+                    '<input type="text" id="monHook" class="tool-input" placeholder="' + escapeHTML(t.monHookPh) + '" autocomplete="off">' +
+                    '<select id="monFmt" class="tool-input"><option value="generic">Generic JSON</option><option value="dingtalk">DingTalk</option><option value="feishu">Feishu</option><option value="wecom">WeCom</option></select>' +
+                    '<div class="side-desc" style="margin:0">' + escapeHTML(t.monNote) + '</div>');
+                setToolActions(
+                    primaryAction('monSave', 'fa-floppy-disk', t.monSave) +
+                    secondaryAction('monRun', 'fa-play', t.monRun));
+                body.innerHTML = '<div id="monOut"></div>';
                 let savedKey = '';
                 try { savedKey = localStorage.getItem('mon-admin-key') || ''; } catch (e) {}
                 const keyEl = document.getElementById('monKey');
@@ -4436,7 +5518,7 @@ const APP_JS = `
                 if (!o) return;
                 o.innerHTML = '<div class="tool-loading"><span class="loading"></span> ' + escapeHTML(t.running) + '</div>';
                 try {
-                    const res = await fetch('/api/monitor?key=' + encodeURIComponent(key), { cache: 'no-store' });
+                    const res = await fetch('/api/monitor', { headers: { 'x-admin-key': key }, cache: 'no-store' });
                     const d = await res.json();
                     if (res.status === 403) { o.innerHTML = monErrHtml(t.monKeyBad); return; }
                     if (!res.ok || d.error) {
@@ -4505,7 +5587,9 @@ const APP_JS = `
                         let msg = t.loadFailed;
                         if (d.error === 'key_not_set') msg = t.monKeyNeeded;
                         else if (d.error === 'bad_url' || d.error === 'bad_webhook') msg = t.monBadUrl;
+                        else if (d.error === 'bad_port') msg = t.monBadPort;
                         else if (d.error === 'too_many_urls') msg = t.monMax;
+                        else if (d.error === 'write_budget_exceeded') msg = t.monKvWriteLimit;
                         if (o) o.innerHTML = monErrHtml(msg);
                         return;
                     }
@@ -4542,35 +5626,9 @@ const APP_JS = `
                 } catch (e) {}
             }
 
+            // C1：历史面板已改为「本地历史」（localStorage，零 KV 读），保留函数名以兼容既有调用点
             async function loadSpeedHistory() {
-                const panel = document.getElementById('speed-history-panel');
-                if (!panel) return;
-                if (!(window.__NETDIAG__ && window.__NETDIAG__.speedHistoryKv)) {
-                    panel.innerHTML = '<div class="no-data"><i class="fas fa-database"></i> ' + i18n[currentLang].historyKvOff + '</div>';
-                    return;
-                }
-                try {
-                    const res = await fetch('/api/speed-history?limit=5');
-                    const records = await res.json();
-                    if (!records || records.length === 0) {
-                        panel.innerHTML = '<div class="no-data"><i class="fas fa-inbox"></i> <span id="t-no-records">' + i18n[currentLang].noRecords + '</span></div>';
-                        return;
-                    }
-                    let html = '<table class="speed-history-table"><thead><tr><th>' + i18n[currentLang].historyTitle + '</th><th>' + i18n[currentLang].historyAvgSpeed + '</th><th>' + i18n[currentLang].historyNode + '</th></tr></thead><tbody>';
-                    const maxSpeed = Math.max(...records.map(r => Number.isFinite(Number(r.avgSpeed)) ? Number(r.avgSpeed) : 0), 1);
-                    records.forEach(r => {
-                        const d = new Date(r.timestamp);
-                        const time = d.toLocaleString('zh-CN', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' });
-                        const avg = Number.isFinite(Number(r.avgSpeed)) ? Number(r.avgSpeed) : 0;
-                        const pct = Math.min((avg / maxSpeed) * 100, 100);
-                        let cls = avg > 50 ? 'speed-good' : (avg > 10 ? 'speed-mid' : 'speed-low');
-                        html += '<tr><td>' + escapeHTML(time) + '</td><td><span class="speed-bar" style="width:' + pct + 'px"></span><span class="' + cls + '">' + avg.toFixed(1) + ' Mbps</span></td><td>' + escapeHTML(r.colo || 'N/A') + '</td></tr>';
-                    });
-                    html += '</tbody></table>';
-                    panel.innerHTML = html;
-                } catch (e) {
-                    panel.innerHTML = '<div class="no-data"><i class="fas fa-exclamation-circle"></i> ' + i18n[currentLang].loadFailed + '</div>';
-                }
+                renderLocalHistory();
             }
 
             async function loadUsageStats() {
@@ -4696,11 +5754,24 @@ async function handleRequest(event) {
   const request = event.request;
   const url = new URL(request.url);
   const cache = caches.default;
-  const clientIp = request.headers.get('cf-connecting-ip') || request.headers.get('x-real-ip') || 'unknown';
+  const workerStart = Date.now(); // 统计整个请求的 Worker 处理耗时（原先取在模板渲染前，恒为 ~0ms）
+  const clientIp = request.headers.get('cf-connecting-ip') || 'unknown';
   
   // 处理 OPTIONS 预检请求
   if (request.method === 'OPTIONS') {
     return handleOptions(request);
+  }
+  
+  // 已停用端点：最早短路（先于令牌校验、限流、用量统计），不消耗任何资源
+  if (isDisabledEndpoint(url.pathname)) {
+    return new Response(JSON.stringify({
+      error: 'endpoint_disabled',
+      endpoint: url.pathname,
+      message: '该端点已停用 / endpoint disabled'
+    }), {
+      status: 410,
+      headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...corsHeaders(request), ...SECURITY_HEADERS }
+    });
   }
   
   // 限流检查（跳过静态资源；/health 使用独立配额，RTT/丢包轮询不挤占工具请求额度）
@@ -4732,13 +5803,20 @@ async function handleRequest(event) {
   
   // ==================== 健康检查端点 ====================
   if (url.pathname === '/health') {
-    // 同源校验：/health 被 RTT 轮询高频调用且此前不设防，外部爬虫/扫描器可无限打——现拦掉非浏览器流量
+    // 会话令牌校验：/health 被 RTT 轮询高频调用，未持有主页面签发令牌的客户端一律 403（防爬虫/扫描器）
     if (!isSameOriginNavigation(request)) return forbiddenResponse(request);
     return new Response(JSON.stringify({
       status: 'ok',
       timestamp: Date.now(),
-      version: '4.6.2',
+      version: '4.7.1',
       storage: { usageBackend: USAGE_BACKEND, speedHistoryKv: SPEED_HISTORY_KV_ENABLED },
+      kvWrite: {
+        today: kvWriteStats.dayCount,
+        blocked: kvWriteStats.blocked,
+        budgetPerDay: KV_WRITE_MAX_PER_DAY,
+        budgetPerMin: KV_WRITE_MAX_PER_MIN,
+        note: 'per-isolate counters; writes beyond budget are dropped by design'
+      },
       note: 'Cloudflare Workers are stateless; per-request context only'
     }), {
       headers: {
@@ -4767,6 +5845,7 @@ async function handleRequest(event) {
   }
   // ==================== PWA 资源端点 ====================
   if (url.pathname === '/manifest.webmanifest') {
+    const manifestLang = resolveDefaultLang(request.headers.get('accept-language') || '');
     const manifest = {
       name: 'NetSight Pro',
       short_name: 'NetSight Pro',
@@ -4776,7 +5855,7 @@ async function handleRequest(event) {
       display: 'standalone',
       background_color: '#0a0b0d',
       theme_color: '#0a0b0d',
-      lang: 'zh-CN',
+      lang: manifestLang,
       icons: [
         { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
         { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'maskable' },
@@ -4936,9 +6015,8 @@ async function handleRequest(event) {
   // ==================== CPU 密集型测试端点 ====================
   if (url.pathname === '/cpu-test') {
     if (!isSameOriginNavigation(request)) return forbiddenResponse(request);
-    const clientIP = request.headers.get('cf-connecting-ip') || 'unknown';
     const now = Date.now();
-    let cpulimit = cpuRateLimit.get(clientIP);
+    let cpulimit = cpuRateLimit.get(clientIp);
     if (!cpulimit || now > cpulimit.resetTime) {
       cpulimit = { count: 0, resetTime: now + 60000 };
     }
@@ -4952,7 +6030,7 @@ async function handleRequest(event) {
       });
     }
     cpulimit.count++;
-    cpuRateLimit.set(clientIP, cpulimit);
+    cpuRateLimit.set(clientIp, cpulimit);
     if (cpuRateLimit.size > 5000 || Math.random() < 0.05) {
       cleanupRateLimit();
     }
@@ -4973,6 +6051,20 @@ async function handleRequest(event) {
       headers: {
         'content-type': 'application/json',
         ...corsHeaders(request),
+        ...SECURITY_HEADERS
+      }
+    });
+  }
+  
+  // ==================== 多节点对比探测端点（跨域 CORS，供其它 NetSight 部署节点互测延迟） ====================
+  // 其它工具端点均有「页面会话令牌」校验，跨域调用会被 403；该端点响应极小（~60B）、
+  // 不设令牌要求，仅暴露版本与时间，且受默认 60 次/分/IP 限流约束。
+  if (url.pathname === '/node-ping') {
+    return new Response(JSON.stringify({ ok: true, version: '4.7.1', time: Date.now() }), {
+      headers: {
+        'content-type': 'application/json',
+        'cache-control': 'no-store',
+        'access-control-allow-origin': '*',
         ...SECURITY_HEADERS
       }
     });
@@ -5000,6 +6092,12 @@ async function handleRequest(event) {
     if (!['http:', 'https:'].includes(parsedTarget.protocol)) {
       return new Response(JSON.stringify({ error: 'invalid scheme' }), {
         status: 400,
+        headers: { 'content-type': 'application/json', ...corsHeaders(request), ...SECURITY_HEADERS }
+      });
+    }
+    if (!isAllowedTargetPort(parsedTarget)) {
+      return new Response(JSON.stringify({ error: 'forbidden port' }), {
+        status: 403,
         headers: { 'content-type': 'application/json', ...corsHeaders(request), ...SECURITY_HEADERS }
       });
     }
@@ -5143,7 +6241,7 @@ async function handleRequest(event) {
     const resolverDefs = [
       { id: 'cloudflare', label: 'Cloudflare', url: 'https://cloudflare-dns.com/dns-query?name=' + encodeURIComponent(cName) + '&type=' + cType },
       { id: 'google', label: 'Google', url: 'https://dns.google/resolve?name=' + encodeURIComponent(cName) + '&type=' + cType },
-      { id: 'quad9', label: 'Quad9', url: 'https://dns.quad9.net:5053/dns-query?name=' + encodeURIComponent(cName) + '&type=' + cType },
+      { id: 'quad9', label: 'Quad9', url: 'https://dns.quad9.net/dns-query?name=' + encodeURIComponent(cName) + '&type=' + cType },
       { id: 'alidns', label: 'AliDNS', url: 'https://dns.alidns.com/resolve?name=' + encodeURIComponent(cName) + '&type=' + cType }
     ];
     const cmpResults = await Promise.all(resolverDefs.map(async (rv) => {
@@ -5175,7 +6273,7 @@ async function handleRequest(event) {
       sigMap[sig].push(r.id);
     }
     const groups = Object.keys(sigMap).map(sig => ({ sig: sig, resolvers: sigMap[sig], count: sigMap[sig].length })).sort((a, b) => b.count - a.count);
-    const payload = { name: cName, type: cType, resolvers: cmpResults, groups: groups, consistent: groups.length <= 1 };
+    const payload = { name: cName, type: cType, resolvers: cmpResults, groups: groups, consistent: groups.length === 1 };
     if (dnsLookupCache.size > 300) dnsLookupCache.clear();
     dnsLookupCache.set(cKey, { at: nowCmp, data: payload });
     return cmpJson(payload);
@@ -5295,13 +6393,16 @@ async function handleRequest(event) {
     if (!kv) return jsonOut({ error: 'kv_missing' }, 503);
     const adminKey = (typeof MONITOR_ADMIN_KEY !== 'undefined' && MONITOR_ADMIN_KEY) ? String(MONITOR_ADMIN_KEY) : '';
     if (!adminKey) return jsonOut({ error: 'key_not_set' }, 503);
-    const reqKey = request.headers.get('x-admin-key') || url.searchParams.get('key') || '';
+    // 管理密钥只走请求头：放 URL query 会泄漏到访问日志/浏览器历史/Referer
+    const reqKey = request.headers.get('x-admin-key') || '';
     if (reqKey !== adminKey) return jsonOut({ error: 'bad_key' }, 403);
     if (url.pathname === '/api/monitor' && request.method === 'GET') {
       let config = null, state = {}, log = [];
       try { const raw = await kv.get('monitor:config'); if (raw) config = JSON.parse(raw); } catch (e) {}
       try { const raw = await kv.get('monitor:state'); if (raw) state = JSON.parse(raw); } catch (e) {}
+      if (!state || typeof state !== 'object' || Array.isArray(state)) state = {};
       try { const raw = await kv.get('monitor:log'); if (raw) log = JSON.parse(raw); } catch (e) {}
+      if (!Array.isArray(log)) log = [];
       return jsonOut({ ok: true, config: config, state: state, log: log });
     }
     if (url.pathname === '/api/monitor' && request.method === 'POST') {
@@ -5315,25 +6416,42 @@ async function handleRequest(event) {
         const s = String(u || '').trim();
         if (!s) continue;
         if (s.length > 300) return jsonOut({ error: 'bad_url', detail: s.slice(0, 120) }, 400);
-        let ok = false;
-        try { const p = new URL(s); ok = (p.protocol === 'http:' || p.protocol === 'https:') && p.hostname.includes('.'); } catch (e) {}
-        if (!ok) return jsonOut({ error: 'bad_url', detail: s.slice(0, 120) }, 400);
+        let ok = false, portBlocked = false;
+        try {
+          const p = new URL(s);
+          const schemeOk = (p.protocol === 'http:' || p.protocol === 'https:');
+          const hostOk = schemeOk && p.hostname.includes('.') && !isPrivateHost(p.hostname);
+          const portOk = isAllowedTargetPort(p);
+          ok = hostOk && portOk;
+          portBlocked = hostOk && !portOk;
+        } catch (e) {}
+        if (!ok) return jsonOut({ error: portBlocked ? 'bad_port' : 'bad_url', detail: s.slice(0, 120) }, 400);
         urls.push(s);
       }
       const webhook = String(body.webhook || '').trim().slice(0, 500);
       if (webhook) {
-        let ok = false;
-        try { const p = new URL(webhook); ok = (p.protocol === 'https:' || p.protocol === 'http:'); } catch (e) {}
-        if (!ok) return jsonOut({ error: 'bad_webhook' }, 400);
+        let ok = false, portBlocked = false;
+        try {
+          const p = new URL(webhook);
+          // Webhook SSRF 防护：拒绝内网/本机主机；端口只放行 80/443
+          const schemeOk = (p.protocol === 'https:' || p.protocol === 'http:');
+          const hostOk = schemeOk && !isPrivateHost(p.hostname);
+          const portOk = isAllowedTargetPort(p);
+          ok = hostOk && portOk;
+          portBlocked = hostOk && !portOk;
+        } catch (e) {}
+        if (!ok) return jsonOut({ error: portBlocked ? 'bad_port' : 'bad_webhook' }, 400);
       }
       const format = ['generic', 'dingtalk', 'feishu', 'wecom'].includes(body.format) ? body.format : 'generic';
-      await kv.put('monitor:config', JSON.stringify({ urls: urls, webhook: webhook, format: format, updatedAt: Date.now() }));
+      // 保存配置：跳过同键去抖（用户可能连续保存），但仍受分钟/每日写入预算约束
+      const configSaved = await kvPut(kv, 'monitor:config', JSON.stringify({ urls: urls, webhook: webhook, format: format, updatedAt: Date.now() }), undefined, { skipDebounce: true });
+      if (!configSaved) return jsonOut({ error: 'write_budget_exceeded' }, 503);
       return jsonOut({ ok: true, urls: urls, webhook: webhook, format: format });
     }
     if (url.pathname === '/api/monitor-run' && request.method === 'POST') {
       let cfg = null;
       try { const raw = await kv.get('monitor:config'); if (raw) cfg = JSON.parse(raw); } catch (e) {}
-      if (!cfg || !Array.isArray(cfg.urls) || cfg.urls.length === 0) return jsonOut({ error: 'no_config' }, 400);
+      if (!cfg || typeof cfg !== 'object' || Array.isArray(cfg) || !Array.isArray(cfg.urls) || cfg.urls.length === 0) return jsonOut({ error: 'no_config' }, 400);
       const result = await handleMonitorCheck();
       return jsonOut({ ok: true, result: result });
     }
@@ -5351,7 +6469,7 @@ async function handleRequest(event) {
         headers: { 'content-type': 'application/json', ...corsHeaders(request), ...SECURITY_HEADERS }
       });
     }
-    if (!['http:', 'https:'].includes(parsed.protocol) || isPrivateHost(parsed.hostname) || !(await resolvesToPublicOnly(parsed.hostname))) {
+    if (!['http:', 'https:'].includes(parsed.protocol) || !isAllowedTargetPort(parsed) || isPrivateHost(parsed.hostname) || !(await resolvesToPublicOnly(parsed.hostname))) {
       return new Response(JSON.stringify({ error: 'forbidden target' }), {
         status: 403,
         headers: { 'content-type': 'application/json', ...corsHeaders(request), ...SECURITY_HEADERS }
@@ -5376,7 +6494,7 @@ async function handleRequest(event) {
         if (resp.status >= 300 && resp.status < 400 && loc && hop < 5) {
           let next;
           try { next = new URL(loc, current); } catch (e) { break; }
-          if (!['http:', 'https:'].includes(next.protocol) || isPrivateHost(next.hostname) || !(await resolvesToPublicOnly(next.hostname))) break;
+          if (!['http:', 'https:'].includes(next.protocol) || !isAllowedTargetPort(next) || isPrivateHost(next.hostname) || !(await resolvesToPublicOnly(next.hostname))) break;
           current = next.href;
           redirectCount++;
           continue;
@@ -5466,6 +6584,26 @@ async function handleRequest(event) {
       issues.push('no_https');
       score = Math.min(score, 40);
     }
+    // 可选证书检查（?cert=1）：1 次出站到 crt.sh；失败/不可用时静默跳过，不影响其余评分
+    let cert = null;
+    if (url.searchParams.get('cert') === '1') {
+      let finalHost = parsed.hostname;
+      try { finalHost = new URL(current).hostname; } catch (e) {}
+      cert = await fetchCertInfo(finalHost);
+      if (cert) {
+        let certStatus = 'pass';
+        if (cert.daysLeft < 0) {
+          certStatus = 'fail';
+          issues.push('cert_expired');
+          score = Math.max(0, score - 10);
+        } else if (cert.daysLeft <= 14) {
+          certStatus = 'warn';
+          issues.push('cert_expiring');
+          score = Math.max(0, score - 5);
+        }
+        checks.push({ key: 'cert', name: 'Certificate', status: certStatus, detail: cert.daysLeft + 'd' });
+      }
+    }
     score = Math.max(0, Math.min(100, score));
     const grade = score >= 90 ? 'A' : score >= 75 ? 'B' : score >= 60 ? 'C' : score >= 40 ? 'D' : 'F';
     const auditData = {
@@ -5478,6 +6616,7 @@ async function handleRequest(event) {
       grade: grade,
       issues: issues.slice(0, 12),
       checks: checks,
+      cert: cert,
       headers: {
         hsts: hsts,
         csp: csp,
@@ -5619,7 +6758,6 @@ async function handleRequest(event) {
     const protocol = cf.httpProtocol || 'N/A';
     const isHttp2 = protocol.includes('HTTP/2');
     const isHttp3 = protocol.toUpperCase().includes('HTTP/3');
-    const acceptEarlyHints = request.headers.get('Accept-Early-Hints');
     
     let tlsProtocol = 'N/A';
     if (cf.tlsVersion) {
@@ -5631,8 +6769,10 @@ async function handleRequest(event) {
       http3: isHttp3,
       protocol: protocol,
       tlsVersion: tlsProtocol,
-      earlyHints: acceptEarlyHints === 'early-hints',
-      supportsEarlyHints: acceptEarlyHints !== null,
+      // Workers 无法主动发送 103 Early Hints，该能力未实现；此前依赖浏览器自发携带
+      // Accept-Early-Hints 头（几乎恒为 null），字段无意义，现固定为 false
+      earlyHints: false,
+      supportsEarlyHints: false,
       alpn: cf.tlsClientAlpn || 'N/A'
     }), {
       headers: {
@@ -5734,22 +6874,27 @@ async function handleRequest(event) {
       };
       
       if (SPEED_HISTORY_KV_ENABLED && typeof SPEED_HISTORY !== 'undefined' && SPEED_HISTORY) {
-        // 限制 KV 写入：同一客户端在 SPEED_LOG_MIN_INTERVAL_MS 内只落盘一次，避免高频 POST 放大写入
+        // ===== KV 防爆：单键环形缓冲写入 =====
+        // 写入限制：按 IP 15s 节流 + 单 isolate 全局 30 次/分 + 功能默认关闭；
+        // 每次落盘仅 1 get + 1 put，无 list/delete（旧实现见常量区注释）。
         const nowTs = Date.now();
         const lastLog = speedLogThrottle.get(clientIp) || 0;
         if (nowTs - lastLog >= SPEED_LOG_MIN_INTERVAL_MS) {
           speedLogThrottle.set(clientIp, nowTs);
           if (speedLogThrottle.size > 5000) speedLogThrottle.clear();
-          const key = `speed:${record.timestamp}`;
-          await SPEED_HISTORY.put(key, JSON.stringify(record), { expirationTtl: 86400 * 7 });
-          const allKeys = await SPEED_HISTORY.list({ prefix: 'speed:' });
-          if (allKeys.keys.length > 5) {
-            const sorted = allKeys.keys.sort((a, b) => b.name.localeCompare(a.name));
-            for (const k of sorted.slice(5)) {
-              await SPEED_HISTORY.delete(k.name);
+          if (isSpeedLogGloballyAllowed()) {
+            try {
+              const raw = await SPEED_HISTORY.get('speed:history');
+              let arr = raw ? JSON.parse(raw) : [];
+              if (!Array.isArray(arr)) arr = [];
+              arr.unshift(record);
+              if (arr.length > SPEED_HISTORY_MAX) arr = arr.slice(0, SPEED_HISTORY_MAX);
+              const speedWrote = await kvPut(SPEED_HISTORY, 'speed:history', JSON.stringify(arr), { expirationTtl: 86400 * 7 });
+              if (speedWrote) invalidateStatsCache();
+            } catch (e) {
+              // 落盘失败直接忽略：测速历史非关键路径，不做重试（避免失败重试放大写入）
             }
           }
-          invalidateStatsCache();
         }
       }
       return new Response(JSON.stringify({ ok: true }), {
@@ -5771,14 +6916,18 @@ async function handleRequest(event) {
     if (!records) {
       records = [];
       if (SPEED_HISTORY_KV_ENABLED && typeof SPEED_HISTORY !== 'undefined' && SPEED_HISTORY) {
-        const list = await SPEED_HISTORY.list({ prefix: 'speed:', limit: limit });
-        for (const key of list.keys) {
-          try {
-            const val = await SPEED_HISTORY.get(key.name);
-            if (val) records.push(JSON.parse(val));
-          } catch (e) {}
-        }
-        records.sort((a, b) => b.timestamp - a.timestamp);
+        // KV 防爆：单键读取（speed:history）。旧实现为 list + 逐键 get（均按量计费）；
+        // 现在每次查询仅 1 次 get，且结果被 statsCache 缓存 60s，读量恒定不随记录数增长
+        try {
+          const raw = await SPEED_HISTORY.get('speed:history');
+          const arr = raw ? JSON.parse(raw) : [];
+          if (Array.isArray(arr)) {
+            records = arr
+              .filter(r => r && typeof r === 'object')
+              .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+              .slice(0, limit);
+          }
+        } catch (e) {}
       }
       setStatsCache('speed:' + limit, records);
     }
@@ -5834,7 +6983,6 @@ async function handleRequest(event) {
   }
   
   // ==================== 主诊断页面 ====================
-  const workerStart = Date.now();
   const cf = request.cf || {};
   
   const lat = safeNumber(cf.latitude, 0);
@@ -5891,11 +7039,7 @@ async function handleRequest(event) {
     tlsClientJa4: escapeHtml(cf.tlsClientJa4 || 'N/A')
   };
   
-  const acceptLang = request.headers.get('accept-language') || '';
-  let defaultLang = 'en';
-  if (acceptLang.match(/zh-(CN|SG|MY)/i)) defaultLang = 'zh-CN';
-  else if (acceptLang.match(/zh/i)) defaultLang = 'zh-TW';
-  else if (acceptLang.match(/en/i)) defaultLang = 'en';
+  const defaultLang = resolveDefaultLang(request.headers.get('accept-language') || '');
   
   const workerDuration = Date.now() - workerStart;
   
@@ -5922,6 +7066,8 @@ async function handleRequest(event) {
   
   // 生成随机 nonce 用于 CSP
   const nonce = crypto.randomUUID();
+  // 页面会话令牌：颁发给本次页面加载，API 端点凭此放行（防伪造 Origin/Referer 的脚本与爬虫）
+  const pageToken = issuePageToken();
   // connect-src 保留 'https:' 的取舍：多节点测速需由浏览器直连用户输入的任意节点 URL；
   // 站点可达性/流媒体探测走 img-src 白名单（不受 connect-src 影响）。如需收紧可改为具体域名列表。
   const cspHeader = `default-src 'self'; script-src 'self' 'nonce-${nonce}'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; connect-src 'self' https:; img-src 'self' data: https://cloudflare.com https://www.google.com https://github.com https://www.netflix.com https://www.disneyplus.com https://www.youtube.com https://chat.openai.com; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none';`;
@@ -5930,7 +7076,7 @@ async function handleRequest(event) {
   // 开始 HTML 模板（全界面国际化 + 美化）
   // ============================================================
   const html = `<!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="${defaultLang}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
@@ -6064,19 +7210,8 @@ async function handleRequest(event) {
                 </div>
             </div>
             <div class="card-body">
+                <div class="info-section-label" id="t-sec-group-transport">传输与协议</div>
                 <div class="info-grid">
-                    <div class="info-row">
-                        <span class="info-label"><i class="fas fa-server"></i> <span id="t-dc-label">数据中心代理</span></span>
-                        <span class="info-value" id="s-dc">---</span>
-                    </div>
-                    <div class="info-row">
-                        <span class="info-label"><i class="fas fa-chart-simple"></i> <span id="t-risk">风险等级</span></span>
-                        <span class="info-value" id="s-risk">---</span>
-                    </div>
-                    <div class="info-row">
-                        <span class="info-label"><i class="fas fa-network-wired"></i> <span id="t-asn">ASN</span></span>
-                        <span class="info-value">${h.asn}</span>
-                    </div>
                     <div class="info-row">
                         <span class="info-label"><i class="fas fa-exchange-alt"></i> <span id="t-proto-label">协议</span></span>
                         <span class="info-value" id="proto-val">${h.proto}</span>
@@ -6100,6 +7235,21 @@ async function handleRequest(event) {
                     <div class="info-row">
                         <span class="info-label"><i class="fas fa-rocket"></i> <span id="t-http2-label">HTTP/2 状态</span></span>
                         <span class="info-value" id="http2-val">--</span>
+                    </div>
+                </div>
+                <div class="info-section-label" id="t-sec-group-origin">来源与指纹</div>
+                <div class="info-grid">
+                    <div class="info-row">
+                        <span class="info-label"><i class="fas fa-server"></i> <span id="t-dc-label">数据中心代理</span></span>
+                        <span class="info-value" id="s-dc">---</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label"><i class="fas fa-chart-simple"></i> <span id="t-risk">风险等级</span></span>
+                        <span class="info-value" id="s-risk">---</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label"><i class="fas fa-network-wired"></i> <span id="t-asn">ASN</span></span>
+                        <span class="info-value">${h.asn}</span>
                     </div>
                     <div class="info-row">
                         <span class="info-label"><i class="fas fa-robot"></i> <span id="t-bot-label">机器人评分</span></span>
@@ -6191,8 +7341,8 @@ async function handleRequest(event) {
                 <div class="card-header">
                     <i class="fas fa-chart-line"></i>
                     <div>
-                        <h3><span id="t-history-title">测速历史</span></h3>
-                        <p><span id="t-history-sub">最近 10 条带宽测速记录</span></p>
+                        <h3><span id="t-history-title">测试历史（本地）</span></h3>
+                        <p><span id="t-history-sub">最近 20 条记录 · 仅保存在本机浏览器</span></p>
                     </div>
                 </div>
                 <div class="card-body" id="speed-history-panel">
@@ -6245,7 +7395,7 @@ async function handleRequest(event) {
         </div>
     </div>
 
-    <!-- ====== 工具结果弹层 ====== -->
+    <!-- ====== 工具结果弹层（宽屏两栏：左参数 / 右结果） ====== -->
     <div class="modal-overlay" id="toolModal">
         <div class="modal-box tool-modal-box">
             <div class="tool-modal-head">
@@ -6258,7 +7408,14 @@ async function handleRequest(event) {
                     <button class="tool-close" id="toolModalClose" aria-label="close"><i class="fas fa-xmark"></i></button>
                 </div>
             </div>
-            <div class="tool-modal-body" id="toolModalBody"></div>
+            <div class="tool-modal-main">
+                <aside class="tool-modal-side" id="toolModalSide">
+                    <p class="side-desc" id="toolModalSideDesc"></p>
+                    <div class="side-params" id="toolModalParams"></div>
+                    <div class="side-actions" id="toolModalSideActions"></div>
+                </aside>
+                <div class="tool-modal-body" id="toolModalBody"></div>
+            </div>
         </div>
     </div>
 
@@ -6279,6 +7436,7 @@ async function handleRequest(event) {
                 tlsClientJa3: "${data.tlsClientJa3}", tlsClientJa4: "${data.tlsClientJa4}"
             };
         window.__DEFAULT_LANG__ = '${defaultLang}';
+        window.__PAGE_KEY__ = '${escapeForJS(pageToken)}';
         window.__NETDIAG__ = { usageBackend: '${USAGE_BACKEND}', speedHistoryKv: ${SPEED_HISTORY_KV_ENABLED} };
         (function () {
             try {
@@ -6298,6 +7456,7 @@ async function handleRequest(event) {
       'content-type': 'text/html;charset=UTF-8',
       'cache-control': 'no-cache, no-store, must-revalidate',
       'content-security-policy': cspHeader,
+      'set-cookie': '__ns_t=' + pageToken + '; HttpOnly; SameSite=Strict; Path=/; Max-Age=3600' + (url.protocol === 'https:' ? '; Secure' : ''),
       ...SECURITY_HEADERS,
       'server-timing': `worker;dur=${workerDuration}`
     }
