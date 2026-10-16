@@ -1,501 +1,486 @@
-# NetSight Pro
+# NetSight Pro · CF-workers-netdiag
 
-> 单文件 Cloudflare Worker 网络诊断平台 · 20 项诊断工具 · 三语言 · 可视化结果
->
-> A single-file Cloudflare Worker for network diagnostics · 20 tools · Trilingual · Visualized results
+> 单文件 Cloudflare Worker 网络诊断工具箱 —— 一个 `.js` 文件同时提供 Worker 逻辑、API 端点与完整前端（PWA）。23 个诊断工具、三语界面、零构建步骤、零运行时依赖、默认零 Worker 出站。
 
-![version](https://img.shields.io/badge/version-4.6.0-blue)
-![platform](https://img.shields.io/badge/platform-Cloudflare%20Workers-orange)
-![license](https://img.shields.io/badge/license-AGPL--3.0-green)
-![i18n](https://img.shields.io/badge/i18n-EN%20%7C%20%E7%AE%80%E4%BD%93%20%7C%20%E7%B9%81%E9%AB%94-lightgrey)
-![dependencies](https://img.shields.io/badge/dependencies-0-brightgreen)
+![License](https://img.shields.io/badge/license-AGPL--3.0-blue)
+![Platform](https://img.shields.io/badge/platform-Cloudflare%20Workers-orange)
+![Dependencies](https://img.shields.io/badge/dependencies-none-brightgreen)
+![i18n](https://img.shields.io/badge/i18n-en%20%7C%20zh--CN%20%7C%20zh--TW-lightgrey)
+![Version](https://img.shields.io/badge/version-4.7.1-informational)
 
-NetSight Pro 是一个部署在 Cloudflare Workers 上的**整站网络诊断平台**。它把「我这条链路到 Cloudflare 边缘」以及「任意站点」的可观测数据一次性摊开：IP、边缘节点、TLS/协议指纹、实时 RTT、带宽、丢包、DNS、WebRTC 泄漏、域名邮件安全、站点安全响应头评分等，并全部在浏览器端实时计算与渲染。整个后端就是**一个 Worker 脚本**——无需构建、无需依赖。
+[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/BlueDriftHK/CF-workers-netdiag)
 
-NetSight Pro is an all-in-one **network diagnostics platform** that runs on Cloudflare Workers. It surfaces everything observable about "my path to the Cloudflare edge" and "any third-party site": IP, edge colo, TLS/protocol fingerprints, live RTT, bandwidth, packet loss, DNS, WebRTC leaks, domain email security, HTTP security-header scoring, and more — all computed and rendered client-side. The backend is **a single Worker script**: no build step, no dependencies.
+**问题反馈**：[Issues](https://github.com/BlueDriftHK/CF-workers-netdiag/issues) · **安全报告**：[SECURITY.md](SECURITY.md)
 
-- **版本 / Version**：`4.6.0`
-- **运行平台 / Runtime**：Cloudflare Workers（V8, ES2020）
-- **存储 / Storage**：**可选** KV（绑定 `SPEED_HISTORY`）。默认策略下**常规请求不读写 KV**，用量统计走内存；测速历史默认不落 KV。
-- **规模 / Scale**：20 项诊断工具 · 3 种语言 · 40+ 项自动断言回归
-
----
-
-## 📋 目录 · Table of Contents
-
-- [✨ 特性总览 · Features](#-特性总览--features)
-- [🎯 观测点与数据来源 · Vantage Points](#-观测点与数据来源--vantage-points)
-- [🎨 界面 · UI](#-界面--ui)
-- [🧱 技术架构 · Architecture](#-技术架构--architecture)
-- [🚀 快速部署 · Quick Deploy](#-快速部署--quick-deploy)
-- [🛠️ 详细部署 · Detailed Deployment](#️-详细部署--detailed-deployment)
-- [⚙️ 绑定与变量 · Bindings & Vars](#️-绑定与变量--bindings--vars)
-- [📌 API 端点 · Endpoints](#-api-端点--endpoints)
-- [🖱️ 前端功能与工具 · Frontend & Tools](#️-前端功能与工具--frontend--tools)
-- [🔒 安全机制 · Security](#-安全机制--security)
-- [💾 KV 用量策略 · KV Budget](#-kv-用量策略--kv-budget)
-- [🌐 国际化与主题 · i18n & Theme](#-国际化与主题--i18n--theme)
-- [⚡ 性能与可靠性 · Performance](#-性能与可靠性--performance)
-- [🔀 相较上游的改动 · Changes vs Upstream](#-相较上游的改动--changes-vs-upstream)
-- [🛠️ 自定义与扩展 · Customization](#️-自定义与扩展--customization)
-- [❓ 常见问题 · FAQ](#-常见问题--faq)
-- [📝 版本记录 · Changelog](#-版本记录--changelog)
-- [📄 许可证与贡献 · License & Contributing](#-许可证与贡献--license--contributing)
+<!-- 截图位置（放到 docs/ 或 assets/ 后取消注释）
+<p align="center">
+  <img src="docs/overview.png" width="820" alt="概览页">
+</p>
+-->
 
 ---
 
-## ✨ 特性总览 · Features
+## 目录
 
-| 类别 Category | 功能 Feature | 描述 Description |
-| --- | --- | --- |
-| 📡 网络质量 Quality | 实时 RTT 监控 / Live RTT | 每 2s 探测一次，绘制延迟趋势图，计算抖动、最低/最高 RTT、丢包率、质量与稳定性等级 |
-| | 一键体检 / Quick check | 一键运行全部检测并生成评分报告 |
-| | 下载测速 / Download speed | 多档位下载，估算下行带宽 |
-| | 上传测速 / Upload speed | 多档位上传，估算上行带宽 |
-| | 缓冲膨胀 / Bufferbloat | 负载下的延迟测试，A–F 评级 |
-| | 并发测试 / Concurrency | 4/6/8 路并发请求，观察多连接处理能力 |
-| | 流式吞吐 / Stream | 分块流式下载，测试长连接持续吞吐 |
-| | TTFB 分阶段 / TTFB phase | 拆解各阶段耗时 |
-| 🔒 协议与安全 Protocol | HTTP/2 · HTTP/3 | 判定 HTTP/2 或 QUIC 协议 |
-| | TLS 信息 / TLS info | TLS 版本、加密套件、ECH 推断 |
-| | 压缩 / Compression | 检测 br / gzip / deflate / zstd |
-| | Bot 评分 / Bot score | Cloudflare Bot Management 评分 |
-| | **站点安全评分 / Site audit** | **审计任意站点的 HTTP 安全响应头，给出 0–100 分与 A–F 评级 + 问题清单** |
-| | WebRTC 泄漏 / WebRTC leak | 检测内网/公网 IP 是否经 WebRTC 泄露 |
-| 🌍 IP 与位置 Location | 双栈 IP / Dual-stack | 多公共 API 备用获取 IPv4 / IPv6 |
-| | 真实位置 / Geo | **直接使用 Cloudflare 边缘数据**（城市、地区、国家、运营商、客户端 IP），零出站请求 |
-| | 距离 / Distance | 客户端到边缘节点的直线距离（Haversine） |
-| | IP 风险评分 / IP risk | 代理 / VPN / TOR / 托管标记与风险等级（proxycheck.io，HTTPS） |
-| 🌐 DNS 与域名 DNS | DNS 工具箱 / DNS toolbox | DoH 记录查询（A/AAAA/CNAME/MX/TXT/NS/SOA/CAA）+ IP 黑名单检测 |
-| | 多解析器对比 / DNS compare | 并发查询 Cloudflare / Google / Quad9 / AliDNS 并比对一致性 |
-| | 域名安全体检 / Domain check | MX / SPF / DMARC / DKIM 与域名声誉，评分 + 问题清单 |
-| 🛰️ 网络探测 Probe | 网络可达性 / Reachability | **边缘侧与浏览器侧同时探测境内外站点，识别本地阻断** |
-| | 多节点对比 / Multi-node | 输入多个节点 URL，并行测延迟并对比 |
-| | 流媒体连通 / Media | Netflix / Disney+ / YouTube / ChatGPT 可达性 |
-| 📊 运维 Ops | 站点监控 / Site monitor | 定时巡检（Cron），异常自动 Webhook 告警；**仅状态变化时写 KV** |
-| | 测速历史 / Speed history | 最近记录（需 KV，默认关闭写入） |
-| | 用量统计 / Usage stats | 各端点调用次数（默认内存，不写 KV） |
-| 🎨 交互 UX | 一键报告 / Copy report | 生成纯文本诊断报告 |
-| | 主题 / Theme | 深色 / 浅色 / 跟随系统 |
-| | 语言 / Language | English / 简体中文 / 繁體中文，全量覆盖 |
-| | PWA | 可安装到桌面 / 主屏，具备离线外壳 |
+- [它是什么](#它是什么)
+- [功能总览](#功能总览)
+  - [诊断工具（23 个 · 6 分组）](#诊断工具23-个--6-分组)
+  - [平台能力](#平台能力)
+- [设计原则](#设计原则)
+- [快速开始](#快速开始)
+- [部署配置](#部署配置)
+- [API 端点](#api-端点)
+- [限流与配额](#限流与配额)
+- [安全与隐私](#安全与隐私)
+- [工具成本一览](#工具成本一览)
+- [常见问题](#常见问题)
+- [项目结构](#项目结构)
+- [开发与贡献](#开发与贡献)
+- [未实现 / 不打算做](#未实现--不打算做)
+- [变更摘要](#变更摘要)
+- [许可与第三方归属](#许可与第三方归属)
+- [免责声明](#免责声明)
+- [联系](#联系)
 
 ---
 
-## 🎯 观测点与数据来源 · Vantage Points
+## 它是什么
 
-**本工具以「用户端（你的浏览器 / 本机网络）」为第一观测视角。** 绝大多数测量都在你的浏览器里发起，反映的是**你的链路**；只有需要「公网视角」的检查才由 **Cloudflare 边缘**发起——它们描述的是**目标站点**或边缘侧能力，**不代表你的网络**。
+把浏览器能做的网络探测全部放在**浏览器侧**完成，Worker 只承担少量必要职责（限流、可选 KV 存储、少量可选出站）。于是：
 
-> This tool is **client-first**: most measurements are initiated by your browser and describe **your own network**. Only checks that need a public vantage point are issued by the **Cloudflare edge** — they describe the **target site**, not your network.
+- **部署极简**：一个文件，`wrangler deploy` 即可；不需要 npm install、不需要打包、没有 CI。
+- **成本可控**：默认不写 KV、不做 Worker 出站；KV 写入有硬预算闸门。
+- **隐私友好**：没有账号、没有埋点、不上报测速结果；历史记录默认只存在你自己的浏览器里。
+- **跨语言**：界面完整支持 `en` / `zh-CN` / `zh-TW`，深色/浅色主题。
 
-| 观测点 Vantage | 工具 Tools | 说明 Description |
-| --- | --- | --- |
-| 🖥️ 你的浏览器 Your browser | 实时 RTT 监控、丢包率、带宽测速、上传测速、缓冲膨胀、DNS 解析、TTFB、WebRTC、多节点对比、流媒体连通、WebSocket、并发测试、流式传输、一键体检 | 从你的设备发起，反映你的链路质量 |
-| 🛰️ 双侧对照 Both sides | 网络可达性 | 边缘侧与浏览器侧**同时**探测并对照，用于识别「本地被阻断」 |
-| ☁️ Cloudflare 边缘 Edge | DNS 工具箱、多解析器对比、域名安全体检、站点安全评分、CPU 基准、站点监控 | 由边缘发起；描述**目标站点**或边缘侧能力 |
-
-**判读建议**：判断「我的网络好不好」请以 **🖥️ 浏览器侧**数据为准；边缘侧结果仅作对照参考。
-
-### 请求来源说明 · Who calls the Worker
-
-| 来源 | 是否用户端 | 会产生什么 |
-| --- | --- | --- |
-| 你的浏览器 | ✅ 是 | 页面/资源加载、每 2s 的 `/health`（仅前台轮询）、点击工具时的 API 调用 |
-| 第三方 / 爬虫 / 外部探针 | ❌ 否 | 可直接访问 `/` 与 `/health`（这两者不做同源校验）；敏感 API 会被同源校验拒绝（403） |
-| Cloudflare Cron Triggers | ❌ 否 | 服务端定时触发 `scheduled` 处理器执行站点巡检（探测目标 + 发 Webhook），**不经过 fetch 处理器**，故不计入用量统计 |
-| Worker 自己发起的出站请求 | ❌ 否 | DoH 解析、`proxycheck.io`、站点评分目标抓取、可达性探测、监控目标探测与 Webhook 告警 |
-
-> 因此，「默认策略下不写 KV」这一结论**与调用方无关**：无论请求来自你的浏览器、爬虫还是别的来源，默认都不会产生 KV 写入。另注：用量统计是 **per-isolate 内存**，不同边缘节点各算各的，并非全站总数。
+**它不是什么**：不是 SaaS，不保证可用性，不带账号体系，也不是给第三方站点做扫描的工具。
 
 ---
 
-## 🎨 界面 · UI
+## 功能总览
 
-界面分为 **4 个标签页 / 4 tabs**：
+### 诊断工具（23 个 · 6 分组）
 
-- **概览 Overview**：IPv4/IPv6、边缘节点、Worker 耗时 + 实时 RTT 监控（图表 + 质量/稳定性/丢包/样本）
-- **网络信息 Network**：TLS/协议/ECH/压缩/Bot 评分、边缘位置与运营商、真实 IP 位置与风险、硬件信息
-- **诊断工具 Tools**：**20 张工具卡片网格**
-- **历史统计 History**：测速历史、用量统计
+| 分组 | 工具 | 说明 |
+|---|---|---|
+| **网络质量与延迟** | 一键体检 | 串跑延迟/抖动/丢包/上下行/协议/DNS 等 6 项，给出百分制评分、评级、**问题清单 + 原因建议** |
+| | 长时质量监控 | 1/5/10 分钟每秒探测，输出 **p50/p95/p99**、抖动、丢包、卡顿次数与时间线色带 |
+| | 丢包率 | 连续探测统计丢包（自动剔除限流样本，不虚报 0%） |
+| | TTFB 分析 | DNS / TCP / TLS / 等待 / 下载 五阶段耗时拆解 |
+| | WebSocket | 真实 WebSocket 往返延迟（服务端心跳 + 超时上限） |
+| | 代理/VPN 检测 | 比对 **HTTP 出口 IP** 与 **WebRTC 暴露 IP**，识别代理、VPN 与分流泄漏 |
+| | WebRTC 泄漏 | 检测浏览器是否暴露内网/公网真实 IP |
+| **带宽与吞吐** | 带宽测速 | 3 档位下载测速（读取完整响应体，不做 TTFB 误判） |
+| | 多流并发测速 | 4 条并行流 + **实时速率曲线**，报告平均 / p95 峰值 / 稳定性 |
+| | 上传测速 | 3 档位上传，服务端流式读取 |
+| | 缓冲膨胀 | 空闲 vs 满载延迟对比，A–F 评级（会消耗较多流量） |
+| | 流式传输 | 分块流式下载吞吐 |
+| | 并发测试 | 多档位并发请求观察耗时变化 |
+| **DNS** | DNS 解析 | 主流站点解析/加载耗时（优先取浏览器真实 DNS 耗时） |
+| | DNS 工具箱 | DoH 记录查询（A/AAAA/CNAME/MX/TXT/NS/SOA/CAA）+ IP 黑名单检测 |
+| | 多解析器对比 | 同时查询 Cloudflare / Google / Quad9 / AliDNS，判定解析一致性 |
+| **安全与合规** | 站点体检 | 安全响应头审计评分（HSTS/CSP/XFO/XCTO/Referrer-Policy/COOP/Server），可选**证书到期检查** |
+| | 域名安全体检 | MX / SPF / DMARC / DKIM + 两个黑名单声誉库 |
+| **可达性与多节点** | 流媒体连通性 | 纯浏览器探测流媒体站点可达性 |
+| | 网络可达性 | 浏览器侧直连境内外站点，识别本地阻断 |
+| | 多节点对比 | 对比多个自建 Worker 节点的延迟（走跨域 `/node-ping`） |
+| **监控与系统** | 站点监控 | Cron 定时巡检 + Webhook 告警（钉钉/飞书/企微/Slack），仅状态变化时写存储 |
+| | CPU 性能 | Worker 端计算基准（独立限流 3 次/分/IP） |
 
-诊断工具采用 **卡片网格 + 结果弹层**：点击卡片 → 弹出层内运行并展示结果，右上角带「重新运行」按钮，窄屏自动精简。结果用**指标卡 + 进度条 / 行列表**结构化呈现，而非一段裸文本。深浅主题可切换，偏好保存到 `localStorage`。
+### 平台能力
+
+- **实时 RTT 监控**：5 秒间隔轮询、抖动、最小/最大、丢包率、实时曲线、质量与稳定性评级
+- **诊断建议引擎（E1）**：把问题映射为「可能原因 + 建议动作」，而不是只丢一个分数
+- **本地测试历史**：六类测试结果存 localStorage（最近 20 条，可一键清空），**不写 KV**
+- **分享能力**：体检结果可生成分享图（Canvas）或分享链接（URL 内嵌压缩数据）
+- **i18n**：`en` / `zh-CN` / `zh-TW` 全界面覆盖，含分组名与建议文案
+- **主题**：深色/浅色，跟随系统或手动切换
+- **PWA**：manifest + Service Worker（网络直通，不做离线缓存以保证诊断实时性）
+- **安全响应头**：HSTS / XCTO / XFO / Referrer-Policy / Permissions-Policy，主页面带 nonce CSP
 
 ---
 
-## 🧱 技术架构 · Architecture
+## 设计原则
 
-**后端 · Backend（Cloudflare Worker）**
-- 运行时 Runtime：Cloudflare Workers（V8）
-- 语言 Language：JavaScript（ES2020）
-- 存储 Storage：**可选** KV（`SPEED_HISTORY`）；默认策略下常规请求零 KV 读写
-- API 设计：RESTful，返回 JSON 或二进制流
-- 并发控制 Concurrency：自定义 `pLimit`
-- 限流 Rate limit：内存 Map（per-isolate），分区限流（通用 / 健康检查 / 大响应 / CPU）
-- 安全头 Security headers：HSTS、X-Frame-Options、CSP(nonce)、CORS 白名单
+这四条是本项目的取舍底线，改动代码前请先读 [CODE_OF_CONDUCT.md 第 6 节](CODE_OF_CONDUCT.md#6-本项目特有的技术红线)。
 
-**前端 · Frontend（原生 SPA）**
-- 框架 Framework：纯原生 JS，无第三方框架（仅字体与图标库）
-- 图表 Chart：Canvas 2D 实时折线
-- WebSocket：`wss://` 双向通信测试
-- 响应式 Responsive：CSS Grid + Flexbox
-- 本地存储：`localStorage` 保存语言与主题偏好
-
-**外部依赖 · External deps**：IP 探测（`ipify` / `icanhazip` 等）、IP 风险（`proxycheck.io`，HTTPS）、字体 Google Fonts（Inter，**异步加载、不阻塞首屏**）、图标 Font Awesome 6（带 SRI 校验）。
-
-> 客户端地理位置**不再依赖第三方 API**，直接使用 Cloudflare `request.cf` 边缘数据，任何网络环境均可用。
+| 原则 | 具体做法 |
+|---|---|
+| **零出站优先** | 可达性、WebRTC、测速、质量监控全在浏览器侧；IP 风险评分已停用；证书检查是**可勾选**的 1 次出站 |
+| **KV 写入有预算** | 所有写入经统一闸门（20 次/分、600 次/日/isolate、同键 10s 去抖）；测速历史为单键环形缓冲，**无 list、无 delete** |
+| **安全默认值不可放宽** | 会话令牌校验、CSP、安全头、SSRF 防护、体积上限、管理密钥只走请求头 |
+| **单文件零依赖** | 无构建步骤、无运行时依赖、无前端框架；改一行推一次即上线 |
 
 ---
 
-## 🚀 快速部署 · Quick Deploy
+## 快速开始
+
+### 方式一：一键部署
+
+点击顶部 **Deploy to Cloudflare Workers** 按钮，按提示授权即可（部署后可选配置 KV 与变量，见下节）。
+
+### 方式二：命令行
 
 ```bash
-# 1) 获取代码
 git clone https://github.com/BlueDriftHK/CF-workers-netdiag.git
 cd CF-workers-netdiag
 
-# 2) 安装 Wrangler
-npm install -g wrangler
-
-# 3) 登录 Cloudflare
-wrangler login
-
-# 4)（可选）创建 KV
-wrangler kv:namespace create "SPEED_HISTORY"
-
-# 5) 在 wrangler.toml 填入 KV id（如使用 KV）
-
-# 6) 发布
-wrangler deploy
+npx wrangler login
+npx wrangler dev            # 本地预览 http://localhost:8787
+npx wrangler deploy         # 部署到 *.workers.dev
 ```
 
-访问 Worker 分配的 `*.workers.dev` 域名即可使用。
-Then open the assigned `*.workers.dev` URL.
+### 部署后自检
+
+1. 打开首页，确认「边缘节点 / Worker 耗时」有值、RTT 曲线开始滚动。
+2. 控制台执行 `fetch('/health').then(r=>r.json()).then(console.log)`，确认 `version` 与 `kvWrite` 正常。
+3. 点几个工具卡片：免参数工具应立即出结果，带参数工具应在**左栏输入、右栏查看结果**。
 
 ---
 
-## 🛠️ 详细部署 · Detailed Deployment
+## 部署配置
 
-### 方式一 / Option A：Wrangler CLI（推荐 / Recommended）
+### `wrangler.toml` 参考
 
-**前置条件 Prerequisites**：Node.js 16+、Cloudflare 账号。
-
-**Step 1 · 安装 Wrangler**
-```bash
-npm install -g wrangler
-```
-
-**Step 2 · 登录 Cloudflare**
-```bash
-wrangler login
-```
-
-**Step 3 ·（可选）创建 KV 命名空间**
-```bash
-wrangler kv:namespace create "SPEED_HISTORY"
-```
-输出形如：
-```
-✨ Success! Worker KV namespace created:
-{ binding = "SPEED_HISTORY", id = "abc123def456" }
-```
-记下 `id`。**不绑定也能完整运行**（用量统计走内存、测速历史与站点监控持久化不可用）。
-
-**Step 4 · 配置 `wrangler.toml`**
 ```toml
-name = "netsight-pro"
+name = "cf-workers-netdiag"
 main = "_workers.js"
-compatibility_date = "2024-01-01"
+compatibility_date = "2024-11-01"
 
-# 可选 optional
+# 可选：测速历史、用量统计（kv 模式）、站点监控状态依赖它
+[[kv_namespaces]]
+binding = "SPEED_HISTORY"
+id = "<你的 KV namespace id>"
+
+# 可选：/static/ 静态资源缓存（该前缀当前停用，见「端点表」）
 # [[kv_namespaces]]
-# binding = "SPEED_HISTORY"
-# id = "abc123def456"
+# binding = "CACHE_KV"
+# id = "<你的 KV namespace id>"
 
-[vars]
-# 可选：跨域白名单（逗号分隔；含 * 表示允许全部）
-ALLOWED_ORIGINS = "https://yourdomain.com"
-# 可选：站点监控管理密钥
-# MONITOR_ADMIN_KEY = "your-secret"
-
-# 可选：站点监控定时巡检
-# [triggers]
-# crons = ["*/15 * * * *"]
+# 可选：站点监控定时巡检（建议 5 分钟）
+[triggers]
+crons = ["*/5 * * * *"]
 ```
 
-**Step 5 · 发布并验证**
 ```bash
-wrangler deploy
-curl https://your-worker.workers.dev/health
-# => {"status":"ok","version":"4.6.0", ...}
+# 创建 KV（可选）
+npx wrangler kv namespace create SPEED_HISTORY
+
+# 设置管理员密钥（站点监控用，务必用 secret，不要写进代码）
+npx wrangler secret put MONITOR_ADMIN_KEY
 ```
 
-### 方式二 / Option B：Cloudflare Dashboard
+### 绑定与变量
 
-1. 登录 Dashboard → **Workers & Pages** → 创建 Worker。
-2. 把本项目的 Worker 脚本（`_workers.js`）完整粘贴进在线编辑器。
-3. **设置 → 变量 / Settings → Bindings**（可选）添加：
-   - KV Namespace：名称 `SPEED_HISTORY`
-   - 变量：`ALLOWED_ORIGINS`、`MONITOR_ADMIN_KEY`
-4. 保存并部署。
+| 名称 | 类型 | 必填 | 用途 | 不配置时 |
+|---|---|---|---|---|
+| `SPEED_HISTORY` | KV 绑定 | 否 | 测速历史、用量统计（kv 模式）、站点监控状态与日志 | 用量统计退化为 isolate 内存；测速历史与监控提示未绑定 |
+| `CACHE_KV` | KV 绑定 | 否 | `/static/` 前缀的静态资源（该前缀当前停用） | 无影响 |
+| `MONITOR_ADMIN_KEY` | Secret | 否 | 站点监控管理密钥（仅接受 `x-admin-key` 请求头） | 监控端点返回 `key_not_set` |
+| `ALLOWED_ORIGINS` | Var/Secret | 否 | 跨域白名单（逗号分隔，`*` 表示放开） | 仅允许同源访问（推荐） |
 
-> 注意：Dashboard 方式不支持本地调试与热更新，适合快速测试。变量名需与代码一致（区分大小写）。
+### Cron Triggers
 
----
+站点监控由 `scheduled` 事件驱动。不配置 Cron 时，监控工具仍可手动触发「立即检测」，只是不会有自动巡检。
 
-## ⚙️ 绑定与变量 · Bindings & Vars
+### 自定义域
 
-| 名称 Name | 类型 Type | 必填 Required | 描述 Description |
-| --- | --- | --- | --- |
-| `SPEED_HISTORY` | KV Namespace | 否 No | 站点监控状态/日志、测速历史。未绑定时相关功能优雅降级为「暂无记录」，**不影响其它功能** |
-| `ALLOWED_ORIGINS` | 环境变量 Var | 否 No | 跨域来源白名单（逗号分隔）。未设置时仅允许同源；含 `*` 允许全部 |
-| `MONITOR_ADMIN_KEY` | 环境变量 Var | 否 No | 站点监控管理密钥；未设置时监控配置读写不可用 |
-| Cron Triggers | 定时触发器 | 否 No | 启用后站点监控才会按计划自动巡检 |
+在 Cloudflare 面板绑定自定义域即可；仓库里的 `CNAME` 文件用于 Pages 场景。绑定后请确认：
 
-| 源码常量 Constant | 默认 Default | 说明 |
-| --- | --- | --- |
-| `USAGE_BACKEND` | `memory` | 用量统计后端；设为 `kv` 才会聚合后写入 KV（消耗额度） |
-| `SPEED_HISTORY_KV_ENABLED` | `false` | 是否把测速历史写入 KV；默认关闭以保护额度 |
-
-> 所有绑定都是**软依赖**：代码用 `typeof X !== 'undefined'` 判断，未绑定也能完整运行。
-> All bindings are **soft dependencies** — the script degrades gracefully when absent.
+- 站点通过 **HTTPS** 访问（会话令牌 Cookie 会带 `Secure`；HTTP 下改用 `x-ns-token` 请求头兜底）
+- 若对外提供的是**修改版**，请把页脚源码链接换成你自己的仓库（AGPL-3.0 §13 要求，见 [CODE_OF_CONDUCT.md 13.3](CODE_OF_CONDUCT.md#133-agpl-30-13-对本项目的实际含义部署者必读)）
 
 ---
 
-## 📌 API 端点 · Endpoints
+## API 端点
 
-| 端点 Endpoint | 方法 Method | 参数 Params | 说明 Description | 限制 Limit |
-| --- | --- | --- | --- | --- |
-| `/` | GET | — | 主诊断页 | — |
-| `/health` | GET | — | 健康检查（版本 + 存储策略） | 独立限流 180/分 |
-| `/app.js`、`/app.css` | GET | — | 前端资源（可缓存） | — |
-| `/manifest.webmanifest`、`/sw.js` | GET | — | PWA 清单与 Service Worker | — |
-| `/icon.svg`、`/icon-192.png`、`/icon-512.png` | GET | — | 站点图标 | — |
-| `/speedtest` | GET | `size` | 下载测速（随机字节） | 1..67,108,864（默认 100KB）；大响应独立限流 30/分 |
-| `/upload-test` | POST | body | 上传测速（流式读取） | body ≤ 32 MB |
-| `/cpu-test` | GET | `n` | CPU 基准测试 | n 1..20,000；独立限流 3/分 |
-| `/dns-proxy` | GET | `url` | HEAD 探测 | 仅 http/https + 公网校验 |
-| `/ws-test` | GET | — | WebSocket 往返延迟 | 需 Upgrade 头 |
-| `/http2-test` | GET | — | HTTP/2·3 / TLS / ALPN | — |
-| `/concurrent-test` | GET | `count`,`size` | 并发下载 | count 1..16；size 1..65,536 |
-| `/stream-test` | GET | `size` | 流式传输 | 1..5,242,880 |
-| `/api/dns-lookup` | GET | `name`,`type` | 单条 DoH 查询 | 类型白名单 |
-| `/api/dnsbl` | GET | `ip` | IP 黑名单检测 | 需 IPv4 |
-| `/api/dns-compare` | GET | `name`,`type` | 多解析器对比与一致性判定 | 类型白名单 |
-| `/api/domain-check` | GET | `domain`,`selector` | 域名邮件安全体检 | 合法域名 |
-| `/api/site-audit` | GET | `url` | 站点安全响应头审计与评分 | 仅公网 http/https |
-| `/api/reach-check` | GET | — | 边缘侧可达性探测结果 | — |
-| `/api/monitor` | GET / POST | `key`（GET） | 读取 / 保存站点监控配置 | 需 `MONITOR_ADMIN_KEY` |
-| `/api/monitor-run` | POST | — | 手动触发一次巡检 | 需 `x-admin-key` |
-| `/api/usage-stats` | GET | — | 用量统计（默认内存） | — |
-| `/api/speed-history` | GET | `limit` | 查询测速历史（需 KV） | limit 1..20 |
-| `/api/log-speed` | POST | `{avgSpeed,results}` | 记录一次测速结果 | body ≤ 10KB |
-| `/api/ip-fraud` | GET | — | IP 风险评分 | 依赖第三方接口 |
-| `/*` | OPTIONS | — | CORS 预检 | 含 CORS 头 |
+🔑 = 需要主页面签发的**会话令牌**（HttpOnly Cookie `__ns_t` 或 `x-ns-token` 头，TTL 1 小时）。缺失或失效返回 **403**；前端收到 403 会自动刷新页面重新领取。
 
-除静态资源外，所有端点受基础限流（默认 **60 次/分钟/IP**）保护；`/health`、大响应下载、`/cpu-test` 使用**独立限流桶**。所有响应均携带安全头，敏感端点实施同源保护。
+| 端点 | 方法 | 参数 | 说明 | 限制 |
+|---|---|---|---|---|
+| `/` | GET | — | 主诊断页（签发会话令牌） | 无令牌要求 |
+| `/health` | GET | — | 版本 + 存储策略 + **KV 写入遥测** | 🔑 独立限流 180/分/IP |
+| `/app.js`、`/app.css` | GET | `v` | 前端资源 | 1 年 immutable，免限流 |
+| `/manifest.webmanifest`、`/sw.js` | GET | — | PWA 清单与 Service Worker | 免限流 |
+| `/icon.svg`、`/icon-192.png`、`/icon-512.png` | GET | — | 站点图标 | 免限流 |
+| `/node-ping` | GET | — | 节点互测延迟（供多节点对比） | 无令牌、CORS `*`、响应 ≈60B |
+| `/speedtest` | GET | `size` | 下载测速（随机字节） | 🔑 1..67,108,864（默认 100KB）；>2MB 走独立桶 30/分 |
+| `/upload-test` | POST | body | 上传测速（流式读取） | 🔑 body ≤ 32MB |
+| `/cpu-test` | GET | `n` | CPU 基准测试 | 🔑 n 1..20,000；独立限流 3/分 |
+| `/ws-test` | GET | — | WebSocket 往返延迟 | 🔑 需 `Upgrade: websocket`；消息 ≤4KB；最长 5 分钟 |
+| `/http2-test` | GET | — | HTTP/2·3 / TLS / ALPN | 🔑 `earlyHints` 恒为 false（Workers 无法发 103） |
+| `/concurrent-test` | GET | `count,size` | 并发下载 | 🔑 count 1..16、size 1..65,536 |
+| `/stream-test` | GET | `size` | 流式传输（64KB 分块） | 🔑 1..5,242,880 |
+| `/api/dns-lookup` | GET | `name,type` | 单条 DoH 查询 | 🔑 类型白名单；缓存 60s |
+| `/api/dnsbl` | GET | `ip` | IP 黑名单检测（3 个 zone） | 🔑 需 IPv4；缓存 5 分钟 |
+| `/api/dns-compare` | GET | `name,type` | 4 个公共解析器对比 | 🔑 `consistent` 需恰好 1 组；缓存 60s |
+| `/api/domain-check` | GET | `domain,selector` | MX/SPF/DMARC/DKIM + 声誉 | 🔑 缓存 120s |
+| `/api/site-audit` | GET | `url,cert` | 安全响应头审计与评分；`cert=1` 附证书到期 | 🔑 公网 http/https、端口仅 80/443、≤6 跳逐跳校验 |
+| `/api/monitor` | GET / POST | — | 读取 / 保存站点监控配置 | 🔑 + `x-admin-key`；目标与 Webhook 限公网 + 80/443 |
+| `/api/monitor-run` | POST | — | 手动触发一次巡检 | 🔑 + `x-admin-key` |
+| `/api/usage-stats` | GET | — | 用量统计 | 🔑 默认内存模式；kv 模式缓存 60s |
+| `/api/speed-history` | GET | `limit` | 测速历史（需 KV 开关） | 🔑 limit 1..20；单键读 + 缓存 60s |
+| `/api/log-speed` | POST | `{avgSpeed,results}` | 记录一次测速结果 | 🔑 body ≤ 10KB；按 IP 15s + 全局 30/分 |
+| `/*` | OPTIONS | — | CORS 预检 | 含 CORS 头；先于限流处理 |
 
----
+### 已停用端点（统一返回 **410 Gone**）
 
-## 🖱️ 前端功能与工具 · Frontend & Tools
+| 端点 | 停用原因 |
+|---|---|
+| `/dns-proxy` | 前端从未调用；DNS 探测已由浏览器侧实现 |
+| `/api/ip-fraud` | 外部风险评分已停用（零出站设计） |
+| `/api/reach-check` | 边缘侧可达性探测已移除，改为纯浏览器侧 |
+| `/static/*` | 遗留的 KV 静态托管，无任何静态资源被引用 |
 
-### 实时 RTT 监控 / Live RTT
-每 2s 向 `/health` 发一次 HEAD 请求（带缓存破坏参数），计算往返时间；保留最近样本绘制折线图。派生指标：抖动（移动平均窗口）、最低/最高 RTT、丢包率、质量等级、稳定性等级。**标签页切到后台时自动暂停轮询，回到前台自动恢复。**
-
-### 20 个诊断工具 / 20 tools
-
-| 工具 Tool | 数据来源 Source | 测试内容 What it does |
-| --- | --- | --- |
-| 一键体检 Quick check | 🖥️ 本机 | 运行全部检测并生成评分报告 |
-| 丢包率 Packet Loss | 🖥️ 本机 | 连续探测，统计失败率与质量 |
-| 带宽测速 Bandwidth | 🖥️ 本机 | 依次下载多档位，算各档与平均 Mbps |
-| 上传测速 Upload | 🖥️ 本机 | 多档位上传，算各档与平均 Mbps |
-| 缓冲膨胀 Bufferbloat | 🖥️ 本机 | 负载下延迟，A–F 评级 |
-| DNS 解析 DNS | 🖥️ 本机 | 解析主流站点，测量解析耗时 |
-| TTFB 分析 TTFB | 🖥️ 本机 | 拆解请求各阶段耗时 |
-| WebRTC 泄漏 Leak | 🖥️ 本机 | 判断内网/公网 IP 泄露 |
-| 多节点对比 Multi-node | 🖥️ 本机 | 输入多节点 URL，并行测延迟 |
-| 流媒体连通 Media | 🖥️ 本机 | Netflix/Disney+/YouTube/ChatGPT 可达性 |
-| WebSocket | 🖥️ 本机 | 建连后往返延迟测量 |
-| 并发测试 Concurrency | 🖥️ 本机 | 多路并发，观测平均耗时 |
-| 流式传输 Stream | 🖥️ 本机 | 分块流式读取，算持续吞吐 |
-| 网络可达性 Reachability | 🛰️ 双侧 | 边缘侧与浏览器侧**同时**探测并对照 |
-| DNS 工具箱 DNS Toolbox | ☁️ 边缘 | DoH 记录查询 + IP 黑名单检测 |
-| 多解析器对比 DNS Compare | ☁️ 边缘 | 4 个公共解析器并发对比 |
-| 域名安全体检 Domain Check | ☁️ 边缘 | MX / SPF / DMARC / DKIM 与声誉 |
-| 站点安全评分 Site Audit | ☁️ 边缘 | HTTP 安全响应头审计 + A–F 评级 |
-| CPU 性能 CPU | ☁️ 边缘 | Worker 端计算基准 |
-| 站点监控 Monitor | ☁️ 边缘 | 定时巡检 + Webhook 告警 |
-
-### 站点安全评分 · Site Audit
-输入任意公网 URL，由 Worker 端发起请求并审计：状态码、首字节（TTFB）、总耗时、重定向次数、跟随重定向后的最终地址，并逐项检查安全响应头：
-
-`Strict-Transport-Security` / `Content-Security-Policy` / `X-Frame-Options` / `X-Content-Type-Options` / `Referrer-Policy` / `Permissions-Policy` / `COOP` / `Server`
-
-按权重汇总为 **0–100 安全评分与 A–F 评级**，并给出问题清单（如 HSTS 缺失、CSP 允许 `unsafe-inline`、Server 头暴露软件信息等）。
-
-> 说明：Workers `fetch` 无法获取任意目标的 TLS 证书信息，因此体检覆盖 **HTTP 层**，不含证书链审计。
-
-### 网络可达性 · Reachability
-同时从 **Cloudflare 边缘**（服务端）与 **你的浏览器**（客户端）探测 10 个境内外目标站点，给出结论：可达 / **疑似被阻断**（边缘可达而本地不可达）/ 不可达。用于快速识别本地网络或出口层的阻断与干扰。
-
-### 报告 / Report
-点击「复制报告」生成纯文本报告：诊断时间、边缘节点、客户端 IP、RTT/抖动/丢包、协议/TLS/压缩/Bot 评分、位置与 ISP、IP 风险信息等。
+实现代码保留，恢复只需从 `DISABLED_ENDPOINTS` / `DISABLED_PATH_PREFIXES` 移除对应路径。
 
 ---
 
-## 🔒 安全机制 · Security
+## 限流与配额
 
-1. **CSP（随机 nonce）**：`script-src` 仅 `'self' + 'nonce-<random>'`，页面内联脚本携带该 nonce；脚本不使用 `'unsafe-inline'`。
-2. **安全响应头**：`X-Content-Type-Options: nosniff`、`X-Frame-Options: DENY`、`Referrer-Policy: strict-origin-when-cross-origin`、HSTS、`Permissions-Policy`。
-3. **同源校验（fail-closed）**：写操作与敏感端点校验 `Origin`/`Referer`；**无 `Origin` 且无 `Referer` 一律拒绝**，跨域需显式加入 `ALLOWED_ORIGINS`。
-4. **SSRF 防护**（`/dns-proxy`、`/api/site-audit`）：协议白名单 + 私网/保留地址拦截 + DoH 解析确认全为公网 IP + 重定向**逐跳**校验 + 超时 + 只读响应头。
-5. **分区限流**：通用 60/分；`/health` 180/分；大响应下载 30/分；`/cpu-test` 3/分（均为 per-isolate、按 IP）。
-6. **上传防护**：统一**流式读取**，超过 32 MB 直接返回 413。
-7. **第三方资源**：外链样式/字体带 `integrity`（SRI）与 `crossorigin`。
-8. **出站加密**：优先 HTTPS（如 `proxycheck.io`），避免明文链路。
-9. **转义分层**：HTML 上下文 `escapeHtml`，JS 字符串上下文 `escapeForJS`，客户端渲染统一 `escapeHTML`。
+### 限流桶（按 IP）
 
-> English: CSP with a random nonce (no `unsafe-inline` scripts), strict security headers, fail-closed same-origin checks, SSRF guards with per-hop redirect validation, partitioned rate limits, streaming upload cap, SRI on third-party assets, HTTPS-only egress, and layered escaping for HTML vs JS contexts.
+| 桶 | 配额 | 说明 |
+|---|---|---|
+| 默认 | 60 次/分钟 | 除静态资源外的几乎所有端点 |
+| `/health` | 180 次/分钟 | 独立配额，RTT 轮询与质量监控不挤占工具额度 |
+| 大响应下载 | 30 次/分钟 | `/speedtest?size>2MB`（缓冲膨胀、长时测速） |
+| `/cpu-test` | 3 次/分钟 | CPU 密集，独立收紧 |
 
----
+> 未授权的请求头（伪造 `Origin`/`Referer`/`cf-connecting-ip`）不能用于规避限流，见 [CODE_OF_CONDUCT.md 6.1](CODE_OF_CONDUCT.md#61-不要滥用公开实例)。
 
-## 💾 KV 用量策略 · KV Budget
+### KV 写入总闸
 
-> 免费 KV 额度为 **1,000 次写入/天**。若页面高频轮询的接口顺手写 KV，极易「爆额度」。当前策略如下：
+所有 KV 写入都经过统一闸门，宁可丢少量非关键数据，也不让异常循环打爆额度：
 
-1. **常规请求零 KV 读写**：源码常量 `USAGE_BACKEND = 'memory'`，用量统计只走 isolate 内存。
-2. **测速历史默认不落 KV**：源码常量 `SPEED_HISTORY_KV_ENABLED = false`；前端据此关闭 `/api/log-speed` 与历史轮询。
-3. **站点监控按状态变化写入**：仅在「正常 → 异常」「异常 → 正常」或每小时例行刷新时写入，平稳状态不产生写操作。
-4. **前端行为由服务端注入的 `window.__NETDIAG__` 驱动**，三种语言文案自动跟随开关状态。
+| 限制 | 值 |
+|---|---|
+| 每分钟写入 | 20 次 / isolate |
+| 每日写入 | 600 次 / isolate（免费额度 1000/天，留 40% 余量） |
+| 同键去抖 | 10 秒内同键只写 1 次 |
+| 测速历史 | 单键环形缓冲（≤10 条），每次写入 = 1 get + 1 put，**无 list / 无 delete** |
+| 用量统计（kv 模式） | 默认关闭；开启后最多 1 次写/分钟 |
+| 站点监控 | 仅状态变化时写；无变化心跳写 6 小时一次 |
 
-> 如需跨 isolate 持久化用量或恢复测速历史：绑定 `SPEED_HISTORY` 后，分别把上述常量改为 `'kv'` / `true` 即可（请自行评估额度）。
+超预算时：非关键写入静默丢弃并计数；**保存监控配置**会返回 `503 write_budget_exceeded` 并给出明确提示。
 
----
+### 免费额度参考
 
-## 🌐 国际化与主题 · i18n & Theme
+以 Cloudflare 官方为准（可能调整）：
 
-**语言 / Languages**：English (en)、简体中文 (zh-CN)、繁體中文 (zh-TW)。三个语言包**键集合完全一致**（各 280+ 键，含 20 项工具说明与 9 类审计问题文案），切换时即时更新所有静态与动态内容。语言偏好持久化到 `localStorage`，并按 `Accept-Language` 自动初选。通用缩写与单位（IPv4/TLS/ASN/ECH/ms/Mbps/KB 等）跨语言一致，不做翻译。
+| 项目 | 免费额度 |
+|---|---|
+| Workers 请求 | 100,000 / 天 |
+| KV 读取 / 写入 / 删除 / 列出 | 100,000 / 1,000 / 1,000 / 1,000 每天 |
+| 可观测性事件 | 200,000 / 天（**本项目对事件量敏感，建议关注**） |
 
-**主题 / Theme**：深色 / 浅色 / 跟随系统。通过 CSS 变量与 `data-theme` 属性控制，偏好保存到 `localStorage`。
-
----
-
-## ⚡ 性能与可靠性 · Performance
-
-- **字体非阻塞**：Google Fonts 由内联脚本**异步注入**，链路不可达时自动回退系统字体，不拖慢首屏。
-- **后台暂停**：标签页隐藏时暂停 RTT 轮询，回到前台自动恢复，减少无谓请求与耗电。
-- **缓存**：前端资源独立外置并缓存；主页面与测速端点 `no-store`。
-- **高效随机数据**：`crypto.getRandomValues` 分块填充；流式传输用 `ReadableStream` 逐块生成，内存友好。
-- **并发控制**：`pLimit` 限制并发数，避免资源耗尽。
-- **内存管理**：限流 Map 定期清理；KV 记录带 TTL。
-- **降级**：KV 未绑定或外部接口失败时给出友好提示，不抛异常。
-- **零 KV 压力**：默认策略下常规使用不产生任何 KV 读写。
+> 写 KV 与出站请求默认关闭；即使全部开启，写入闸门也把最坏情况限制在每日 600 次/isolate 以内。
 
 ---
 
-## 🔀 相较上游的改动 · Changes vs Upstream
+## 安全与隐私
 
-> 本仓库在上游 `CF-workers-netdiag` 基础上做了界面重做与稳定性/安全加固，并持续迭代新功能。This fork reworked the UI and hardened reliability/security on top of the upstream project, and keeps adding new capabilities.
+### 安全机制
 
-**界面与交互**
-- 单页长滚动 → **4 个标签页**；工具按钮堆叠 → **卡片网格 + 结果弹层**（指标卡/进度条 + 「重新运行」）。
-- 结果统一结构化渲染，窄屏自适应精简。
+| 机制 | 说明 |
+|---|---|
+| 会话令牌 | 取代可伪造的 Origin/Referer 判断：主页面签发令牌（HttpOnly Cookie + `x-ns-token` 兜底），失效时前端自动刷新重领 |
+| SSRF 防护 | 私网/本机判定（含 IPv6 与 IPv4 映射）、端口白名单（仅 80/443）、DoH 解析结果必须全为公网、重定向逐跳复检 |
+| CSP | 主页面 nonce CSP + 严格响应头（HSTS/XCTO/XFO/Referrer-Policy/Permissions-Policy） |
+| 输入限制 | 上传 ≤32MB、日志 ≤10KB、域名/URL 正则白名单、监控目标 ≤10 个 |
+| 管理密钥 | 只走 `x-admin-key` 请求头，绝不接受查询参数（避免进入日志/历史） |
+| 端点开关 | 无引用或已废弃端点统一 410，且短路在令牌校验与限流之前 |
+| 出站端口 | Worker 侧所有用户可控目标仅放行 80/443 |
 
-**功能新增**
-- 站点安全评分（HTTP 安全响应头审计 + A–F）。
-- DNS 工具箱（DoH 查询 + IP 黑名单）、**多解析器对比**、域名邮件安全体检。
-- **网络可达性检测**（边缘侧 + 浏览器侧对照）、缓冲膨胀测试、一键体检评分。
-- 站点监控（Cron 巡检 + Webhook 告警）、PWA。
-- 三语言全量对齐，覆盖所有动态内容。
+### 数据去向
 
-**稳定性**
-- `/cpu-test` 迭代上限压到免费计划 CPU 预算内（避免 1102 超时）；带宽端点体积上限收敛。
-- 客户端地理位置改用 Cloudflare `request.cf` 边缘数据，消除第三方接口不可达导致的「获取失败」。
-- 字体异步加载、后台暂停轮询等渲染优化。
+| 数据 | 默认位置 |
+|---|---|
+| RTT / 抖动 / 质量监控样本 | 仅在浏览器内存与图表，**不上传** |
+| 测试历史 | **localStorage**（`netsight-local-history`，≤20 条，可一键清空） |
+| 出口 IP / 地理位置 | **浏览器直连**第三方（ipify、icanhazip、ipapi.co 回退）；Worker 侧只用 Cloudflare 提供的 `request.cf` |
+| 测速历史 / 用量统计 | 默认**不写 KV**；开启后受写入闸门约束 |
+| 站点监控配置 | 仅在部署者绑定 KV 且设置管理员密钥时保存 |
+| 第三方埋点 / 统计 / 广告 | **没有** |
 
-**安全**
-- CSP `script-src` 收紧为 `'self' + nonce`；补齐多个 API 端点的同源校验（fail-closed）。
-- 新增 SSRF 防护（DoH 解析校验 + 逐跳重定向校验）；新增 `Permissions-Policy`。
-- 分区限流（健康检查 / 大响应 / CPU）；上传 32 MB 流式限制；外链资源加 SRI。
-- 出站风险查询由明文 HTTP 改为 HTTPS（`proxycheck.io`）。
-- HTML/JS 转义彻底分离；修复客户端正则的模板字符串转义 bug。
+### 报告安全问题
 
-**成本**
-- KV 用量策略：默认关闭常规请求的 KV 读写，杜绝额度被刷爆。
-
----
-
-## 🛠️ 自定义与扩展 · Customization
-
-**加一个诊断工具**：在客户端 `TOOL_LIST` 增加一项（`key / icon / nameKey`），在 `TOOL_RUNNERS` 注册对应函数，结果用 `metricCard()` / `resultTitle()` / `result-rows` 渲染；如需要输入，参考「多解析器对比」或「站点体检」的实现。三语言需在 `i18n` 与 `toolDesc` 中补齐。
-
-**加一个后端端点**：在 `handleRequest` 主流程添加 `if (url.pathname === '/your-endpoint')` 分支，并沿用相同的安全措施（CORS、限流、同源检查、输入收敛、SSRF 校验）。
-
-**改配色 / 改主题**：只改 `:root` 与 `[data-theme="light"]` 的 CSS 变量即可全局换色。
-
-**改文案**：编辑客户端 `i18n` 对象（三语言同步）。界面文本 ID 以 `t-` 开头，对应 `updateUI` 里的映射表。
-
-> ⚠️ **踩坑提醒 · Pitfall**：内嵌客户端代码里的正则反斜杠必须写**双份**（如 `/^https?:\\/\\//`），否则会被外层模板字符串「吃掉」，导致客户端脚本解析失败。改动客户端正则后，务必验证渲染出的 `<script>` 能被解析（`node --check` 只校验 Worker 本身，不会校验内嵌脚本）。同理，客户端里的反引号与 `${` 也需要转义。
+请**不要**开公开 issue。使用 GitHub 私密报告（仓库 **Security → Report a vulnerability**）或邮件 `admin@bjhr.space`，详见 [SECURITY.md](SECURITY.md) 与 [CODE_OF_CONDUCT.md 第 8 节](CODE_OF_CONDUCT.md#8-安全漏洞与敏感数据上报)。
 
 ---
 
-## ❓ 常见问题 · FAQ
+## 工具成本一览
 
-**Q：部署后页面空白 / 加载失败？**
-A：检查 Worker 日志（Dashboard → Workers → 选择 Worker → 日志），确认代码完整粘贴、无语法错误。
-
-**Q：需要绑定 KV 吗？**
-A：**不需要**。默认策略下用量统计走内存、测速历史不写 KV。仅在需要跨 isolate 持久化（测速历史 / 站点监控状态）时才绑定 `SPEED_HISTORY`。
-
-**Q：测速历史 / 监控配置显示「暂无记录」或不可用？**
-A：确认已绑定 `SPEED_HISTORY`（绑定名区分大小写）；站点监控另需设置 `MONITOR_ADMIN_KEY`。测速历史还需把源码常量 `SPEED_HISTORY_KV_ENABLED` 改为 `true`。
-
-**Q：KV 额度老是被刷爆？**
-A：确认使用当前默认策略（`USAGE_BACKEND='memory'`、`SPEED_HISTORY_KV_ENABLED=false`）。页面每 2s 一次的 `/health` 轮询若顺手写 KV，一天就能耗尽免费额度。
-
-**Q：WebSocket / 部分测试失败？**
-A：检查浏览器是否支持 WebSocket，某些企业网络或插件会拦截；可尝试无痕模式。
-
-**Q：地理位置显示失败？**
-A：4.5.1 起客户端位置直接取自 Cloudflare 边缘数据，正常情况下不会再失败；请确认请求确实经过 Cloudflare 网络。
-
-**Q：IP 风险评分显示「获取失败」？**
-A：该评分依赖第三方接口（`proxycheck.io`，免费额度有限），可能受可用性波动影响。
-
-**Q：主题 / 语言切换不生效？**
-A：确认浏览器未禁用 `localStorage`；`data-theme` 与语言偏好是否正确写入。
-
-**Q：如何限制仅自己使用？**
-A：在 `ALLOWED_ORIGINS` 填入自己的域名；如需更强限制，可自行增加基于 `cf-connecting-ip` 的 IP 白名单。
-
-**Q：CPU 压测报错 1102？**
-A：免费计划单请求 CPU 时间有限，`/cpu-test` 迭代上限已刻意压低；如需更高可选付费计划。
-
-**Q：报告能存成文件吗？**
-A：复制报告后粘贴到文本编辑器另存为 `.md` / `.txt` 即可。
+| 工具 | Worker 出站 | 流量消耗 | 备注 |
+|---|---|---|---|
+| RTT / 丢包 / 长时质量监控 / 一键体检（延迟部分） | 0 | 极小 | 仅 `/health` HEAD 请求 |
+| WebRTC 泄漏 / 代理检测 | 0 | 0 | 浏览器直连 STUN/ICE |
+| 带宽测速 / 上传测速 / 流式 / 并发 | 0 | 中（数 MB 起） | 与带宽成正比 |
+| 多流并发测速 | 0 | 约 64MB | 4 流 × 16MB |
+| 缓冲膨胀 | 0 | 较大（可达数百 MB） | 会在界面提示 |
+| DNS 解析 / 可达性 / 流媒体连通性 | 0 | 极小 | 浏览器侧 Image / fetch |
+| DNS 工具箱 / 多解析器对比 / 域名体检 | 1–6 次/次操作 | 极小 | Worker 侧 DoH 查询（固定解析器） |
+| 站点体检 | 1–6 次/次操作 | 小 | 抓取目标站点响应头 |
+| 站点体检 + 证书检查（需勾选） | +1 次 | 极小 | crt.sh，30 分钟内存缓存 |
+| 站点监控 | 每目标 1 次/巡检 | 小 | Cron 驱动，含 Webhook |
 
 ---
 
-## 📝 版本记录 · Changelog
+## 常见问题
 
-- **4.6.0** — 新增「DNS 多解析器对比」「网络可达性检测（边缘侧 + 浏览器侧）」；站点体检升级为安全响应头评分制（0–100 / A–F + 问题清单）。
-- **4.5.x** — 渲染与性能优化：字体异步加载、标签页后台暂停 RTT 轮询、转义函数单遍化；客户端地理位置改用 Cloudflare 边缘数据（修复查询失败）。
-- **4.4.0** — 域名安全体检、站点监控（Cron + Webhook 告警）、PWA。
-- **4.3.0** — KV 用量策略落地：默认关闭 KV 读写，杜绝额度被刷爆。
-- **4.2.x** — 安全加固：SSRF 防护、同源 fail-closed、分区限流、SRI、CSP。
-- **4.1.x** — 首版安全审查修复与界面重做。
+<details>
+<summary><b>打开页面后工具都报错 / RTT 停摆？</b></summary>
+
+多半是**会话令牌失效**（isolate 重建或超过 1 小时 TTL）。前端在 RTT 探测收到 403 时会自动刷新页面重新领取；若仍不行，强制刷新一次即可。
+</details>
+
+<details>
+<summary><b>用 curl 请求 <code>/health</code> 返回 403？</b></summary>
+
+这是预期的：`/health` 需要页面会话令牌。脚本化探活请改用 **`/node-ping`**（无令牌、响应极小、带 CORS 头）。
+</details>
+
+<details>
+<summary><b>某个端点返回 410？</b></summary>
+
+该端点已停用（`/dns-proxy`、`/api/ip-fraud`、`/api/reach-check`、`/static/*`）。需要恢复请在 Issues 中说明用途。
+</details>
+
+<details>
+<summary><b>测速历史 / 站点监控说"未绑定 KV"？</b></summary>
+
+两者的持久化依赖 KV 绑定 `SPEED_HISTORY`（且测速历史还有独立开关，默认关闭）。不绑定也能正常使用其他工具。
+</details>
+
+<details>
+<summary><b>站点监控没有自动巡检？</b></summary>
+
+需要三件事齐备：KV 绑定 + `MONITOR_ADMIN_KEY` 已设置 + `wrangler.toml` 里配置了 Cron Triggers。缺任意一项时可手动点「立即检测」。
+</details>
+
+<details>
+<summary><b>提示 429 Too Many Requests？</b></summary>
+
+命中限流。默认 60 次/分/IP，`/health` 180/分，大响应下载 30/分，`/cpu-test` 3/分。等一分钟，或避免同时运行多个重工具。
+</details>
+
+<details>
+<summary><b>缓冲膨胀/多流测速提示限流或结果不可信？</b></summary>
+
+这类测试会短时间发出大量大响应请求，可能触发大响应桶（30/分）。界面会明确提示"负载阶段触发限流，结果可能不准确"，稍后重跑即可。若持续发生，请考虑自行部署实例。
+</details>
+
+<details>
+<summary><b>能加第三方统计 / 广告 / 风控接口吗？</b></summary>
+
+不可以。本项目坚持零埋点、零不必要出站（这也是 IP 风险评分被停用的原因）。相关改动需先在 Issues 讨论。
+</details>
+
+<details>
+<summary><b>如何自建多节点做"多节点对比"？</b></summary>
+
+把本项目部署到多个区域/账号，然后在工具里填入各节点根地址（每行一个）。探测走跨域 `/node-ping`，因此目标节点需为 4.6.3 以后的版本。
+</details>
 
 ---
 
-## 📄 许可证与贡献 · License & Contributing
+## 项目结构
 
-本项目基于 **AGPL-3.0** 许可证开源，欢迎任何形式的贡献（Issue / PR / Star）。
+```
+.
+├── _workers.js            # 唯一权威源文件：Worker + 内联 CSS/JS + HTML 模板
+├── index.html             # 静态副本 / 展示页（用途见下方说明）
+├── README.md              # 本文档
+├── CONTRIBUTING.md        # 贡献指南（开发、测试、PR 规范）
+├── CODE_OF_CONDUCT.md     # 行为准则 + 工程红线 + 许可与 AGPL 合规
+├── SECURITY.md            # 漏洞披露策略
+├── LICENSE                # GNU AGPL-3.0
+├── CNAME                  # 自定义域（Pages 场景）
+└── .github/               # issue / PR 模板与自动化
+```
 
-- **作者 Author**：BlueDriftHK
-- **仓库 Repository**：https://github.com/BlueDriftHK/CF-workers-netdiag
-- **反馈 Feedback**：请提交 GitHub Issue
+> `index.html` 。若它与 `_workers.js` 内容重叠，改动时需同步，否则会出现"两份代码两种行为"。
 
-本项目为网络诊断用途。对目标站点发起探测前，请确保你**有权**对该目标进行测试，并遵守目标站点服务条款与所在地法律法规。
-This tool is for network diagnostics. Ensure you are **authorized** to probe any target site and comply with the target's terms of service and applicable laws.
+### 代码地图（`_workers.js`）
 
-> NetSight Pro – 让网络诊断既克制又高效。 🌌
+| 区块 | 内容 |
+|---|---|
+| 常量与安全头 | `CORS_HEADERS`、`SECURITY_HEADERS`、会话令牌、同源判定 |
+| 限流与配额 | 各 bucket、`COUNTED_ENDPOINTS`、`DISABLED_ENDPOINTS` |
+| 安全校验 | `isPrivateIp` / `isPrivateHost` / `isAllowedTargetPort` / `resolvesToPublicOnly` |
+| KV 层 | `kvPut` 写入闸门、用量统计、测速历史环形缓冲、内存缓存 |
+| 站点监控 | 巡检、Webhook、Cron 入口 |
+| 前端资源 | `APP_CSS`、`APP_JS`（i18n、工具表、各工具 runner） |
+| 请求路由 | `handleRequest()`：令牌/限流 → 停用端点 → 各端点 → 主页面 |
+| 主页面模板 | 内联 HTML、CSP nonce、注入的 `window.__BACKEND__` |
+
+---
+
+## 开发与贡献
+
+```bash
+npx wrangler dev              # 本地预览
+node --check _workers.js      # 语法检查（模板字符串转义错误会在这里暴露）
+npx wrangler deploy --dry-run # 打包与配置校验
+```
+
+开始动手前请读 [CONTRIBUTING.md](CONTRIBUTING.md)（含 **`APP_JS` 模板字符串转义陷阱**、新增工具/端点的可复制骨架、测试清单、PR 模板），行为规范见 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)。
+
+**适合上手的改动**：三语文案统一、移动端布局细节、错误提示可读性、新增诊断建议规则、文档与端点表修正。
+
+---
+
+## 未实现 / 不打算做
+
+有些想法受平台限制或与本项目取舍冲突，列在这里避免重复讨论：
+
+| 想法 | 结论 |
+|---|---|
+| traceroute / 跳数路径 | Cloudflare Workers 与浏览器都不支持 ICMP 与 TTL 控制，**做不了** |
+| 真实 MTU 探测 | 无 DF/分片控制，只能间接推断，价值低 |
+| 直读证书链 | Workers `fetch` 不暴露对端证书，浏览器跨域读证书被禁；改用 CT 日志（已实现为可选的证书到期检查） |
+| 严格 DNS 泄漏检测 | 浏览器无法指定解析器；Worker 侧只能做"多解析器对比"（已实现） |
+| 服务端 IP 风险评分 | 需要第三方出站，与"零出站"冲突，**已停用** |
+| 第三方统计 / 广告 | 不做 |
+| 账号体系 / 云端历史 | 不做（本地历史 + 可选 KV 已够用） |
+
+---
+
+## 变更摘要
+
+| 版本 | 主要变化 |
+|---|---|
+| **4.7.1** | UI 重构：工具按 6 类分组 + 紧凑卡片（说明移到 tooltip）；结果弹层改**宽屏两栏**（左参数/操作，右结果）；按钮统一三级；安全卡分「传输与协议」「来源与指纹」 |
+| **4.7.0** | 新增 6 项：代理/VPN 一致性检测、长时质量监控（p50/p95/p99 + 卡顿时间线）、多流并发测速（实时曲线）、证书到期检查（可选出站）、本地测试历史、（一键体检）诊断建议引擎 |
+| 4.6.7 | 端点开关：停用 `/dns-proxy`、`/static/*`、`/api/ip-fraud`、`/api/reach-check`（统一 410） |
+| 4.6.6 | 出站端口收紧：Worker 侧用户可控目标仅放行 80/443 |
+| 4.6.5 | KV 写入总闸（分钟/每日预算 + 同键去抖）；监控心跳写 1h→6h；`/health` 暴露 `kvWrite` 遥测 |
+| 4.6.4 | KV 防爆：测速历史改单键环形缓冲（去掉 list/批量 delete）；用量落盘最小间隔 + 故障退避 |
+| 4.6.3 | 安全：页面会话令牌取代可伪造的 Origin/Referer 校验；修复测速带宽高估、Quad9 DoH 端口、多节点对比被同源校验拦截等问题 |
+
+---
+
+## 许可与第三方归属
+
+- **代码**：[GNU AGPL-3.0](LICENSE)。你可以自由使用、修改、再分发；但**如果你修改后把它作为网络服务对外提供，必须向使用者提供对应源代码**（§13）。部署修改版时请把页脚源码链接换成你自己的仓库——详见 [CODE_OF_CONDUCT.md 13.3](CODE_OF_CONDUCT.md#133-agpl-30-13-对本项目的实际含义部署者必读)。
+- **本文档**：CC BY 4.0。
+- **第三方资源**：Font Awesome（图标 CC BY 4.0 / 代码 MIT）、Inter 字体（SIL OFL 1.1）、Cloudflare Workers 运行时与 CDN。请保留相应归属声明。
+
+---
+
+## 免责声明
+
+- 所有诊断结果**仅供参考**，不代表任何服务等级承诺；不同网络环境、时段、运营商可能得出不同结论。
+- 请**不要**把本站点体检 / 站点监控用于扫描、探测或骚扰他人站点；请仅对你拥有或获授权的目标使用。
+- 自托管实例的**配额、费用与合规由部署者自行承担**；建议开启预算与用量告警。
+- 本项目不对因使用本工具造成的任何直接或间接损失负责。
+
+---
+
+## 联系
+
+- 一般问题 / 缺陷 / 功能建议：[GitHub Issues](https://github.com/BlueDriftHK/CF-workers-netdiag/issues)
+- 安全漏洞 / 敏感事项：`admin@bjhr.space`（或仓库私密报告）
+- 行为问题：见 [CODE_OF_CONDUCT.md 第 9 节](CODE_OF_CONDUCT.md#9-举报渠道与保密)
+
+如果这个项目对你有帮助，欢迎给个 ⭐ 或自建一个节点加入多节点对比。
