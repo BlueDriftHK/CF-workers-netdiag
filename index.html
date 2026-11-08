@@ -1,1482 +1,1385 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="dark">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>NetSight Pro · 边缘网络诊断工具</title>
-<meta name="description" content="NetSight Pro —— 单文件 Cloudflare Worker 网络诊断工具箱：23 项工具、三语界面、零构建、零依赖、默认零出站。AGPL-3.0 开源，几分钟即可自部署。" />
-<meta name="theme-color" content="#0a0b0d" />
+<title>NetSight Pro · 把网络看透</title>
+<meta name="description" content="NetSight Pro v5.1 —— 单文件 Cloudflare Worker 边缘网络诊断工具箱：25+ 工具、6 种语言、实时监控、域名体检、DoH 对比与离线 PWA。默认零出站，数据留在你自己的账号里。" />
+<meta name="theme-color" content="#050506" />
 <meta name="color-scheme" content="dark light" />
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230a0b0d'/%3E%3Cpolyline points='5,19 12,19 15,12 18,24 21,17 27,17' fill='none' stroke='%23e9eaec' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23050506'/%3E%3Cpath d='M6.5 19h4.2l3-6.4 3.2 11 3-6.1 1.6-3.1h1.9' fill='none' stroke='%23f5f5f7' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
 
-<!--
-  ============================================================================
-  NetSight Pro · 静态介绍页（可直接部署到 Cloudflare Pages / GitHub Pages）
-  ----------------------------------------------------------------------------
-  · 无外部依赖：图标为内联 SVG，字体用系统字体，没有任何 CDN 请求
-  · 三语：简体 / 繁體 / English，字典在页面底部 I18N 中，新增文案必须三语齐全
-  · 界面展示为纯 CSS/SVG 复刻（不是截图），改版后不会过期
-  · 如需修改仓库地址，搜索 REPO_URL；版本号搜索 VERSION
-  ============================================================================
--->
-
-<script>document.documentElement.classList.add('js');</script>
 <style>
-/* ==================== 主题变量（与应用 _workers.js 对齐） ==================== */
+/* 无 JS 时保证内容可见 */
+</style>
+<noscript><style>.reveal{opacity:1!important;transform:none!important}</style></noscript>
+<style>
+/* ============================================================
+   NetSight Pro · Apple 风格静态展示页
+   无外部依赖：系统字体 / 内联 SVG / 原生 Canvas
+   ============================================================ */
 :root{
-  --bg:#0a0b0d;
-  --grid-line:rgba(255,255,255,.03);
-  --panel:#101114;
-  --panel-hover:#17181c;
-  --panel-heavy:#121316;
-  --border:#24262b;
-  --border-hover:#383b42;
-  --text:#e9eaec;
-  --text-2:#9a9da3;
-  --text-3:#6a6d74;
-  --text-4:#45484e;
-  --success:#a7b6a9;
-  --warning:#c8b07a;
-  --danger:#c98a8a;
-  --divider:#1d1f24;
-  --accent-light:rgba(255,255,255,.06);
-  --radius-sm:3px; --radius-md:4px; --radius-lg:6px; --radius-xl:8px;
-  --pill:50px;
-  --font:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Hiragino Sans GB','Microsoft YaHei',system-ui,sans-serif;
-  --mono:'SF Mono','JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
-  --shadow:0 1px 0 rgba(0,0,0,.5);
-  --shadow-lg:0 12px 32px rgba(0,0,0,.5);
-  --t-fast:.15s ease; --t-smooth:.25s ease;
-  --ease-out:cubic-bezier(.22,1,.36,1); --ease-soft:cubic-bezier(.4,0,.2,1);
-  --t-enter:.72s; --t-acc:.42s;
+  --bg:#050506;
+  --bg-soft:#0b0b0e;
+  --text:#f5f5f7;
+  --text-2:#a1a1a6;
+  --text-3:#6e6e73;
+  --line:rgba(255,255,255,.09);
+  --line-strong:rgba(255,255,255,.16);
+  --card:rgba(255,255,255,.045);
+  --card-2:rgba(255,255,255,.075);
+  --glass:rgba(12,12,14,.62);
+  --g1:#0a84ff;
+  --g2:#64d2ff;
+  --g3:#bf5af2;
+  --g4:#ff375f;
+  --green:#30d158;
+  --orange:#ff9f0a;
+  --red:#ff453a;
+  --radius:28px;
+  --radius-sm:16px;
+  --shadow:0 40px 120px rgba(0,0,0,.55);
+  --font:-apple-system,BlinkMacSystemFont,'SF Pro Display','SF Pro Text','Segoe UI','PingFang SC','Hiragino Sans GB','Microsoft YaHei',system-ui,sans-serif;
+  --mono:'SF Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --ease:cubic-bezier(.22,1,.36,1);
+  --header-h:68px;
 }
 html[data-theme="light"]{
-  --bg:#f4f5f6;
-  --grid-line:rgba(0,0,0,.035);
-  --panel:#ffffff;
-  --panel-hover:#f2f3f4;
-  --panel-heavy:#ffffff;
-  --border:#dcdde0;
-  --border-hover:#c3c5c9;
-  --text:#17181a;
-  --text-2:#5b5e64;
-  --text-3:#8a8d93;
-  --text-4:#b7b9bd;
-  --success:#5f7265;
-  --warning:#8a7538;
-  --danger:#9c6060;
-  --divider:#e7e8ea;
-  --accent-light:rgba(0,0,0,.05);
-  --shadow:0 1px 0 rgba(0,0,0,.03);
-  --shadow-lg:0 12px 32px rgba(0,0,0,.08);
+  --bg:#f5f5f7;
+  --bg-soft:#ffffff;
+  --text:#1d1d1f;
+  --text-2:#6e6e73;
+  --text-3:#86868b;
+  --line:rgba(0,0,0,.08);
+  --line-strong:rgba(0,0,0,.16);
+  --card:rgba(255,255,255,.72);
+  --card-2:rgba(255,255,255,.9);
+  --glass:rgba(255,255,255,.72);
+  --shadow:0 30px 90px rgba(0,0,0,.12);
 }
 *{box-sizing:border-box}
-html{scroll-behavior:smooth}
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
 body{
   margin:0;background:var(--bg);color:var(--text);font-family:var(--font);
-  line-height:1.6;-webkit-font-smoothing:antialiased;overflow-x:hidden;
-  transition:background .4s ease,color .4s ease;
+  line-height:1.55;letter-spacing:-.01em;overflow-x:hidden;
+  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+  transition:background .5s var(--ease),color .5s var(--ease);
 }
-/* 网格背景（与应用 HUD 一致） */
-body::before{
-  content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
-  background-image:linear-gradient(var(--grid-line) 1px,transparent 1px),linear-gradient(90deg,var(--grid-line) 1px,transparent 1px);
-  background-size:40px 40px,40px 40px;
-  -webkit-mask-image:radial-gradient(circle at 50% 0%,#000 0%,transparent 78%);
-  mask-image:radial-gradient(circle at 50% 0%,#000 0%,transparent 78%);
-}
-img,svg{display:block;max-width:100%}
 a{color:inherit;text-decoration:none}
-code,kbd{font-family:var(--mono);font-size:.94em}
-.wrap{width:min(1080px,92vw);margin:0 auto;position:relative;z-index:1}
-.muted{color:var(--text-2)}
-.mono{font-family:var(--mono)}
+img,svg{display:block;max-width:100%}
+button{font:inherit;color:inherit}
+::selection{background:rgba(10,132,255,.35)}
+:focus-visible{outline:2px solid var(--g2);outline-offset:3px;border-radius:6px}
+.skip{position:fixed;left:16px;top:-80px;z-index:1000;background:var(--text);color:var(--bg);padding:10px 18px;border-radius:999px;font-size:13px;transition:top .3s}
+.skip:focus{top:16px}
 
-/* ==================== 通用面板 / 徽标 / 按钮 ==================== */
-.panel{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow);transition:border-color var(--t-smooth),background var(--t-smooth),transform var(--t-smooth),box-shadow var(--t-smooth)}
-.panel:hover{border-color:var(--border-hover)}
-.eyebrow{
-  display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:var(--pill);
-  border:1px solid var(--border);background:var(--panel);font-size:12px;color:var(--text-2);letter-spacing:.3px;
+/* ---------- 背景 ---------- */
+.bg{position:fixed;inset:0;z-index:0;overflow:hidden;pointer-events:none}
+.bg .grid{
+  position:absolute;inset:-10%;
+  background-image:linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px);
+  background-size:72px 72px;
+  -webkit-mask-image:radial-gradient(ellipse 70% 55% at 50% 0%,#000 0%,transparent 78%);
+  mask-image:radial-gradient(ellipse 70% 55% at 50% 0%,#000 0%,transparent 78%);
+  opacity:.8;
 }
-.dot{width:6px;height:6px;border-radius:50%;background:var(--success);animation:pulse 2.4s ease-in-out infinite}
-@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(1.35)}}
+html[data-theme="light"] .bg .grid{
+  background-image:linear-gradient(rgba(0,0,0,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(0,0,0,.05) 1px,transparent 1px);
+}
+.orb{position:absolute;border-radius:50%;filter:blur(90px);opacity:.5;will-change:transform}
+.orb-a{width:52vw;height:52vw;left:-14vw;top:-22vw;background:radial-gradient(circle at 35% 35%,rgba(10,132,255,.55),rgba(10,132,255,0) 62%);animation:drift 22s var(--ease) infinite alternate}
+.orb-b{width:46vw;height:46vw;right:-12vw;top:-14vw;background:radial-gradient(circle at 60% 40%,rgba(191,90,242,.42),rgba(191,90,242,0) 66%);animation:drift 26s var(--ease) infinite alternate-reverse}
+.orb-c{width:60vw;height:34vw;left:22vw;top:44vh;background:radial-gradient(circle at 50% 50%,rgba(100,210,255,.22),rgba(100,210,255,0) 68%);animation:drift 30s var(--ease) infinite alternate}
+html[data-theme="light"] .orb{opacity:.34;filter:blur(110px)}
+.vignette{position:absolute;inset:0;background:radial-gradient(ellipse 90% 70% at 50% 40%,transparent 40%,var(--bg) 100%)}
+@keyframes drift{from{transform:translate3d(0,0,0) scale(1)}to{transform:translate3d(4vw,3vh,0) scale(1.12)}}
+
+section[id]{scroll-margin-top:calc(var(--header-h) + 18px)}
+/* ---------- 通用 ---------- */
+.wrap{width:min(1160px,92vw);margin:0 auto;position:relative;z-index:2}
+.mono{font-family:var(--mono);font-variant-ligatures:none}
+.grad{
+  background:linear-gradient(100deg,var(--g2) 0%,var(--g1) 30%,var(--g3) 62%,var(--g4) 100%);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+  background-size:180% 100%;animation:shine 9s linear infinite;
+}
+@keyframes shine{to{background-position:180% 0}}
+.kicker{display:inline-flex;align-items:center;gap:9px;font-size:12.5px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--text-2)}
+.kicker::before{content:'';width:22px;height:1px;background:linear-gradient(90deg,transparent,var(--g2))}
+.h2{font-size:clamp(34px,4.8vw,62px);line-height:1.06;letter-spacing:-.045em;font-weight:700;margin:18px 0 16px;text-wrap:balance}
+.lead{font-size:clamp(16px,1.5vw,19px);line-height:1.75;color:var(--text-2);max-width:640px;text-wrap:pretty}
+.section{padding:clamp(80px,10vw,150px) 0;position:relative}
+.section-head{max-width:820px;margin-bottom:clamp(36px,5vw,64px)}
 .btn{
-  display:inline-flex;align-items:center;gap:8px;padding:10px 20px;border-radius:var(--pill);
-  border:1px solid var(--border);background:var(--panel);color:var(--text);
-  font-family:var(--font);font-size:13px;font-weight:500;cursor:pointer;
-  transition:background var(--t-fast),border-color var(--t-fast),transform var(--t-fast),color var(--t-fast);
+  --btn-bg:var(--text);--btn-fg:var(--bg);
+  display:inline-flex;align-items:center;justify-content:center;gap:9px;
+  height:50px;padding:0 26px;border-radius:999px;border:1px solid transparent;
+  background:var(--btn-bg);color:var(--btn-fg);font-size:14.5px;font-weight:600;
+  letter-spacing:-.01em;cursor:pointer;white-space:nowrap;
+  transition:transform .35s var(--ease),box-shadow .35s var(--ease),background .35s,border-color .35s,color .35s;
+  will-change:transform;position:relative;overflow:hidden;
 }
-.btn svg{width:15px;height:15px;transition:transform var(--t-fast)}
-.btn:hover{background:var(--panel-hover);border-color:var(--border-hover);transform:translateY(-1px)}
-.btn:active{transform:scale(.98)}
-.btn:active svg{transform:scale(.9)}
-.btn-primary:hover svg{transform:translateX(2px)}
-.btn-primary{background:var(--text);color:var(--bg);border-color:var(--text);font-weight:600}
-.btn-primary:hover{background:#fff;border-color:#fff;color:#000}
-html[data-theme="light"] .btn-primary{background:#17181a;color:#fff;border-color:#17181a}
-html[data-theme="light"] .btn-primary:hover{background:#000;color:#fff}
-.btn-ghost{background:transparent;border-color:transparent;color:var(--text-2)}
-.btn-ghost:hover{background:var(--panel-hover);border-color:var(--border);color:var(--text)}
-.btn-sm{padding:7px 14px;font-size:12px}
-.tag{
-  display:inline-flex;align-items:center;gap:6px;padding:2px 9px;border-radius:var(--pill);
-  border:1px solid var(--border);font-size:10.5px;color:var(--text-3);letter-spacing:.2px;white-space:nowrap;
+.btn:hover{transform:translateY(-2px) scale(1.015);box-shadow:0 16px 40px rgba(0,0,0,.3)}
+.btn:active{transform:translateY(0) scale(.99)}
+.btn-ghost{--btn-bg:transparent;--btn-fg:var(--text);border-color:var(--line-strong)}
+.btn-ghost:hover{background:var(--card);border-color:var(--text-3)}
+.btn-sm{height:40px;padding:0 18px;font-size:13px}
+.icon-btn{
+  width:40px;height:40px;display:grid;place-items:center;border-radius:50%;
+  border:1px solid var(--line);background:var(--card);cursor:pointer;
+  transition:transform .3s var(--ease),background .3s,border-color .3s;
 }
-.tag.zero{color:var(--success);border-color:color-mix(in srgb,var(--success) 35%,transparent)}
-.tag.exit{color:var(--warning);border-color:color-mix(in srgb,var(--warning) 35%,transparent)}
-.tag.heavy{color:var(--danger);border-color:color-mix(in srgb,var(--danger) 35%,transparent)}
+.icon-btn:hover{background:var(--card-2);border-color:var(--line-strong);transform:translateY(-1px)}
+.icon{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.icon-sm{width:15px;height:15px}
 
-/* ==================== 顶部导航 ==================== */
-/* 阅读进度条：随滚动平滑推进 */
-.progress{
-  position:fixed;top:0;left:0;right:0;height:2px;z-index:60;pointer-events:none;
-  background:linear-gradient(90deg,var(--text-4),var(--text-2) 45%,var(--text));
-  transform:scaleX(0);transform-origin:0 50%;opacity:0;transition:opacity var(--t-smooth);
+/* ---------- 顶部导航 ---------- */
+.progress{position:fixed;top:0;left:0;right:0;height:2px;z-index:100;background:transparent}
+.progress i{display:block;height:100%;width:100%;transform:scaleX(0);transform-origin:0 50%;background:linear-gradient(90deg,var(--g2),var(--g1),var(--g3),var(--g4));transition:opacity .3s;opacity:0}
+.progress.on i{opacity:1}
+.nav{position:fixed;top:0;left:0;right:0;z-index:90;transition:background .4s var(--ease),border-color .4s,box-shadow .4s,backdrop-filter .4s}
+.nav::after{content:'';position:absolute;left:0;right:0;bottom:0;height:1px;background:var(--line);opacity:0;transition:opacity .4s}
+.nav.scrolled{background:var(--glass);-webkit-backdrop-filter:saturate(180%) blur(24px);backdrop-filter:saturate(180%) blur(24px)}
+.nav.scrolled::after{opacity:1}
+.nav-inner{width:min(1230px,94vw);margin:0 auto;height:var(--header-h);display:flex;align-items:center;gap:28px}
+.brand{display:flex;align-items:center;gap:10px;font-size:16px;font-weight:700;letter-spacing:-.02em;flex:none}
+.brand-icon{width:26px;height:26px;fill:none;stroke:var(--text);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.brand b{font-weight:600;color:var(--text-2)}
+.nav-links{display:flex;align-items:center;gap:4px;margin-left:auto}
+.nav-links a{position:relative;padding:9px 13px;border-radius:999px;font-size:13px;color:var(--text-2);transition:color .25s,background .25s}
+.nav-links a:hover{color:var(--text)}
+.nav-links a.active{color:var(--text);background:var(--card)}
+.nav-actions{display:flex;align-items:center;gap:10px}
+.menu-btn{display:none}
+@media (max-width:900px){
+  .nav-links{
+    position:fixed;left:50%;top:calc(var(--header-h) + 8px);transform:translate(-50%,-12px);
+    width:min(92vw,420px);flex-direction:column;align-items:stretch;gap:4px;
+    padding:10px;border-radius:22px;border:1px solid var(--line);
+    background:rgba(14,14,16,.97);-webkit-backdrop-filter:blur(28px) saturate(180%);backdrop-filter:blur(28px) saturate(180%);
+    box-shadow:var(--shadow);opacity:0;pointer-events:none;transition:opacity .3s var(--ease),transform .3s var(--ease);
+    max-height:calc(100svh - var(--header-h) - 20px);overflow:auto;
+  }
+  html[data-theme="light"] .nav-links{background:rgba(255,255,255,.97)}
+  .nav-links.open{opacity:1;pointer-events:auto;transform:translate(-50%,0)}
+  .nav-links a{padding:13px 16px;font-size:15px}
+  .menu-btn{display:grid}
+  .nav-actions .btn{display:none}
 }
-.progress.on{opacity:.7}
-.nav{position:fixed;top:0;left:0;right:0;z-index:50;padding:12px 0;transition:padding var(--t-smooth)}
-.nav .bar{
-  display:flex;align-items:center;gap:14px;width:min(1080px,94vw);margin:0 auto;
-  padding:8px 10px 8px 14px;border-radius:var(--pill);border:1px solid transparent;
-  transition:background var(--t-smooth),border-color var(--t-smooth),box-shadow var(--t-smooth);
-  animation:navIn .7s var(--ease-out) both;
+
+/* ---------- 首屏 ---------- */
+.hero{position:relative;min-height:100svh;display:grid;align-items:center;padding:calc(var(--header-h) + 42px) 0 80px;overflow:hidden}
+.hero-grid{display:grid;grid-template-columns:1.02fr .98fr;gap:clamp(32px,5vw,80px);align-items:center}
+.eyebrow{display:inline-flex;align-items:center;gap:9px;padding:7px 14px 7px 10px;border-radius:999px;border:1px solid var(--line);background:var(--card);font-size:12px;font-weight:600;color:var(--text-2);letter-spacing:.01em;backdrop-filter:blur(10px)}
+.eyebrow .dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 0 4px rgba(48,209,88,.14);animation:pulse 2.4s ease-in-out infinite}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 4px rgba(48,209,88,.14)}50%{box-shadow:0 0 0 8px rgba(48,209,88,.03)}}
+.hero h1{font-size:clamp(46px,7.6vw,96px);line-height:.99;letter-spacing:-.052em;font-weight:700;margin:26px 0 22px;text-wrap:balance}
+.hero h1 .line{display:block}
+.hero .lead{font-size:clamp(16px,1.55vw,19.5px);max-width:560px}
+.hero-cta{display:flex;gap:12px;flex-wrap:wrap;margin-top:34px}
+.hero-meta{display:flex;gap:18px;flex-wrap:wrap;margin-top:30px;font-size:12.5px;color:var(--text-3)}
+.hero-meta span{display:inline-flex;align-items:center;gap:7px}
+.hero-meta i{width:5px;height:5px;border-radius:50%;background:var(--text-3);display:inline-block}
+.scroll-hint{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:8px;font-size:10.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--text-3)}
+.scroll-hint i{width:1px;height:38px;background:linear-gradient(180deg,transparent,var(--text-3));display:block;animation:hint 2.4s var(--ease) infinite}
+@keyframes hint{0%{transform:scaleY(.2);transform-origin:top;opacity:0}35%{opacity:1}100%{transform:scaleY(1);transform-origin:top;opacity:0}}
+
+/* 首屏虚拟仪表盘 */
+.hero-visual{position:relative;perspective:1400px}
+.device{
+  position:relative;border-radius:30px;border:1px solid var(--line-strong);
+  background:linear-gradient(165deg,rgba(255,255,255,.09),rgba(255,255,255,.03) 42%,rgba(255,255,255,.015));
+  box-shadow:var(--shadow),inset 0 1px 0 rgba(255,255,255,.14);
+  padding:16px;transform:rotateY(-7deg) rotateX(4deg) translateZ(0);
+  transition:transform .9s var(--ease);backdrop-filter:blur(24px);overflow:hidden;
 }
-.nav.scrolled .bar{background:var(--panel);background:color-mix(in srgb,var(--bg) 82%,transparent);border-color:var(--border);backdrop-filter:blur(14px);box-shadow:var(--shadow)}
-.brand{display:flex;align-items:center;gap:9px;font-weight:700;font-size:14.5px;letter-spacing:.2px;white-space:nowrap}
-.logo{width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,#2a2c31,#14151a);border:1px solid var(--border);display:grid;place-items:center;color:var(--text)}
-html[data-theme="light"] .logo{background:linear-gradient(135deg,#e9eaec,#d3d5d9);color:#17181a}
-.logo svg{width:15px;height:15px}
-.navlinks{display:flex;gap:2px;margin-left:auto}
-.navlinks a{padding:7px 13px;border-radius:var(--pill);font-size:13px;color:var(--text-3);transition:color var(--t-fast),background var(--t-fast)}
-.navlinks a:hover{color:var(--text);background:var(--panel-hover)}
-.navlinks a.active{color:var(--text);background:var(--accent-light)}
-.nav .actions{display:flex;align-items:center;gap:6px}
-.langsw{display:flex;gap:2px;padding:3px;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--panel)}
-.langsw button{
-  border:none;background:transparent;color:var(--text-3);font-family:var(--font);
-  font-size:11.5px;padding:5px 9px;border-radius:var(--radius-sm);cursor:pointer;transition:var(--t-fast);
+html[data-theme="light"] .device{background:linear-gradient(165deg,rgba(255,255,255,.92),rgba(255,255,255,.62));box-shadow:0 30px 90px rgba(0,0,0,.14),inset 0 1px 0 #fff}
+.hero-visual:hover .device{transform:rotateY(-2deg) rotateX(1.4deg)}
+.device::before{content:'';position:absolute;inset:0;border-radius:inherit;background:radial-gradient(120% 80% at 20% 0%,rgba(100,210,255,.14),transparent 46%),radial-gradient(100% 70% at 90% 10%,rgba(191,90,242,.12),transparent 50%);pointer-events:none}
+.device-top{display:flex;align-items:center;gap:8px;padding:4px 6px 14px;position:relative}
+.win-dots{display:flex;gap:6px}
+.win-dots i{width:9px;height:9px;border-radius:50%;background:var(--line-strong);display:block}
+.win-dots i:first-child{background:#ff5f57}.win-dots i:nth-child(2){background:#febc2e}.win-dots i:nth-child(3){background:#28c840}
+.device-title{font-size:11.5px;color:var(--text-3);font-family:var(--mono);letter-spacing:.02em}
+.live-pill{margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:10.5px;font-weight:600;color:var(--green);padding:4px 10px;border-radius:999px;background:rgba(48,209,88,.1);border:1px solid rgba(48,209,88,.22)}
+.live-pill i{width:5px;height:5px;border-radius:50%;background:var(--green);animation:pulse 2s infinite}
+.dash-hero{display:flex;align-items:flex-end;justify-content:space-between;padding:6px 8px 2px}
+.dash-rtt{display:flex;align-items:baseline;gap:8px}
+.dash-rtt strong{font-size:clamp(42px,5vw,62px);font-weight:700;letter-spacing:-.055em;font-variant-numeric:tabular-nums;line-height:1;font-family:var(--font)}
+.dash-rtt span{font-size:13px;color:var(--text-3)}
+.dash-chip{font-size:10.5px;font-family:var(--mono);color:var(--text-2);border:1px solid var(--line);border-radius:999px;padding:5px 10px;background:var(--card)}
+#heroChart{width:100%;height:132px;margin-top:14px;display:block}
+.dash-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:10px}
+.dash-stat{padding:11px 10px;border-radius:14px;border:1px solid var(--line);background:var(--card);min-width:0}
+.dash-stat b{display:block;font-size:16px;font-weight:650;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.dash-stat span{display:block;font-size:10px;color:var(--text-3);margin-top:3px;letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dash-foot{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.mini-tag{font-size:10px;font-family:var(--mono);color:var(--text-2);border:1px solid var(--line);border-radius:8px;padding:4px 8px;background:rgba(255,255,255,.03)}
+.float-card{
+  position:absolute;max-width:230px;display:flex;align-items:center;gap:9px;padding:11px 15px;border-radius:16px;
+  border:1px solid var(--line-strong);background:var(--glass);backdrop-filter:blur(20px) saturate(180%);
+  font-size:12px;font-weight:600;box-shadow:0 20px 50px rgba(0,0,0,.35);z-index:3;white-space:nowrap;
+  animation:floaty 7s ease-in-out infinite;
 }
-.langsw button:hover{color:var(--text)}
-.langsw button.active{background:var(--accent-light);color:var(--text);font-weight:600}
-.iconbtn{width:34px;height:34px;border-radius:var(--pill);border:1px solid var(--border);background:var(--panel);color:var(--text-2);display:grid;place-items:center;cursor:pointer;transition:var(--t-fast)}
-.iconbtn:hover{color:var(--text);border-color:var(--border-hover)}
-.iconbtn svg{width:16px;height:16px;transition:transform var(--t-smooth)}
-.iconbtn.spin svg{animation:spin .55s var(--ease-soft)}
-
-/* ==================== 首屏 ==================== */
-.hero{padding:150px 0 40px;text-align:center}
-.hero h1>span{display:inline-block}
-h1{font-size:clamp(34px,5.6vw,58px);line-height:1.08;margin:20px 0 0;letter-spacing:-1.4px;font-weight:800}
-h1 .dim{color:var(--text-3)}
-.lead{max-width:640px;margin:18px auto 0;font-size:clamp(14.5px,1.6vw,16.5px);color:var(--text-2)}
-.lead b{color:var(--text);font-weight:600}
-.cta{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:26px}
-.heroNote{margin-top:14px;font-size:12px;color:var(--text-4)}
-
-/* 首屏：CSS 复刻的应用界面 */
-.mock{margin:52px auto 0;max-width:860px;text-align:left;overflow:hidden}
-.mock-bar{display:flex;align-items:center;gap:7px;padding:10px 14px;border-bottom:1px solid var(--divider);background:var(--panel-heavy)}
-.mock-bar i{width:9px;height:9px;border-radius:50%;background:var(--border)}
-.js .mock.in .mock-bar i{animation:dotPop .55s var(--ease-out) backwards}
-.js .mock.in .mock-bar i:nth-child(1){animation-delay:.30s}
-.js .mock.in .mock-bar i:nth-child(2){animation-delay:.42s}
-.js .mock.in .mock-bar i:nth-child(3){animation-delay:.54s}
-.mock-url{margin-left:8px;font-size:11px;color:var(--text-3);font-family:var(--mono)}
-.mock-body{padding:16px 18px}
-.mock-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
-.chip{display:inline-flex;align-items:center;gap:7px;padding:6px 12px;border:1px solid var(--border);border-radius:var(--pill);font-size:11.5px;color:var(--text-2)}
-.chip b{color:var(--text);font-family:var(--mono);font-weight:600}
-.rtt{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
-.rtt-box{border:1px solid var(--border);border-radius:var(--radius-md);padding:14px 10px;text-align:center;background:var(--panel)}
-.rtt-box .v{font-size:26px;font-weight:700;font-family:var(--mono);letter-spacing:-1px}
-.rtt-box .l{font-size:10.5px;color:var(--text-3);margin-top:5px;text-transform:uppercase;letter-spacing:.9px}
-.sparkbox{margin-top:12px;border:1px solid var(--border);border-radius:var(--radius-md);padding:10px 12px;background:var(--panel)}
-.sparkbox svg{width:100%;height:74px}
-/* 折线一次性描出 + 面积淡入 */
-.js .mock .sparkbox svg polyline:first-of-type{stroke-dasharray:700;stroke-dashoffset:700}
-.js .mock.in .sparkbox svg polyline:first-of-type{animation:drawLine 1.5s var(--ease-soft) .35s forwards}
-.js .mock.in .sparkbox svg polyline:last-of-type{animation:areaIn .9s ease .75s backwards}
-.quality{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:12px}
-.q-item{display:flex;align-items:center;justify-content:space-between;gap:8px;border:1px solid transparent;border-radius:var(--radius-sm);padding:9px 11px;background:var(--panel)}
-.q-item span:first-child{font-size:11px;color:var(--text-3)}
-.q-item span:last-child{font-size:12px;font-weight:600}
-
-/* ==================== 数字带 ==================== */
-.stats{margin-top:56px}
-.stats .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden}
-.stat{background:var(--panel);padding:22px 14px;text-align:center;transition:background var(--t-smooth)}
-.stat:hover{background:var(--panel-hover)}
-.stat .n{font-size:clamp(22px,3.4vw,32px);font-weight:800;letter-spacing:-1px;font-family:var(--mono)}
-.stat .l{font-size:11.5px;color:var(--text-3);margin-top:3px;letter-spacing:.3px}
-
-/* ==================== 分区 ==================== */
-section{padding:76px 0}
-.shead{margin-bottom:34px}
-.shead.center{text-align:center}
-.shead .kicker{font-size:10.5px;text-transform:uppercase;letter-spacing:1.4px;color:var(--text-4)}
-.shead h2{font-size:clamp(22px,3.4vw,32px);margin:8px 0 0;letter-spacing:-.8px;font-weight:750}
-.shead p{color:var(--text-2);margin:10px 0 0;max-width:620px;font-size:14px}
-.shead.center p{margin-left:auto;margin-right:auto}
-
-/* 亮点 */
-.highlights{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
-.hi{padding:20px}
-.hi .tile{width:34px;height:34px;border-radius:var(--radius-md);border:1px solid var(--border);background:var(--panel-heavy);display:grid;place-items:center;color:var(--text-2);margin-bottom:13px;transition:var(--t-fast)}
-.hi .tile svg{width:17px;height:17px}
-.hi h3{margin:0 0 6px;font-size:14.5px;letter-spacing:.2px}
-.hi p{margin:0;font-size:13px;color:var(--text-2)}
-.hi:hover{transform:translateY(-3px);border-color:var(--border-hover);box-shadow:var(--shadow-lg)}
-.hi:hover .tile{color:var(--text);border-color:var(--border-hover);transform:translateY(-2px)}
-
-/* 工具 */
-.filters{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:20px}
-.filters button{
-  padding:7px 14px;border-radius:var(--pill);border:1px solid var(--border);background:transparent;
-  color:var(--text-3);font-family:var(--font);font-size:12.5px;cursor:pointer;transition:var(--t-fast);
+.float-card .ic{width:24px;height:24px;border-radius:8px;display:grid;place-items:center;background:linear-gradient(135deg,rgba(10,132,255,.2),rgba(191,90,242,.2));border:1px solid var(--line)}
+.float-card small{display:block;font-size:10px;color:var(--text-3);font-weight:500;letter-spacing:.01em}
+.fc1{right:-10%;top:-8%;animation-delay:-1.4s}
+.fc2{left:-13%;bottom:-7%;animation-delay:-3.6s}
+@keyframes floaty{0%,100%{transform:translateY(0)}50%{transform:translateY(-11px)}}
+@media (max-width:980px){
+  .hero-grid{grid-template-columns:1fr;gap:48px}
+  .hero-visual{max-width:600px;margin:0 auto;width:100%}
+  .device{transform:none}
+  .fc1{right:-2%;top:-4%}.fc2{left:-2%;bottom:-5%}
+  .hero{min-height:auto;padding-top:calc(var(--header-h) + 64px)}
 }
-.filters button:hover{color:var(--text);border-color:var(--border-hover)}
-.filters button.active{background:var(--text);color:var(--bg);border-color:var(--text);font-weight:600}
-.tgroups{display:flex;flex-direction:column;gap:22px}
-.tg-head{display:flex;align-items:center;gap:8px;font-size:10.5px;text-transform:uppercase;letter-spacing:1.2px;color:var(--text-3);margin-bottom:9px}
-.tg-head svg{width:12px;height:12px;color:var(--text-3)}
-.tg-head .cnt{margin-left:auto;font-family:var(--mono);font-size:10px;border:1px solid var(--border);border-radius:var(--pill);padding:1px 7px;color:var(--text-4)}
-.tgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(232px,1fr));gap:8px}
-.tcard{display:flex;align-items:flex-start;gap:11px;padding:12px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--panel);transition:var(--t-fast)}
-.tcard:hover{background:var(--panel-hover);border-color:var(--border-hover);transform:translateY(-2px);box-shadow:var(--shadow)}
-.tcard:hover .ic{color:var(--text);border-color:var(--border-hover)}
-.tcard .ic{width:28px;height:28px;flex:0 0 28px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--panel-heavy);display:grid;place-items:center;color:var(--text-2);transition:var(--t-fast)}
-.tcard .ic svg{width:14px;height:14px}
-.tcard .nm{font-size:12.5px;font-weight:600;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
-.tcard .ds{font-size:11.5px;color:var(--text-3);margin-top:3px}
 
-/* 界面展示（CSS 复刻） */
-.showtabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;justify-content:center}
-.showtabs button{padding:7px 15px;border-radius:var(--pill);border:1px solid var(--border);background:transparent;color:var(--text-3);font-family:var(--font);font-size:12.5px;cursor:pointer;transition:var(--t-fast)}
-.showtabs button.active{background:var(--text);color:var(--bg);border-color:var(--text);font-weight:600}
-.shot{border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--panel);overflow:hidden}
-.shot-head{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--divider);background:var(--panel-heavy);font-size:11px;color:var(--text-3)}
-.shot-head .cap{margin-left:auto;font-size:10.5px;color:var(--text-4)}
-.shot-body{padding:16px}
+/* ---------- 数字带 ---------- */
+.stats{border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:rgba(255,255,255,.015)}
+.stats-grid{display:grid;grid-template-columns:repeat(4,1fr)}
+.stat-cell{padding:clamp(26px,4vw,46px) 20px;text-align:center;position:relative}
+.stat-cell+.stat-cell::before{content:'';position:absolute;left:0;top:24%;bottom:24%;width:1px;background:var(--line)}
+.stat-cell b{display:block;font-size:clamp(30px,4vw,50px);font-weight:700;letter-spacing:-.05em;line-height:1;font-variant-numeric:tabular-nums}
+.stat-cell span{display:block;margin-top:10px;font-size:12.5px;color:var(--text-2);letter-spacing:.02em}
+@media (max-width:720px){.stats-grid{grid-template-columns:repeat(2,1fr)}.stat-cell:nth-child(3)::before{display:none}.stat-cell:nth-child(n+3){border-top:1px solid var(--line)}}
+
+/* ---------- Bento 能力区 ---------- */
+.bento{display:grid;grid-template-columns:repeat(12,1fr);gap:14px}
+.card{
+  position:relative;border-radius:var(--radius);border:1px solid var(--line);
+  background:linear-gradient(170deg,var(--card-2),var(--card) 55%,rgba(255,255,255,.02));
+  padding:clamp(22px,2.6vw,32px);overflow:hidden;isolation:isolate;
+  transition:transform .55s var(--ease),border-color .4s,box-shadow .5s;
+}
+html[data-theme="light"] .card{background:linear-gradient(170deg,#fff,rgba(255,255,255,.72));box-shadow:0 1px 0 rgba(0,0,0,.02)}
+.card::before{
+  content:'';position:absolute;inset:0;z-index:-1;opacity:0;transition:opacity .5s;
+  background:radial-gradient(340px circle at var(--mx,50%) var(--my,0%),rgba(10,132,255,.16),transparent 62%);
+}
+html[data-theme="light"] .card::before{background:radial-gradient(340px circle at var(--mx,50%) var(--my,0%),rgba(10,132,255,.1),transparent 62%)}
+.card:hover{transform:translateY(-4px);border-color:var(--line-strong);box-shadow:0 26px 70px rgba(0,0,0,.28)}
+html[data-theme="light"] .card:hover{box-shadow:0 26px 70px rgba(0,0,0,.1)}
+.card:hover::before{opacity:1}
+.card .tile{
+  width:46px;height:46px;border-radius:14px;display:grid;place-items:center;margin-bottom:20px;
+  border:1px solid var(--line-strong);
+  background:linear-gradient(140deg,rgba(100,210,255,.14),rgba(191,90,242,.1) 55%,rgba(255,255,255,.02));
+  color:var(--text);
+}
+.card .tile .icon{width:22px;height:22px}
+.card h3{font-size:19px;letter-spacing:-.025em;font-weight:650;margin:0 0 8px}
+.card p{font-size:13px;line-height:1.72;color:var(--text-2);margin:0}
+.card .tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:16px}
+.tag{font-size:10px;font-family:var(--mono);letter-spacing:.02em;color:var(--text-2);padding:4px 9px;border-radius:999px;border:1px solid var(--line);background:rgba(255,255,255,.03)}
+.span-8{grid-column:span 8}.span-6{grid-column:span 6}.span-4{grid-column:span 4}.span-3{grid-column:span 3}.span-12{grid-column:span 12}
+@media (max-width:980px){.span-8,.span-4,.span-3,.span-6{grid-column:span 6}}
+@media (max-width:640px){.bento{grid-template-columns:1fr}.span-8,.span-4,.span-3,.span-6,.span-12{grid-column:auto}.card{padding:24px}}
+/* 卡内迷你图 */
+.spark{width:100%;height:64px;margin-top:18px;display:block;opacity:.9}
+.bars-mini{display:flex;align-items:flex-end;gap:4px;height:56px;margin-top:18px}
+.bars-mini i{flex:1;border-radius:3px 3px 1px 1px;background:linear-gradient(180deg,var(--g2),rgba(10,132,255,.25));opacity:.55;transform-origin:bottom;animation:barGrow 3.2s var(--ease) infinite alternate}
+.bars-mini i:nth-child(2n){animation-delay:-.9s;opacity:.85}
+.bars-mini i:nth-child(3n){animation-delay:-1.8s;opacity:.7}
+@keyframes barGrow{from{transform:scaleY(.55)}to{transform:scaleY(1)}}
+.ring-wrap{display:flex;align-items:center;gap:22px;margin-top:18px}
+.ring{width:92px;height:92px;flex:none;transform:rotate(-90deg)}
+.ring circle{fill:none;stroke-width:7;stroke-linecap:round}
+.ring .bg{stroke:var(--line)}
+.ring .fg{stroke:url(#ringGrad);stroke-dasharray:251;stroke-dashoffset:60;transition:stroke-dashoffset 1.6s var(--ease)}
+.ring-meta b{font-size:26px;font-weight:700;letter-spacing:-.04em;display:block;line-height:1}
+.ring-meta span{font-size:11px;color:var(--text-3);display:block;margin-top:5px}
+
+/* ---------- 交互展示 ---------- */
+.showcase{border:1px solid var(--line);border-radius:36px;padding:clamp(18px,3vw,34px);background:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.015));box-shadow:var(--shadow);position:relative;overflow:hidden}
+.showcase::before{content:'';position:absolute;inset:-40% 20% auto;height:60%;background:radial-gradient(ellipse at center,rgba(10,132,255,.16),transparent 65%);pointer-events:none}
+.show-tabs{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin:0 auto 22px;position:relative;z-index:2}
+.show-tabs button{
+  padding:10px 18px;border-radius:999px;border:1px solid var(--line);background:transparent;
+  color:var(--text-2);font-size:13px;font-weight:500;cursor:pointer;transition:all .3s var(--ease);
+}
+.show-tabs button:hover{color:var(--text);border-color:var(--line-strong)}
+.show-tabs button.active{background:var(--text);color:var(--bg);border-color:var(--text);font-weight:650}
+.panes{position:relative;z-index:2}
 .pane{display:none}
-.pane.on{display:block;animation:paneIn .45s var(--ease-out)}
-.shot-head>span{display:inline-block}
-.shot-head .swap{animation:cardIn .38s var(--ease-out)}
-/* 复刻：工具分组页 */
-.mocktools{display:grid;grid-template-columns:repeat(auto-fill,minmax(176px,1fr));gap:7px}
-.mt{display:flex;align-items:center;gap:9px;padding:9px 11px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--panel);transition:var(--t-fast)}
-.mt:hover{background:var(--panel-hover);border-color:var(--border-hover);transform:translateX(2px)}
-.mt .ic{width:24px;height:24px;flex:0 0 24px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--panel-heavy);display:grid;place-items:center;color:var(--text-2)}
-.mt .ic svg{width:12px;height:12px}
-.mt .nm{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.mt .chev{margin-left:auto;color:var(--text-4);font-size:10px}
-/* 复刻：两栏结果弹层 */
-.mockmodal{border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--panel-heavy);overflow:hidden}
-.mm-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-bottom:1px solid var(--divider)}
-.mm-head h4{margin:0;font-size:13.5px}
-.mm-head .acts{display:flex;gap:6px}
-.mm-actions-btn{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:11px;color:var(--text-2);background:var(--panel)}
-.mm-main{display:grid;grid-template-columns:230px 1fr;gap:16px;padding:14px}
-.mm-side{border-right:1px solid var(--divider);padding-right:14px;display:flex;flex-direction:column;gap:9px}
-.mm-desc{font-size:11.5px;color:var(--text-3);line-height:1.5}
-.mm-input{height:32px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--panel);color:var(--text-3);font-size:11.5px;display:flex;align-items:center;padding:0 10px;font-family:var(--mono)}
-.mm-primary{margin-top:auto;height:34px;border-radius:var(--pill);background:var(--text);color:var(--bg);display:grid;place-items:center;font-size:12px;font-weight:600}
-.mm-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:8px}
-.mm-metric{border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--panel);padding:10px}
-.mm-metric .l{font-size:9.5px;text-transform:uppercase;letter-spacing:.9px;color:var(--text-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.mm-metric .v{font-size:19px;font-weight:700;font-family:var(--mono);margin-top:4px;letter-spacing:-.5px}
-.mm-rows{display:flex;flex-direction:column;gap:5px;margin-top:10px}
-.mm-row{display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 11px;font-size:11.5px}
-.mm-row span:first-child{color:var(--text-2)}
-.mm-row span:last-child{font-family:var(--mono);font-weight:600}
-.advice{margin-top:10px;border:1px solid var(--border);border-radius:var(--radius-sm);padding:11px;background:var(--panel)}
-.advice .t{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-3)}
-.advice .c{font-size:11.5px;color:var(--text-2);margin-top:6px}
-.advice .a{font-size:11.5px;color:var(--text);margin-top:6px}
-@media (max-width:700px){ .mm-main{grid-template-columns:1fr} .mm-side{border-right:0;border-bottom:1px solid var(--divider);padding-right:0;padding-bottom:12px} }
-
-/* 隐私 / 安全 列表 */
-.cols{display:grid;grid-template-columns:1.05fr .95fr;gap:16px}
-.pad{padding:22px}
-.pad h3{margin:0 0 14px;font-size:15px;display:flex;align-items:center;gap:9px}
-.pad h3 svg{width:16px;height:16px;color:var(--text-3)}
-.rows{list-style:none;margin:0;padding:0}
-.rows li{display:flex;gap:11px;padding:10px 0;border-bottom:1px solid var(--divider);font-size:13px;color:var(--text-2)}
-.rows li:last-child{border-bottom:0}
-.rows li b{color:var(--text);font-weight:600}
-.tick{flex:0 0 16px;width:16px;height:16px;margin-top:3px;color:var(--success)}
-.tick svg{width:16px;height:16px}
-.dtable{width:100%;border-collapse:collapse;font-size:12.5px}
-.dtable td{padding:10px 0;border-bottom:1px solid var(--divider);vertical-align:top}
-.dtable tr:last-child td{border-bottom:0}
-.dtable td:first-child{width:44%;color:var(--text-2);padding-right:14px}
-.dtable td:last-child{color:var(--text)}
-
-/* 部署 */
-.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:18px}
-.step{padding:18px;position:relative}
-.step .no{font-family:var(--mono);font-size:11px;color:var(--text-4);border:1px solid var(--border);border-radius:var(--pill);padding:1px 8px;display:inline-block;transition:var(--t-fast)}
-.step h4{margin:12px 0 6px;font-size:14px}
-.step p{margin:0;font-size:12.5px;color:var(--text-2)}
-.step:hover{transform:translateY(-3px);border-color:var(--border-hover);box-shadow:var(--shadow-lg)}
-.step:hover .no{color:var(--text-2);border-color:var(--border-hover)}
-.codewrap{position:relative;border:1px solid var(--border);border-radius:var(--radius-lg);background:#0d0e11;overflow:hidden}
-html[data-theme="light"] .codewrap{background:#14151a}
-.codewrap pre{margin:0;padding:18px;overflow:auto;font-family:var(--mono);font-size:12.5px;line-height:1.75;color:#d7d9dd}
-.codewrap .c{color:#6f7681}
-.codewrap .k{color:#c3c7cd}
-.codewrap .s{color:#9fb0a2}
-.copybtn{position:absolute;top:12px;right:12px;padding:6px 13px;border-radius:var(--pill);border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.08);color:#e9eaec;font-size:11.5px;cursor:pointer;font-family:var(--font);transition:var(--t-fast)}
-.copybtn:hover{background:rgba(255,255,255,.16)}
-.copybtn.ok{border-color:transparent;background:var(--text);color:var(--bg);animation:pop .4s var(--ease-out)}
-.envtable{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:16px}
-.envtable th{text-align:left;padding:9px 10px;border-bottom:1px solid var(--border);color:var(--text-3);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.8px}
-.envtable td{padding:10px;border-bottom:1px solid var(--divider);color:var(--text-2);vertical-align:top}
-.envtable td:first-child{font-family:var(--mono);color:var(--text);white-space:nowrap}
-.envtable tr:last-child td{border-bottom:0}
-.opt{font-size:10px;color:var(--text-4);border:1px solid var(--border);border-radius:var(--pill);padding:1px 7px;margin-left:6px}
-
-/* FAQ */
-.faq{display:flex;flex-direction:column;gap:8px}
-details{border:1px solid var(--border);border-radius:var(--radius-md);background:var(--panel);transition:var(--t-fast)}
-details:hover{border-color:var(--border-hover)}
-details[open]{border-color:var(--border-hover)}
-summary{cursor:pointer;padding:13px 15px;font-size:13.5px;font-weight:600;list-style:none;display:flex;align-items:center;gap:10px;border-radius:var(--radius-md);transition:background var(--t-fast),color var(--t-fast)}
-summary::-webkit-details-marker{display:none}
-summary::after{content:'+';margin-left:auto;color:var(--text-3);font-family:var(--mono);font-size:15px;transition:transform var(--t-smooth),color var(--t-fast)}
-summary:hover{background:var(--panel-hover)}
-details[open] summary::after{content:'–';transform:rotate(180deg);color:var(--text-2)}
-details code{color:var(--text)}
-/* 展开 / 收起过渡：grid-template-rows 0fr ↔ 1fr，纯 CSS 高度动画；
-   内层 .acc-in 负责裁剪（padding 放在里面的 p 上，收起才能真的到 0）；
-   收起时由 JS 延迟移除 open，保证折叠过程可见 */
-.js .acc{display:grid;grid-template-rows:0fr;opacity:0;transition:grid-template-rows var(--t-acc) var(--ease-soft),opacity .32s ease}
-.js .acc.on{grid-template-rows:1fr;opacity:1}
-.acc-in{overflow:hidden;min-height:0}
-.acc-in>p{margin:0;padding:0 15px 14px;font-size:13px;color:var(--text-2)}
-
-/* 许可 / 页脚 */
-.docs{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-top:16px}
-.doclink{display:flex;align-items:center;gap:10px;padding:13px 14px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--panel);font-size:13px;transition:var(--t-fast)}
-.doclink:hover{border-color:var(--border-hover);background:var(--panel-hover);transform:translateY(-2px);box-shadow:var(--shadow)}
-.doclink svg{width:15px;height:15px;color:var(--text-3);transition:transform var(--t-fast)}
-.doclink:hover svg{transform:translateX(2px)}
-.doclink small{display:block;color:var(--text-3);font-size:11px;font-weight:400;margin-top:2px}
-footer{padding:56px 0 46px;border-top:1px solid var(--divider);margin-top:24px}
-.fwrap{display:flex;flex-wrap:wrap;align-items:center;gap:14px;justify-content:space-between;font-size:12px;color:var(--text-3)}
-.flinks{display:flex;gap:16px;flex-wrap:wrap}
-.flinks a:hover{color:var(--text)}
-
-/* ==================== 过渡与动效 ==================== */
-/* 关键帧 */
-@keyframes navIn{from{opacity:0;transform:translateY(-14px)}to{opacity:1;transform:none}}
-@keyframes cardIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
-@keyframes paneIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
-@keyframes dotPop{from{opacity:0;transform:scale(.35)}to{opacity:1;transform:none}}
-@keyframes drawLine{to{stroke-dashoffset:0}}
-@keyframes areaIn{from{opacity:0}to{opacity:1}}
-@keyframes spin{to{transform:rotate(360deg)}}
-@keyframes pop{50%{transform:scale(1.1)}}
-
-/* 入场动画：滚动到视口时淡入 + 上浮 + 轻微去模糊；--d 控制同组内错峰延时 */
-.js .reveal{
-  opacity:0;transform:translateY(18px);filter:blur(6px);
-  transition:opacity var(--t-enter) var(--ease-out) var(--d,0ms),
-             transform var(--t-enter) var(--ease-out) var(--d,0ms),
-             filter var(--t-enter) var(--ease-out) var(--d,0ms);
+.pane.on{display:block;animation:paneIn .55s var(--ease) both}
+@keyframes paneIn{from{opacity:0;transform:translateY(14px) scale(.995)}to{opacity:1;transform:none}}
+.pane-grid{display:grid;grid-template-columns:.9fr 1.1fr;gap:clamp(18px,3vw,34px);align-items:stretch}
+.pane-copy{padding:8px 6px}
+.pane-copy h3{font-size:clamp(24px,2.6vw,32px);letter-spacing:-.035em;font-weight:700;margin:0 0 12px}
+.pane-copy p{font-size:13.5px;line-height:1.8;color:var(--text-2);margin:0 0 20px}
+.pane-list{list-style:none;padding:0;margin:0;display:grid;gap:10px}
+.pane-list li{display:flex;gap:10px;font-size:12.5px;color:var(--text-2);align-items:flex-start}
+.pane-list .tick{width:18px;height:18px;border-radius:50%;flex:none;display:grid;place-items:center;background:rgba(48,209,88,.12);color:var(--green);margin-top:1px}
+.pane-list .tick .icon{width:10px;height:10px;stroke-width:2.4}
+.mock{
+  border:1px solid var(--line);border-radius:24px;background:var(--bg-soft);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 30px 70px rgba(0,0,0,.25);overflow:hidden;
+  display:flex;flex-direction:column;min-height:330px;
 }
-.js .reveal.rv-l{transform:translateX(-26px)}
-.js .reveal.rv-r{transform:translateX(26px)}
-.js .reveal.rv-s{transform:scale(.965)}
-.js .reveal.in{opacity:1;transform:none;filter:none}
-/* 大块容器不做模糊，避免整屏重绘 */
-.js .mock.reveal,.js .shot.reveal,.js .tgroup.reveal,.js .codewrap.reveal,.js details.reveal{filter:none}
-/* 入场结束后恢复常规过渡时长，避免 --d 错峰延时拖慢 hover 反馈 */
-.js .rv-done{
-  transition:transform var(--t-fast),opacity var(--t-fast),filter var(--t-fast),
-             background var(--t-fast),background-color var(--t-fast),border-color var(--t-fast),
-             box-shadow var(--t-fast),color var(--t-fast);
-}
+html[data-theme="light"] .mock{background:#fff;box-shadow:inset 0 1px 0 #fff,0 24px 60px rgba(0,0,0,.08)}
+.mock-head{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--line);background:rgba(255,255,255,.02)}
+html[data-theme="light"] .mock-head{background:rgba(0,0,0,.015)}
+.mock-head .win-dots i{width:8px;height:8px}
+.mock-title{font-size:11px;font-family:var(--mono);color:var(--text-3)}
+.mock-body{padding:18px;flex:1;display:flex;flex-direction:column;gap:14px}
+.mock-actions{display:flex;gap:8px;margin-top:auto;padding-top:12px}
+.mock-btn{padding:8px 14px;border-radius:999px;border:1px solid var(--line-strong);background:var(--card);font-size:11.5px;color:var(--text);cursor:pointer;font-family:var(--font);transition:background .25s,transform .25s}
+.mock-btn:hover{background:var(--card-2);transform:translateY(-1px)}
+.mock-big{display:flex;align-items:baseline;gap:8px}
+.mock-big b{font-size:46px;font-weight:700;letter-spacing:-.05em;font-variant-numeric:tabular-nums;line-height:1}
+.mock-big span{font-size:12px;color:var(--text-3)}
+.mock-kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.kpi{border:1px solid var(--line);border-radius:12px;padding:10px;background:var(--card)}
+.kpi b{display:block;font-size:15px;font-weight:650;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.kpi span{display:block;font-size:9.5px;color:var(--text-3);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#paneChart{width:100%;height:96px;display:block}
+.dns-rows{display:flex;flex-direction:column;gap:9px}
+.dns-row{display:grid;grid-template-columns:78px 1fr 62px;gap:10px;align-items:center;font-size:11.5px}
+.dns-row .nm{color:var(--text-2);display:flex;align-items:center;gap:5px;white-space:nowrap}
+.dns-row .track{height:5px;border-radius:99px;background:var(--line);overflow:hidden}
+.dns-row .fill{display:block;height:100%;width:0;border-radius:99px;background:linear-gradient(90deg,var(--g1),var(--g2));transition:width 1.2s var(--ease)}
+.dns-row .ms{text-align:right;font-family:var(--mono);font-size:10.5px;color:var(--text-3)}
+.dnssec{font-size:8.5px;padding:2px 5px;border-radius:4px;border:1px solid rgba(48,209,88,.3);color:var(--green);background:rgba(48,209,88,.08);letter-spacing:.02em}
+.gauge-wrap{display:flex;align-items:center;justify-content:center;gap:26px;flex-wrap:wrap;padding:6px 0}
+.gauge{width:150px;height:150px;transform:rotate(-90deg)}
+.gauge circle{fill:none;stroke-width:9;stroke-linecap:round}
+.gauge .track{stroke:var(--line)}
+.gauge .value{stroke:url(#gaugeGrad);stroke-dasharray:408;stroke-dashoffset:408;transition:stroke-dashoffset 1.6s var(--ease)}
+.gauge-num{text-align:center}
+.gauge-num b{display:block;font-size:34px;font-weight:700;letter-spacing:-.05em;font-variant-numeric:tabular-nums;line-height:1}
+.gauge-num span{font-size:11px;color:var(--text-3)}
+.uptime{display:flex;gap:3px;align-items:flex-end;height:34px;margin-top:2px;filter:saturate(.78)}
+.uptime i{flex:1;height:100%;border-radius:2px;background:var(--green);opacity:.45;transform-origin:bottom;transform:scaleY(.6);transition:opacity .3s;min-width:2px}
+.uptime i.warn{background:var(--orange)}
+.uptime i.down{background:var(--red)}
+.uptime i:nth-child(7n){opacity:.85}
+.target-rows{display:flex;flex-direction:column;gap:8px}
+.target{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--card);font-size:11.5px}
+.target .tdot{width:7px;height:7px;border-radius:50%;flex:none;background:var(--green);box-shadow:0 0 0 4px rgba(48,209,88,.12)}
+.target.warn .tdot{background:var(--orange);box-shadow:0 0 0 4px rgba(255,159,10,.12)}
+.target.down .tdot{background:var(--red);box-shadow:0 0 0 4px rgba(255,69,58,.14)}
+.target .url{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-2);font-family:var(--mono);font-size:10.5px}
+.target .meta{font-size:10px;color:var(--text-3);white-space:nowrap}
+@media (max-width:900px){.pane-grid{grid-template-columns:1fr}.mock{min-height:300px}}
 
-/* 列表错峰：分组进入视口后，卡片按 --i 依次升起 */
-.js .tgroup.in .tcard{animation:cardIn .5s var(--ease-out) calc(var(--i,0) * 24ms) backwards}
+/* ---------- 流程 ---------- */
+.flow{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;counter-reset:step}
+.flow-item{position:relative;padding:26px 22px 24px;border-radius:24px;border:1px solid var(--line);background:var(--card);overflow:hidden}
+.flow-item::before{content:'0' counter(step);counter-increment:step;position:absolute;right:18px;top:12px;font-size:52px;font-weight:700;letter-spacing:-.06em;color:var(--text);opacity:.06;line-height:1}
+.flow-item h4{font-size:16px;font-weight:650;letter-spacing:-.02em;margin:12px 0 8px}
+.flow-item p{font-size:12.5px;color:var(--text-2);line-height:1.72;margin:0}
+.flow-item .ic{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;border:1px solid var(--line-strong);background:linear-gradient(140deg,rgba(100,210,255,.12),rgba(191,90,242,.1))}
+.flow-line{grid-column:1/-1;height:1px;background:linear-gradient(90deg,transparent,var(--line-strong),transparent);margin:6px 0}
+@media (max-width:900px){.flow{grid-template-columns:repeat(2,1fr)}.flow-line{display:none}}
 
-/* 主题切换：短暂为所有元素补上颜色过渡，实现整页平滑换肤 */
-html.theme-x *,html.theme-x *::before,html.theme-x *::after{
-  transition:background-color .38s ease,color .38s ease,border-color .38s ease,fill .38s ease,stroke .38s ease;
-}
+/* ---------- 工程技术区 ---------- */
+.eng-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:clamp(20px,3vw,40px);align-items:start}
+.code-card{border:1px solid var(--line-strong);border-radius:22px;background:#08080a;overflow:hidden;box-shadow:var(--shadow)}
+html[data-theme="light"] .code-card{background:#0d0d10}
+.code-head{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.03)}
+.code-head .win-dots i{width:9px;height:9px}
+.code-file{font-size:11px;font-family:var(--mono);color:#8e8e93;margin-left:4px}
+.code-copy{margin-left:auto;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:#e9eaec;font-size:10.5px;padding:5px 11px;border-radius:999px;cursor:pointer;transition:background .25s}
+.code-copy:hover{background:rgba(255,255,255,.12)}
+.code-body{padding:18px 20px;overflow-x:auto;font-family:var(--mono);font-size:11.5px;line-height:1.85;color:#c8c9ce;white-space:pre;tab-size:2}
+.code-body .c-key{color:#64d2ff}.code-body .c-str{color:#a7c7a9}.code-body .c-num{color:#ffb86c}.code-body .c-com{color:#5c5f66}
+.eng-list{display:grid;gap:12px;margin-top:22px}
+.eng-item{display:flex;gap:14px;padding:16px 18px;border:1px solid var(--line);border-radius:16px;background:var(--card);transition:border-color .3s,transform .3s var(--ease)}
+.eng-item:hover{border-color:var(--line-strong);transform:translateX(3px)}
+.eng-item .ic{width:36px;height:36px;flex:none;border-radius:11px;display:grid;place-items:center;border:1px solid var(--line);background:rgba(255,255,255,.03)}
+.eng-item b{display:block;font-size:13.5px;font-weight:650;letter-spacing:-.01em}
+.eng-item span{display:block;font-size:11.5px;color:var(--text-2);margin-top:3px;line-height:1.6}
+.eng-note{margin-top:18px;font-size:11.5px;color:var(--text-3);line-height:1.75}
+@media (max-width:900px){.eng-grid{grid-template-columns:1fr}}
 
-/* 锚点跳转补偿固定导航高度 */
-section[id]{scroll-margin-top:86px}
+/* ---------- 语言 / 主题展示 ---------- */
+.i18n-card{display:grid;grid-template-columns:1fr auto;gap:24px;align-items:center;padding:clamp(24px,4vw,46px);border:1px solid var(--line);border-radius:32px;background:linear-gradient(150deg,rgba(10,132,255,.1),rgba(255,255,255,.025) 45%,rgba(191,90,242,.08));position:relative;overflow:hidden}
+.i18n-card::after{content:'';position:absolute;inset:auto -10% -60% 30%;height:80%;background:radial-gradient(ellipse,rgba(100,210,255,.18),transparent 65%);pointer-events:none}
+.i18n-preview{min-width:min(420px,100%)}
+.i18n-line{font-size:clamp(22px,2.6vw,32px);font-weight:700;letter-spacing:-.035em;line-height:1.25;min-height:2.5em;transition:opacity .25s,transform .25s}
+.i18n-line.swap{opacity:0;transform:translateY(6px)}
+.i18n-sub{font-size:12.5px;color:var(--text-2);margin-top:8px;min-height:1.6em}
+.lang-pills{display:flex;gap:7px;flex-wrap:wrap;margin-top:18px}
+.lang-pills button{padding:8px 13px;border-radius:999px;border:1px solid var(--line);background:var(--card);font-size:11.5px;cursor:pointer;color:var(--text-2);transition:all .25s var(--ease)}
+.lang-pills button:hover{color:var(--text);border-color:var(--line-strong)}
+.lang-pills button.on{background:var(--text);color:var(--bg);border-color:var(--text);font-weight:600}
+@media (max-width:820px){.i18n-card{grid-template-columns:1fr}}
 
-:focus-visible{outline:2px solid var(--text-2);outline-offset:2px;border-radius:var(--radius-sm)}
+/* ---------- 部署 ---------- */
+.deploy-step{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:26px}
+.dstep{padding:22px;border:1px solid var(--line);border-radius:20px;background:var(--card)}
+.dstep .no{font-family:var(--mono);font-size:10.5px;color:var(--g2);letter-spacing:.08em}
+.dstep h4{font-size:15px;margin:10px 0 7px;letter-spacing:-.02em}
+.dstep p{font-size:12px;color:var(--text-2);line-height:1.7;margin:0}
+.deploy-cmd{display:flex;align-items:center;gap:12px;margin-top:18px;padding:14px 18px;border-radius:16px;border:1px solid var(--line-strong);background:#08080a;font-family:var(--mono);font-size:12px;color:#c8c9ce;overflow-x:auto}
+html[data-theme="light"] .deploy-cmd{background:#0d0d10}
+.deploy-cmd .p{color:var(--g2)}
+.deploy-cmd .copy{margin-left:auto;font-size:10.5px;padding:5px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.06);color:#e9eaec;cursor:pointer;white-space:nowrap}
+@media (max-width:820px){.deploy-step{grid-template-columns:1fr}}
 
-/* 响应式 */
-@media (max-width:960px){
-  .highlights{grid-template-columns:repeat(2,1fr)}
-  .cols{grid-template-columns:1fr}
-  .steps{grid-template-columns:1fr}
-  .stats .grid{grid-template-columns:repeat(2,1fr)}
-  .navlinks{display:none}
+/* ---------- 终章 ---------- */
+.final{text-align:center;padding:clamp(90px,12vw,170px) 0}
+.final h2{font-size:clamp(40px,6.5vw,86px);line-height:1.02;letter-spacing:-.05em;font-weight:700;margin:0 0 22px;text-wrap:balance}
+.final .lead{margin:0 auto 34px}
+.final-cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+.final-meta{margin-top:26px;font-size:11.5px;color:var(--text-3)}
+
+/* ---------- 页脚 ---------- */
+footer{border-top:1px solid var(--line);padding:48px 0 36px;position:relative;z-index:2}
+.foot-grid{display:flex;justify-content:space-between;gap:30px;flex-wrap:wrap}
+.foot-brand{display:flex;align-items:center;gap:9px;font-weight:650;font-size:14px}
+.foot-brand .brand-icon{width:22px;height:22px}
+.foot-links{display:flex;gap:22px;flex-wrap:wrap;font-size:12px;color:var(--text-2)}
+.foot-links a:hover{color:var(--text)}
+.foot-note{margin-top:26px;font-size:11px;color:var(--text-3);display:flex;justify-content:space-between;gap:18px;flex-wrap:wrap}
+
+/* ---------- 入场动画 ---------- */
+.reveal{opacity:0;transform:translateY(26px);transition:opacity .85s var(--ease) var(--d,0ms),transform .85s var(--ease) var(--d,0ms);will-change:opacity,transform}
+.reveal.in{opacity:1;transform:none}
+.reveal.rv-done{transition:opacity .85s var(--ease),transform .85s var(--ease)}
+html.no-motion .reveal{opacity:1;transform:none;transition:none}
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation-duration:.001ms !important;animation-iteration-count:1 !important;transition-duration:.001ms !important;scroll-behavior:auto !important}
+  .reveal{opacity:1 !important;transform:none !important}
 }
 @media (max-width:640px){
-  .hero{padding-top:118px}
-  .rtt{grid-template-columns:repeat(2,1fr)}
-  .quality{grid-template-columns:1fr 1fr}
-  .highlights{grid-template-columns:1fr}
-  .tgrid{grid-template-columns:1fr}
-  .langsw button{padding:5px 7px;font-size:11px}
-  .brand span{display:none}
-}
-@media (prefers-reduced-motion:reduce){
-  *{animation:none!important;transition:none!important}
-  html{scroll-behavior:auto}
-  .js .reveal,.js .reveal.in{opacity:1!important;transform:none!important;filter:none!important}
-  .js .acc{opacity:1}
-  .js .mock .sparkbox svg polyline:first-of-type{stroke-dasharray:none;stroke-dashoffset:0}
+  :root{--radius:22px;--header-h:60px}
+  .section{padding:70px 0}
+  .hero{padding-top:calc(var(--header-h) + 34px)}
+  .hero h1{margin-top:20px}
+  .hero-cta .btn{flex:1;min-width:150px}
+  .float-card{display:none}
+  .dash-stats{grid-template-columns:repeat(2,1fr)}
+  .pane-grid{gap:18px}
+  .i18n-card{padding:26px 20px}
+  .foot-note{flex-direction:column;gap:8px}
 }
 </style>
 </head>
 <body>
+<a class="skip" href="#main">跳至内容</a>
+<div class="progress" id="progress"><i></i></div>
+<div class="bg" aria-hidden="true">
+  <div class="orb orb-a"></div><div class="orb orb-b"></div><div class="orb orb-c"></div>
+  <div class="grid"></div><div class="vignette"></div>
+</div>
 
-<!-- ==================== 阅读进度条 ==================== -->
-<div class="progress" id="progress" aria-hidden="true"></div>
-
-<!-- ==================== 图标精灵 ==================== -->
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
-  <symbol id="i-pulse" viewBox="0 0 24 24"><path d="M3 12h4l2.5-6 3 12 2.5-8 1.5 2H21" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></symbol>
-  <symbol id="i-gauge" viewBox="0 0 24 24"><path d="M4 18a8 8 0 1 1 16 0" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><path d="M12 18l4.5-5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></symbol>
-  <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 17v2h16v-2" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></symbol>
-  <symbol id="i-wave" viewBox="0 0 24 24"><path d="M2 12c2.5-6 5-6 7.5 0s5 6 7.5 0 2.5-6 5-6" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></symbol>
-  <symbol id="i-server" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="7" rx="2" fill="none" stroke="currentColor" stroke-width="1.9"/><rect x="3" y="13" width="18" height="7" rx="2" fill="none" stroke="currentColor" stroke-width="1.9"/><circle cx="7" cy="7.5" r="1.1" fill="currentColor"/><circle cx="7" cy="16.5" r="1.1" fill="currentColor"/></symbol>
-  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="M15.5 15.5L21 21" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></symbol>
-  <symbol id="i-compare" viewBox="0 0 24 24"><path d="M7 8h13l-3.5-3.5M17 16H4l3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></symbol>
-  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7 3v5.5c0 4.6-3 8-7 9.5-4-1.5-7-4.9-7-9.5V6l7-3z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/><path d="M9 12l2.2 2.2L15.5 10" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></symbol>
-  <symbol id="i-heart" viewBox="0 0 24 24"><path d="M12 20s-7-4.6-7-10a3.8 3.8 0 0 1 7-2.2A3.8 3.8 0 0 1 19 10c0 5.4-7 10-7 10z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/></symbol>
-  <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="M3 12h18M12 3c3 3.4 3 14.6 0 18M12 3c-3 3.4-3 14.6 0 18" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
-  <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5 9-5z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/><path d="M3 13l9 5 9-5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></symbol>
-  <symbol id="i-stream" viewBox="0 0 24 24"><path d="M4 7h16M4 12h10M4 17h13" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></symbol>
-  <symbol id="i-play" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="M10 8.5l6 3.5-6 3.5v-7z" fill="currentColor"/></symbol>
-  <symbol id="i-mask" viewBox="0 0 24 24"><path d="M12 3l7 3v5.5c0 4.6-3 8-7 9.5-4-1.5-7-4.9-7-9.5V6l7-3z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/><path d="M9.5 11.5h.01M14.5 11.5h.01" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M9.5 15c1.6-1.2 3.4-1.2 5 0" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
-  <symbol id="i-stopwatch" viewBox="0 0 24 24"><circle cx="12" cy="13.5" r="7.5" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="M12 13.5V9.5M10 2.5h4" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></symbol>
-  <symbol id="i-cpu" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="M10 2.5v3.5M14 2.5v3.5M10 18v3.5M14 18v3.5M2.5 10h3.5M2.5 14h3.5M18 10h3.5M18 14h3.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
-  <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/></symbol>
-  <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></symbol>
-  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 10a6 6 0 1 1 12 0c0 5 2 6 2 6H4s2-1 2-6z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/><path d="M10.5 19.5a1.8 1.8 0 0 0 3 0" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></symbol>
-  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4.5" y="10" width="15" height="10" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="M8 10V7.5a4 4 0 0 1 8 0V10" fill="none" stroke="currentColor" stroke-width="1.9"/></symbol>
-  <symbol id="i-finger" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0-6 6v3m12-3a6 6 0 0 0-3-5.2M6.5 16.5V9a5.5 5.5 0 0 1 11 0v4.5M9.5 20v-6a2.5 2.5 0 0 1 5 0v3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
-  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
-  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.5" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M19.1 4.9l-1.8 1.8M6.7 17.3l-1.8 1.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
-  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 13.5A8.5 8.5 0 1 1 10.5 3a6.8 6.8 0 0 0 10.5 10.5z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/></symbol>
-  <symbol id="i-auto" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/></symbol>
-  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h13m0 0l-5.5-5.5M18 12l-5.5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
-  <symbol id="i-github" viewBox="0 0 24 24"><path d="M12 2a10 10 0 0 0-3.2 19.5c.5.1.7-.2.7-.5v-1.8c-2.8.6-3.4-1.3-3.4-1.3-.5-1.2-1.1-1.5-1.1-1.5-.9-.6.1-.6.1-.6 1 .1 1.5 1 1.5 1 .9 1.6 2.4 1.1 3 .9.1-.7.4-1.1.6-1.4-2.2-.3-4.6-1.1-4.6-5 0-1.1.4-2 1-2.7-.1-.3-.4-1.3.1-2.7 0 0 .8-.3 2.7 1a9.3 9.3 0 0 1 5 0c1.9-1.3 2.7-1 2.7-1 .5 1.4.2 2.4.1 2.7.6.7 1 1.6 1 2.7 0 3.9-2.4 4.7-4.6 5 .4.3.7.9.7 1.9v2.8c0 .3.2.6.7.5A10 10 0 0 0 12 2z" fill="currentColor"/></symbol>
-  <symbol id="i-doc" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M14 3v4h4M9 12h6M9 16h6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
-  <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M7 18h10a4 4 0 0 0 .6-8A5.5 5.5 0 0 0 7 10.4 3.8 3.8 0 0 0 7 18z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+  <defs>
+    <linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#64d2ff"/><stop offset=".5" stop-color="#0a84ff"/><stop offset="1" stop-color="#bf5af2"/>
+    </linearGradient>
+    <linearGradient id="gaugeGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#30d158"/><stop offset=".5" stop-color="#64d2ff"/><stop offset="1" stop-color="#0a84ff"/>
+    </linearGradient>
+  </defs>
+  <symbol id="i-wave" viewBox="0 0 24 24"><path d="M3 14h3.4l2.2-5 2.6 9 2.4-6 1.4-2.5H21"/></symbol>
+  <symbol id="i-pulse" viewBox="0 0 24 24"><path d="M3 12h4l2-5 3 10 2.4-6 1.6-2H21"/></symbol>
+  <symbol id="i-gauge" viewBox="0 0 24 24"><path d="M4.2 17a9 9 0 1 1 15.6 0"/><path d="M12 13.5l3.6-3.6"/><circle cx="12" cy="14" r="1.6"/></symbol>
+  <symbol id="i-server" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.4-2.9 8-7 10-4.1-2-7-5.6-7-10V6l7-3z"/><path d="M9 12l2 2 4-4"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 19V5"/><path d="M4 19h16"/><path d="M7 15l4-5 3 3 4-6"/></symbol>
+  <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 2L4.5 13.5H11L10 22l9-12h-6.5L13 2z"/></symbol>
+  <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></symbol>
+  <symbol id="i-heart" viewBox="0 0 24 24"><path d="M12 20s-7-4.4-7-9.4A4.1 4.1 0 0 1 12 7a4.1 4.1 0 0 1 7 3.6C19 15.6 12 20 12 20z"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="2.4"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 1 1 12 0v5l2 3H4l2-3z"/><path d="M10 22h4"/></symbol>
+  <symbol id="i-cpu" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.6 2.4 4 5.4 4 9s-1.4 6.6-4 9c-2.6-2.4-4-5.4-4-9s1.4-6.6 4-9z"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.4-4.4"/></symbol>
+  <symbol id="i-compare" viewBox="0 0 24 24"><path d="M8 4L4 8l4 4"/><path d="M4 8h13a3 3 0 0 1 3 3"/><path d="M16 20l4-4-4-4"/><path d="M20 16H7a3 3 0 0 1-3-3"/></symbol>
+  <symbol id="i-sparkles" viewBox="0 0 24 24"><path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6L12 3z"/><path d="M18.5 15l.9 2.6 2.6.9-2.6.9-.9 2.6-.9-2.6-2.6-.9 2.6-.9.9-2.6z"/><path d="M5 15l.7 2 2 .7-2 .7L5 20.4l-.7-2-2-.7 2-.7L5 15z"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4 7 7 0 0 0 20 14.5z"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-terminal" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.4"/><path d="M7 9l3 3-3 3M13 15h4"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3"/></symbol>
+  <symbol id="i-doc" viewBox="0 0 24 24"><path d="M7 3h7l4 4v14H7V3z"/><path d="M14 3v4h4M10 12h6M10 16h6"/></symbol>
+  <symbol id="i-pwa" viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2.4"/><path d="M11 18h2"/></symbol>
+  <symbol id="i-shield-check" viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.4-2.9 8-7 10-4.1-2-7-5.6-7-10V6l7-3z"/><path d="M9 12l2 2 4-4"/></symbol>
 </svg>
 
-<!-- ==================== 导航 ==================== -->
 <header class="nav" id="nav">
-  <div class="bar">
-    <a class="brand" href="#top">
-      <span class="logo"><svg><use href="#i-pulse"/></svg></span>
-      <span>NetSight&nbsp;Pro</span>
+  <div class="nav-inner">
+    <a class="brand" href="#top" aria-label="NetSight Pro 首页">
+      <svg class="brand-icon"><use href="#i-wave"/></svg>
+      <span>NetSight <b>Pro</b></span>
     </a>
-    <nav class="navlinks">
-      <a href="#highlights" data-i18n="nav.highlights">亮点</a>
-      <a href="#tools" data-i18n="nav.tools">工具</a>
-      <a href="#ui" data-i18n="nav.ui">界面</a>
-      <a href="#privacy" data-i18n="nav.privacy">隐私</a>
-      <a href="#deploy" data-i18n="nav.deploy">部署</a>
-      <a href="#faq" data-i18n="nav.faq">问答</a>
+    <nav class="nav-links" id="navLinks" aria-label="主导航">
+      <a href="#capabilities">能力</a>
+      <a href="#showcase">交互</a>
+      <a href="#monitor">流程</a>
+      <a href="#engineering">工程化</a>
+      <a href="#i18n">多语言</a>
+      <a href="#deploy">部署</a>
     </nav>
-    <div class="actions">
-      <div class="langsw" id="langsw" role="group" aria-label="Language">
-        <button data-lang="zh-CN">简体</button>
-        <button data-lang="zh-TW">繁體</button>
-        <button data-lang="en">EN</button>
-      </div>
-      <button class="iconbtn" id="themeBtn" aria-label="Theme" title="Theme"><svg id="themeIcon"><use href="#i-auto"/></svg></button>
-      <a class="btn btn-ghost btn-sm" id="repoBtn" href="https://github.com/BlueDriftHK/CF-workers-netdiag" target="_blank" rel="noopener">
-        <svg><use href="#i-github"/></svg><span>GitHub</span>
-      </a>
+    <div class="nav-actions">
+      <button class="icon-btn" id="themeBtn" aria-label="切换深浅色主题"><svg class="icon"><use id="themeIcon" href="#i-moon"/></svg></button>
+      <a class="btn btn-sm" href="#deploy">开始使用</a>
+      <button class="icon-btn menu-btn" id="menuBtn" aria-label="打开菜单" aria-expanded="false"><svg class="icon"><use id="menuIcon" href="#i-menu"/></svg></button>
     </div>
   </div>
 </header>
 
-<main>
-  <!-- ==================== 首屏 ==================== -->
+<main id="main">
+  <!-- ================= 首屏 ================= -->
   <section class="hero" id="top">
     <div class="wrap">
-      <span class="eyebrow reveal"><span class="dot"></span><span data-i18n="hero.eyebrow">v4.7.1 · 23 项工具 · 默认零 Worker 出站</span></span>
-      <h1><span class="reveal" style="--d:80ms" data-i18n="hero.title">把网络诊断，</span><span class="dim reveal" style="--d:170ms" data-i18n="hero.titleDim">装进一个 Worker 文件</span></h1>
-      <p class="lead reveal" style="--d:250ms" data-i18n-html="hero.lead">单文件 Cloudflare Worker：23 项诊断工具、三语界面、实时延迟监控、DNS 与安全体检。<b>零构建、零依赖、零埋点</b>，几分钟即可拥有自己的诊断站。</p>
-      <div class="cta reveal" style="--d:330ms">
-        <a class="btn btn-primary" href="#deploy"><svg><use href="#i-bolt"/></svg><span data-i18n="hero.ctaDeploy">3 步自部署</span></a>
-        <a class="btn" href="#tools"><svg><use href="#i-arrow"/></svg><span data-i18n="hero.ctaTools">查看 23 项工具</span></a>
-      </div>
-      <p class="heroNote reveal" style="--d:400ms" data-i18n="hero.note">本项目不自带公开演示实例：部署一个属于你自己的，数据只留在你的账号里。</p>
-
-      <!-- CSS 复刻：应用概览页 -->
-      <div class="mock panel reveal rv-s" style="--d:470ms" role="img" aria-label="NetSight Pro overview screen mockup">
-        <div class="mock-bar"><i></i><i></i><i></i><span class="mock-url">netsight · <span data-i18n="mock.overview">概览</span></span></div>
-        <div class="mock-body">
-          <div class="mock-chips">
-            <span class="chip"><span data-i18n="mock.edge">边缘节点</span> <b>NRT</b></span>
-            <span class="chip"><span data-i18n="mock.worker">Worker 耗时</span> <b>12ms</b></span>
-            <span class="chip"><span class="dot" style="background:var(--success)"></span><span data-i18n="mock.live">实时监控中</span></span>
-            <span class="chip"><span data-i18n="mock.lang">界面语言</span> <b>简体 / 繁體 / EN</b></span>
+      <div class="hero-grid">
+        <div class="hero-copy" id="heroCopy">
+          <div class="eyebrow reveal"><span class="dot"></span> <span>v5.1 · Cloudflare Worker · 浏览器侧优先</span></div>
+          <h1 class="reveal" style="--d:80ms">
+            <span class="line">把网络，</span>
+            <span class="line"><span class="grad">看透</span>一页。</span>
+          </h1>
+          <p class="lead reveal" style="--d:160ms">一个文件，25+ 项网络诊断工具。实时延迟、带宽测速、DNS 对比、域名体检与站点监控——全部跑在边缘，数据留在你自己的浏览器与账号里。</p>
+          <div class="hero-cta reveal" style="--d:240ms">
+            <a class="btn" href="#capabilities"><span>探索全部能力</span><svg class="icon icon-sm"><use href="#i-arrow"/></svg></a>
+            <a class="btn btn-ghost" href="#deploy">5 分钟自部署</a>
           </div>
-          <div class="rtt">
-            <div class="rtt-box"><div class="v">24</div><div class="l" data-i18n="mock.rttNow">当前 RTT</div></div>
-            <div class="rtt-box"><div class="v">3</div><div class="l" data-i18n="mock.jitter">抖动</div></div>
-            <div class="rtt-box"><div class="v">18</div><div class="l" data-i18n="mock.rttMin">最低 RTT</div></div>
-            <div class="rtt-box"><div class="v">41</div><div class="l" data-i18n="mock.rttMax">最高 RTT</div></div>
+          <div class="hero-meta reveal" style="--d:320ms">
+            <span><i></i>25+ 诊断工具</span>
+            <span><i></i>6 种界面语言</span>
+            <span><i></i>60+ 可观测指标</span>
+            <span><i></i>零外部 CDN</span>
           </div>
-          <div class="sparkbox">
-            <svg viewBox="0 0 600 74" preserveAspectRatio="none" aria-hidden="true">
-              <polyline points="0,52 30,44 60,49 90,36 120,41 150,28 180,34 210,22 240,31 270,25 300,38 330,20 360,27 390,33 420,24 450,30 480,21 510,29 540,26 570,32 600,25"
-                style="fill:none;stroke:var(--text-2);stroke-width:1.6;stroke-linejoin:round"/>
-              <polyline points="0,74 0,52 30,44 60,49 90,36 120,41 150,28 180,34 210,22 240,31 270,25 300,38 330,20 360,27 390,33 420,24 450,30 480,21 510,29 540,26 570,32 600,25 600,74"
-                style="fill:var(--accent-light);stroke:none"/>
-            </svg>
+        </div>
+        <div class="hero-visual reveal" id="heroVisual" style="--d:200ms">
+          <div class="device" id="heroDevice" aria-hidden="true">
+            <div class="device-top">
+              <div class="win-dots"><i></i><i></i><i></i></div>
+              <span class="device-title">netsight / live</span>
+              <span class="live-pill"><i></i>实时监控中</span>
+            </div>
+            <div class="dash-hero">
+              <div class="dash-rtt"><strong id="heroRtt">12</strong><span>ms · RTT</span></div>
+              <span class="dash-chip" id="heroColo">NRT · Edge</span>
+            </div>
+            <canvas id="heroChart"></canvas>
+            <div class="dash-stats">
+              <div class="dash-stat"><b id="heroJitter">1.8</b><span>抖动 ms</span></div>
+              <div class="dash-stat"><b id="heroLoss">0%</b><span>丢包</span></div>
+              <div class="dash-stat"><b id="heroDown">268</b><span>下行 Mbps</span></div>
+              <div class="dash-stat"><b id="heroSamples">128</b><span>样本</span></div>
+            </div>
+            <div class="dash-foot">
+              <span class="mini-tag">H3 · QUIC</span>
+              <span class="mini-tag">TLS 1.3</span>
+              <span class="mini-tag">DNSSEC AD</span>
+              <span class="mini-tag">PWA ready</span>
+            </div>
           </div>
-          <div class="quality">
-            <div class="q-item"><span data-i18n="mock.quality">连接质量</span><span style="color:var(--success)" data-i18n="mock.qualityVal">优秀</span></div>
-            <div class="q-item"><span data-i18n="mock.stability">网络稳定性</span><span style="color:var(--success)" data-i18n="mock.stabilityVal">非常稳定</span></div>
-            <div class="q-item"><span data-i18n="mock.samples">样本数量</span><span class="mono">128</span></div>
-            <div class="q-item"><span data-i18n="mock.loss">丢包率</span><span class="mono">0%</span></div>
-          </div>
+          <div class="float-card fc1"><span class="ic"><svg class="icon icon-sm"><use href="#i-shield-check"/></svg></span><div><b>域名体检 · A</b><small>SPF / DMARC / DNSSEC 通过</small></div></div>
+          <div class="float-card fc2"><span class="ic"><svg class="icon icon-sm"><use href="#i-server"/></svg></span><div><b>DNS · 9 ms</b><small>6 个 DoH 解析器一致</small></div></div>
         </div>
       </div>
     </div>
+    <div class="scroll-hint" aria-hidden="true"><span>SCROLL</span><i></i></div>
   </section>
 
-  <!-- ==================== 数字带 ==================== -->
-  <section class="stats" style="padding-top:0">
+  <!-- ================= 数字 ================= -->
+  <section class="stats reveal">
     <div class="wrap">
-      <div class="grid reveal">
-        <div class="stat"><div class="n" data-count="23">0</div><div class="l" data-i18n="stats.tools">诊断工具</div></div>
-        <div class="stat"><div class="n" data-count="6">0</div><div class="l" data-i18n="stats.groups">功能分组</div></div>
-        <div class="stat"><div class="n" data-count="3">0</div><div class="l" data-i18n="stats.langs">界面语言</div></div>
-        <div class="stat"><div class="n" data-count="0">0</div><div class="l" data-i18n="stats.deps">运行时依赖</div></div>
+      <div class="stats-grid">
+        <div class="stat-cell"><b><span data-count="25">0</span>+</b><span>诊断工具</span></div>
+        <div class="stat-cell"><b><span data-count="6">0</span></b><span>界面语言</span></div>
+        <div class="stat-cell"><b><span data-count="60">0</span>+</b><span>监控指标</span></div>
+        <div class="stat-cell"><b><span data-count="0">0</span></b><span>外部 CDN 依赖</span></div>
       </div>
     </div>
   </section>
 
-  <!-- ==================== 亮点 ==================== -->
-  <section id="highlights">
+  <!-- ================= 能力 Bento ================= -->
+  <section class="section" id="capabilities">
     <div class="wrap">
-      <div class="shead reveal">
-        <div class="kicker" data-i18n="hi.kicker">设计原则</div>
-        <h2 data-i18n="hi.title">为什么这样做</h2>
-        <p data-i18n="hi.desc">四条取舍贯穿整个项目：能用浏览器做的就不放到服务端；会花别人钱的事情必须有硬上限。</p>
+      <div class="section-head">
+        <span class="kicker reveal">Capabilities</span>
+        <h2 class="h2 reveal" style="--d:60ms">一个页面，<br><span class="grad">整条网络链路。</span></h2>
+        <p class="lead reveal" style="--d:120ms">从浏览器里的第一次 RTT 采样，到边缘侧的证书与 DNS 体检。每项能力都可以单独使用，也可以被诊断向导串成一条完整证据链。</p>
       </div>
-      <div class="highlights" id="highlightGrid"></div>
-    </div>
-  </section>
+      <div class="bento">
+        <article class="card span-6 reveal" data-spotlight>
+          <div class="tile"><svg class="icon"><use href="#i-pulse"/></svg></div>
+          <h3>实时延迟监控</h3>
+          <p>每 5 秒一次采样，持续跟踪 RTT、抖动、丢包与连接质量。图表、分位值与稳定性评分都在浏览器里计算，Worker 只负责一次轻量健康检查。</p>
+          <div class="tags"><span class="tag">实时 RTT</span><span class="tag">抖动 / 丢包</span><span class="tag">浏览器侧</span></div>
+          <canvas class="spark" id="cardSpark" aria-hidden="true"></canvas>
+        </article>
 
-  <!-- ==================== 工具 ==================== -->
-  <section id="tools">
-    <div class="wrap">
-      <div class="shead reveal">
-        <div class="kicker" data-i18n="tools.kicker">诊断能力</div>
-        <h2 data-i18n="tools.title">23 项工具，6 个分组</h2>
-        <p data-i18n="tools.desc">按用途分组，打开即用。标签表示数据流向：绿色为浏览器侧（零 Worker 出站），黄色需要 Worker 代你发起请求。</p>
-      </div>
-      <div class="filters reveal" id="filters"></div>
-      <div class="tgroups" id="toolGroups"></div>
-    </div>
-  </section>
-
-  <!-- ==================== 界面（CSS 复刻） ==================== -->
-  <section id="ui">
-    <div class="wrap">
-      <div class="shead center reveal">
-        <div class="kicker" data-i18n="ui.kicker">界面</div>
-        <h2 data-i18n="ui.title">真实布局，矢量复刻</h2>
-        <p data-i18n="ui.desc">下面三张不是截图，而是用 HTML/CSS 按应用实际布局绘制，因此不会随版本过期，也只有几 KB 大小。</p>
-      </div>
-      <div class="showtabs reveal" id="showTabs"></div>
-      <div class="shot reveal rv-s">
-        <div class="shot-head"><svg style="width:13px;height:13px"><use href="#i-layers"/></svg><span id="shotTitle"></span><span class="cap" id="shotCap"></span></div>
-        <div class="shot-body">
-          <!-- 面板 1：工具分组 -->
-          <div class="pane on" id="pane-0">
-            <div class="tg-head"><svg><use href="#i-wave"/></svg><span data-i18n="grp.quality">网络质量与延迟</span><span class="cnt">7</span></div>
-            <div class="mocktools" style="margin-bottom:14px">
-              <div class="mt"><span class="ic"><svg><use href="#i-heart"/></svg></span><span class="nm" data-i18n="t.quickcheck">一键体检</span><span class="chev">›</span></div>
-              <div class="mt"><span class="ic"><svg><use href="#i-chart"/></svg></span><span class="nm" data-i18n="t.quality">长时质量监控</span><span class="chev">›</span></div>
-              <div class="mt"><span class="ic"><svg><use href="#i-pulse"/></svg></span><span class="nm" data-i18n="t.loss">丢包率</span><span class="chev">›</span></div>
-              <div class="mt"><span class="ic"><svg><use href="#i-mask"/></svg></span><span class="nm" data-i18n="t.proxy">代理/VPN 检测</span><span class="chev">›</span></div>
-            </div>
-            <div class="tg-head"><svg><use href="#i-gauge"/></svg><span data-i18n="grp.bandwidth">带宽与吞吐</span><span class="cnt">6</span></div>
-            <div class="mocktools" style="margin-bottom:14px">
-              <div class="mt"><span class="ic"><svg><use href="#i-gauge"/></svg></span><span class="nm" data-i18n="t.speed">带宽测速</span><span class="chev">›</span></div>
-              <div class="mt"><span class="ic"><svg><use href="#i-layers"/></svg></span><span class="nm" data-i18n="t.multispeed">多流并发测速</span><span class="chev">›</span></div>
-              <div class="mt"><span class="ic"><svg><use href="#i-wave"/></svg></span><span class="nm" data-i18n="t.bufferbloat">缓冲膨胀</span><span class="chev">›</span></div>
-              <div class="mt"><span class="ic"><svg><use href="#i-upload"/></svg></span><span class="nm" data-i18n="t.upload">上传测速</span><span class="chev">›</span></div>
-            </div>
-            <div class="tg-head"><svg><use href="#i-server"/></svg><span data-i18n="grp.dns">DNS</span><span class="cnt">3</span></div>
-            <div class="mocktools">
-              <div class="mt"><span class="ic"><svg><use href="#i-server"/></svg></span><span class="nm" data-i18n="t.dns">DNS 解析</span><span class="chev">›</span></div>
-              <div class="mt"><span class="ic"><svg><use href="#i-search"/></svg></span><span class="nm" data-i18n="t.dnslookup">DNS 工具箱</span><span class="chev">›</span></div>
-              <div class="mt"><span class="ic"><svg><use href="#i-compare"/></svg></span><span class="nm" data-i18n="t.dnscompare">多解析器对比</span><span class="chev">›</span></div>
-            </div>
+        <article class="card span-6 reveal" style="--d:60ms" data-spotlight>
+          <div class="tile"><svg class="icon"><use href="#i-gauge"/></svg></div>
+          <h3>带宽测速套件</h3>
+          <p>快速 / 标准 / 精准三档测速，多流并发、上传、Bufferbloat 与长时质量监控。以实际读取字节计速，先校验状态码，再给出中位数、标准差与首字节。</p>
+          <div class="tags"><span class="tag">三档模式</span><span class="tag">多流并发</span><span class="tag">Bufferbloat</span></div>
+          <div class="ring-wrap">
+            <svg class="ring" viewBox="0 0 92 92" aria-hidden="true"><circle class="bg" cx="46" cy="46" r="40"/><circle class="fg" cx="46" cy="46" r="40"/></svg>
+            <div class="ring-meta"><b>268</b><span>Mbps · 本机示例</span></div>
           </div>
+        </article>
 
-          <!-- 面板 2：两栏结果弹层 -->
-          <div class="pane" id="pane-1">
-            <div class="mockmodal">
-              <div class="mm-head">
-                <h4 data-i18n="t.audit">站点体检</h4>
-                <div class="acts">
-                  <span class="mm-actions-btn"><svg style="width:11px;height:11px"><use href="#i-bolt"/></svg><span data-i18n="ui.rerun">重新运行</span></span>
-                  <span class="mm-actions-btn">✕</span>
+        <article class="card span-4 reveal" data-spotlight>
+          <div class="tile"><svg class="icon"><use href="#i-server"/></svg></div>
+          <h3>DNS 放大镜</h3>
+          <p>6 个 DoH 解析器并行对比，RFC 8484 wireformat 解析，A / AAAA / MX / TXT / NS / CAA / DNSKEY / DS 全覆盖，并标记 DNSSEC <code>AD</code> 结果。</p>
+          <div class="tags"><span class="tag">DoH</span><span class="tag">DNSSEC</span><span class="tag">6 解析器</span></div>
+        </article>
+
+        <article class="card span-4 reveal" style="--d:60ms" data-spotlight>
+          <div class="tile"><svg class="icon"><use href="#i-shield"/></svg></div>
+          <h3>域名体检</h3>
+          <p>一次查询看清 SPF、DMARC、DKIM、DNSSEC、CAA、MTA-STS、BIMI 与 NS 一致性，给出 A–F 评分与可执行的修复建议。</p>
+          <div class="tags"><span class="tag">邮件安全</span><span class="tag">评分 A–F</span></div>
+        </article>
+
+        <article class="card span-4 reveal" style="--d:120ms" data-spotlight>
+          <div class="tile"><svg class="icon"><use href="#i-sparkles"/></svg></div>
+          <h3>智能诊断向导</h3>
+          <p>延迟 → 丢包 → DNS → 吞吐 → 协议，五步串成一条引导式诊断。结束后直接给出评分、等级与下一步建议。</p>
+          <div class="tags"><span class="tag">一键引导</span><span class="tag">根因建议</span></div>
+        </article>
+
+        <article class="card span-8 reveal" id="monitorAnchor" data-spotlight>
+          <div class="tile"><svg class="icon"><use href="#i-bell"/></svg></div>
+          <h3>站点监控与告警</h3>
+          <p>Cron 巡检、证书到期提醒、连续失败阈值、静默时段与维护窗口。Slack、Discord、Telegram、ntfy、飞书、钉钉、企微与企业微信 / 通用 Webhook 均可作为告警通道。</p>
+          <div class="tags"><span class="tag">TLS 到期</span><span class="tag">多渠道</span><span class="tag">告警降噪</span><span class="tag">状态逻辑</span></div>
+          <div class="uptime" id="bentoUptime" aria-hidden="true"></div>
+        </article>
+
+        <article class="card span-4 reveal" style="--d:60ms" data-spotlight>
+          <div class="tile"><svg class="icon"><use href="#i-layers"/></svg></div>
+          <h3>资源瀑布</h3>
+          <p>用 Resource Timing 拆解每个资源的 DNS / TCP / TLS / TTFB / 下载阶段，识别协议版本与缓存命中，不产生额外出站。</p>
+          <div class="tags"><span class="tag">Resource Timing</span><span class="tag">零出站</span></div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 交互展示 ================= -->
+  <section class="section" id="showcase">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="kicker reveal">Interactive</span>
+        <h2 class="h2 reveal" style="--d:60ms">不是截图，<br><span class="grad">是可以点的演示。</span></h2>
+        <p class="lead reveal" style="--d:120ms">下面四个面板由原生 Canvas 与 DOM 组成。切换标签、点击重测，感受真实应用里的动效与信息密度。</p>
+      </div>
+      <div class="showcase reveal">
+        <div class="show-tabs" role="tablist" aria-label="功能演示">
+          <button class="active" role="tab" aria-selected="true" data-tab="live">实时监控</button>
+          <button role="tab" aria-selected="false" data-tab="speed">带宽测速</button>
+          <button role="tab" aria-selected="false" data-tab="dns">DNS 对比</button>
+          <button role="tab" aria-selected="false" data-tab="monitor">站点监控</button>
+        </div>
+        <div class="panes">
+          <div class="pane on" id="pane-live" role="tabpanel">
+            <div class="pane-grid">
+              <div class="pane-copy">
+                <h3>延迟，应该被持续看见。</h3>
+                <p>RTT 只是结果，抖动和丢包才是线索。实时监控以固定采样间隔绘制延迟曲线，并同步计算 p50/p95、稳定性与连接质量。</p>
+                <ul class="pane-list">
+                  <li><span class="tick"><svg class="icon"><use href="#i-check"/></svg></span><span>5 秒采样 · 自动重连 · 页面隐藏时暂停</span></li>
+                  <li><span class="tick"><svg class="icon"><use href="#i-check"/></svg></span><span>抖动、丢包与样本数全部本地计算</span></li>
+                  <li><span class="tick"><svg class="icon"><use href="#i-check"/></svg></span><span>健康检查独立限流，不影响其它工具</span></li>
+                </ul>
+              </div>
+              <div class="mock">
+                <div class="mock-head"><div class="win-dots"><i></i><i></i><i></i></div><span class="mock-title">live · health</span></div>
+                <div class="mock-body">
+                  <div class="mock-big"><b id="liveRtt">12</b><span>ms · 当前 RTT</span></div>
+                  <canvas id="paneChart"></canvas>
+                  <div class="mock-kpis">
+                    <div class="kpi"><b id="liveJitter">1.8</b><span>抖动 ms</span></div>
+                    <div class="kpi"><b id="liveLoss">0%</b><span>丢包</span></div>
+                    <div class="kpi"><b id="liveSamples">128</b><span>样本</span></div>
+                  </div>
                 </div>
               </div>
-              <div class="mm-main">
-                <div class="mm-side">
-                  <div class="mm-desc" data-i18n="ui.sideDesc">左侧固定为「说明 + 参数 + 操作」，右侧是结果。参数区永远在同一位置，不会随工具跳来跳去。</div>
-                  <div class="mm-input">https://example.com</div>
-                  <div class="mm-desc" style="display:flex;gap:7px;align-items:center"><span style="width:12px;height:12px;border:1px solid var(--border);border-radius:2px;display:inline-block"></span><span data-i18n="ui.certOpt">同时检查证书到期（+1 次出站）</span></div>
-                  <div class="mm-primary" data-i18n="ui.run">开始检测</div>
-                </div>
-                <div>
-                  <div class="mm-metrics">
-                    <div class="mm-metric"><div class="l" data-i18n="ui.score">安全评分</div><div class="v">93<span style="font-size:11px;color:var(--text-3)"> / A</span></div></div>
-                    <div class="mm-metric"><div class="l" data-i18n="ui.status">状态码</div><div class="v">200</div></div>
-                    <div class="mm-metric"><div class="l" data-i18n="ui.ttfb">首字节</div><div class="v">86<span style="font-size:11px;color:var(--text-3)"> ms</span></div></div>
-                    <div class="mm-metric"><div class="l" data-i18n="ui.redirects">重定向</div><div class="v">1</div></div>
+            </div>
+          </div>
+
+          <div class="pane" id="pane-speed" role="tabpanel">
+            <div class="pane-grid">
+              <div class="pane-copy">
+                <h3>测速，先保证数字可信。</h3>
+                <p>状态码校验、实际字节计数、预热连接、多轮取中位数——所有容易把测速做成“玄学”的细节都被认真处理。</p>
+                <ul class="pane-list">
+                  <li><span class="tick"><svg class="icon"><use href="#i-check"/></svg></span><span>快速 / 标准 / 精准三档，按场景选择流量</span></li>
+                  <li><span class="tick"><svg class="icon"><use href="#i-check"/></svg></span><span>多流并发与上传，聚合吞吐单独计算</span></li>
+                  <li><span class="tick"><svg class="icon"><use href="#i-check"/></svg></span><span>首字节与吞吐分开呈现，错误响应不计速</span></li>
+                </ul>
+              </div>
+              <div class="mock">
+                <div class="mock-head"><div class="win-dots"><i></i><i></i><i></i></div><span class="mock-title">speedtest · standard</span></div>
+                <div class="mock-body">
+                  <div class="gauge-wrap">
+                    <svg class="gauge" viewBox="0 0 150 150" aria-hidden="true"><circle class="track" cx="75" cy="75" r="65"/><circle class="value" id="gaugeValue" cx="75" cy="75" r="65"/></svg>
+                    <div class="gauge-num"><b id="speedNum">268</b><span>Mbps · 下行</span></div>
                   </div>
-                  <div class="mm-rows">
-                    <div class="mm-row"><span>HSTS</span><span style="color:var(--success)" data-i18n="ui.pass">通过</span></div>
-                    <div class="mm-row"><span>CSP</span><span style="color:var(--warning)" data-i18n="ui.warn">警告</span></div>
-                    <div class="mm-row"><span>X-Frame-Options</span><span style="color:var(--success)" data-i18n="ui.pass">通过</span></div>
-                    <div class="mm-row"><span data-i18n="ui.cert">证书</span><span>62d</span></div>
+                  <div class="mock-kpis">
+                    <div class="kpi"><b id="speedMedian">254</b><span>中位数</span></div>
+                    <div class="kpi"><b id="speedTtfb">38</b><span>首字节 ms</span></div>
+                    <div class="kpi"><b id="speedStd">12.4</b><span>标准差</span></div>
                   </div>
-                  <div class="advice">
-                    <div class="t" data-i18n="ui.adviceTitle">诊断与建议</div>
-                    <div class="c" data-i18n="ui.adviceCause">可能原因：CSP 允许 unsafe-inline，注入风险上升。</div>
-                    <div class="a" data-i18n="ui.adviceAction">建议动作：移除内联脚本或改用 nonce / hash 白名单。</div>
-                  </div>
+                  <div class="mock-actions"><button class="mock-btn" id="speedRun">重新测速</button><span class="mock-title" style="align-self:center">示例数据</span></div>
                 </div>
               </div>
             </div>
           </div>
 
-          <!-- 面板 3：长时质量监控 -->
-          <div class="pane" id="pane-2">
-            <div class="mm-metrics" style="margin-bottom:12px">
-              <div class="mm-metric"><div class="l">p50</div><div class="v">23<span style="font-size:11px;color:var(--text-3)"> ms</span></div></div>
-              <div class="mm-metric"><div class="l">p95</div><div class="v">41<span style="font-size:11px;color:var(--text-3)"> ms</span></div></div>
-              <div class="mm-metric"><div class="l">p99</div><div class="v">78<span style="font-size:11px;color:var(--text-3)"> ms</span></div></div>
-              <div class="mm-metric"><div class="l" data-i18n="mock.loss">丢包率</div><div class="v">0<span style="font-size:11px;color:var(--text-3)"> %</span></div></div>
-              <div class="mm-metric"><div class="l" data-i18n="ui.stalls">卡顿次数</div><div class="v">2</div></div>
+          <div class="pane" id="pane-dns" role="tabpanel">
+            <div class="pane-grid">
+              <div class="pane-copy">
+                <h3>DNS 不一致，就是问题开始。</h3>
+                <p>同一个域名交给 6 个 DoH 解析器，各自返回什么、耗时多少、是否带 DNSSEC 验证，一眼看清。wireformat 实现不再受各家 JSON API 限制。</p>
+                <ul class="pane-list">
+                  <li><span class="tick"><svg class="icon"><use href="#i-check"/></svg></span><span>Cloudflare / Google / Quad9 / AdGuard / DNS.SB / AliDNS</span></li>
+                  <li><span class="tick"><svg class="icon"><use href="#i-check"/></svg></span><span>AD 标志与结果一致性自动比对</span></li>
+                  <li><span class="tick"><svg class="icon"><use href="#i-check"/></svg></span><span>结果缓存 60 秒，重复查询不增加成本</span></li>
+                </ul>
+              </div>
+              <div class="mock">
+                <div class="mock-head"><div class="win-dots"><i></i><i></i><i></i></div><span class="mock-title">dns-compare · example.com</span></div>
+                <div class="mock-body">
+                  <div class="dns-rows" id="dnsRows"></div>
+                  <div class="mock-actions"><button class="mock-btn" id="dnsRun">重新查询</button><span class="mock-title" style="align-self:center">6 个解析器</span></div>
+                </div>
+              </div>
             </div>
-            <div class="mm-desc" style="margin-bottom:6px" data-i18n="ui.timeline">时间线（每 5 秒取最差值）</div>
-            <div style="display:flex;gap:2px;align-items:flex-end;height:34px">
-              <span style="flex:1;height:26%;background:var(--success);border-radius:2px"></span>
-              <span style="flex:1;height:34%;background:var(--success);border-radius:2px"></span>
-              <span style="flex:1;height:22%;background:var(--success);border-radius:2px"></span>
-              <span style="flex:1;height:48%;background:var(--success);border-radius:2px"></span>
-              <span style="flex:1;height:30%;background:var(--success);border-radius:2px"></span>
-              <span style="flex:1;height:72%;background:var(--warning);border-radius:2px"></span>
-              <span style="flex:1;height:28%;background:var(--success);border-radius:2px"></span>
-              <span style="flex:1;height:36%;background:var(--success);border-radius:2px"></span>
-              <span style="flex:1;height:95%;background:var(--danger);border-radius:2px"></span>
-              <span style="flex:1;height:31%;background:var(--success);border-radius:2px"></span>
-              <span style="flex:1;height:24%;background:var(--success);border-radius:2px"></span>
-              <span style="flex:1;height:40%;background:var(--success);border-radius:2px"></span>
+          </div>
+
+          <div class="pane" id="pane-monitor" role="tabpanel">
+            <div class="pane-grid">
+              <div class="pane-copy">
+                <h3>监控的意义，是少看几次。</h3>
+                <p>状态稳定时不打扰，异常时只提醒一次。证书到期、连续失败、静默时段和维护窗口，都可以在配置里说清楚。</p>
+                <ul class="pane-list">
+                  <li><span class="tick"><svg class="icon"><use href="#i-check"/></svg></span><span>证书 ≤14 / ≤7 天与已过期分级提醒</span></li>
+                  <li><span class="tick"><svg class="icon"><use href="#i-check"/></svg></span><span>连续失败阈值 + 静默时段 + 维护窗口</span></li>
+                  <li><span class="tick"><svg class="icon"><use href="#i-check"/></svg></span><span>多渠道 webhook，失败不重复轰炸</span></li>
+                </ul>
+              </div>
+              <div class="mock">
+                <div class="mock-head"><div class="win-dots"><i></i><i></i><i></i></div><span class="mock-title">monitor · uptime</span></div>
+                <div class="mock-body">
+                  <div class="target-rows">
+                    <div class="target"><span class="tdot"></span><span class="url">https://example.com</span><span class="meta">203ms · 证书 87d</span></div>
+                    <div class="target warn"><span class="tdot"></span><span class="url">https://api.example.com</span><span class="meta">连续失败 1 次</span></div>
+                    <div class="target"><span class="tdot"></span><span class="url">https://blog.example.com</span><span class="meta">412ms · 证书 26d</span></div>
+                  </div>
+                  <div class="uptime" id="monitorUptime" aria-hidden="true"></div>
+                  <div class="mock-actions"><button class="mock-btn" id="monitorRun">立即巡检</button><span class="mock-title" style="align-self:center">示例数据 · 最近 42 次</span></div>
+                </div>
+              </div>
             </div>
-            <div class="mm-desc" style="margin-top:10px" data-i18n="ui.timelineNote">绿色为正常、黄色为明显升高、红色为超过中位值 3 倍的卡顿。样本按每秒 1 次采集，1/5/10 分钟可选。</div>
           </div>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- ==================== 隐私 ==================== -->
-  <section id="privacy">
+  <!-- ================= 流程 ================= -->
+  <section class="section" id="monitor">
     <div class="wrap">
-      <div class="cols">
-        <div class="panel pad reveal rv-l">
-          <h3><svg><use href="#i-shield"/></svg><span data-i18n="priv.title">数据去向</span></h3>
-          <table class="dtable" id="privTable"></table>
+      <div class="section-head">
+        <span class="kicker reveal">From signal to decision</span>
+        <h2 class="h2 reveal" style="--d:60ms">从一次采样，<br>到<span class="grad">一个结论。</span></h2>
+        <p class="lead reveal" style="--d:120ms">诊断不是把数字堆给用户。先采样，再分析，然后归因，最后给出可以执行的动作——这条链路在代码里是完整的。</p>
+      </div>
+      <div class="flow">
+        <div class="flow-item reveal"><div class="ic"><svg class="icon"><use href="#i-pulse"/></svg></div><h4>采样</h4><p>浏览器侧发起 RTT、DNS、吞吐和协议探测；能本地完成的，绝不额外经过 Worker。</p></div>
+        <div class="flow-item reveal" style="--d:70ms"><div class="ic"><svg class="icon"><use href="#i-chart"/></svg></div><h4>分析</h4><p>中位数、分位值、标准差、丢包率与稳定性评分，统一在同一套指标口径下计算。</p></div>
+        <div class="flow-item reveal" style="--d:140ms"><div class="ic"><svg class="icon"><use href="#i-sparkles"/></svg></div><h4>归因</h4><p>把“慢”拆成 DNS、TLS、首字节、下载、缓冲膨胀与协议限制，避免错误归因。</p></div>
+        <div class="flow-item reveal" style="--d:210ms"><div class="ic"><svg class="icon"><use href="#i-check"/></svg></div><h4>行动</h4><p>给出可执行的建议：换 DNS、改有线、检查 Wi-Fi 干扰、观察证书到期或调整监控阈值。</p></div>
+        <div class="flow-line"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 工程化 ================= -->
+  <section class="section" id="engineering">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="kicker reveal">Engineering</span>
+        <h2 class="h2 reveal" style="--d:60ms">优雅的表象，<br>靠<span class="grad">克制的基础设施。</span></h2>
+        <p class="lead reveal" style="--d:120ms">单文件发布，模块化开发。构建脚本保证输出可复现，回归测试覆盖令牌、限流、监控与多语言，观测指标直接暴露为 Prometheus 文本。</p>
+      </div>
+      <div class="eng-grid">
+        <div class="reveal">
+          <div class="code-card">
+            <div class="code-head"><div class="win-dots"><i></i><i></i><i></i></div><span class="code-file">SITE_CONFIG · wrangler.toml</span><button class="code-copy" id="copyCode">复制</button></div>
+            <div class="code-body" id="codeBlock"><span class="c-com"># 站点配置：品牌、默认语言、工具开关</span>
+SITE_CONFIG = <span class="c-str">'{"siteName":"NetSight Pro",
+  "defaultLang":"zh-CN",
+  "disabledTools":[],
+  "metricsKey":"••••••",
+  "offline":true}'</span>
+
+<span class="c-com"># 可选：KV / Cron / 自定义域</span>
+[[kv_namespaces]]
+binding = <span class="c-str">"SPEED_HISTORY"</span>
+id = <span class="c-str">"&lt;kv-namespace-id&gt;"</span>
+
+[triggers]
+crons = [<span class="c-str">"*/5 * * * *"</span>]</div>
+          </div>
+          <div class="eng-note">构建产物为单文件 Worker；`npm run build` 会做语法编译与资产一致性校验。`/metrics` 可按需接入 Grafana Cloud 免费额度。</div>
         </div>
-        <div class="panel pad reveal rv-r">
-          <h3><svg><use href="#i-lock"/></svg><span data-i18n="sec.title">安全模型</span></h3>
-          <ul class="rows" id="secList"></ul>
+        <div class="reveal" style="--d:100ms">
+          <div class="eng-list">
+            <div class="eng-item"><span class="ic"><svg class="icon"><use href="#i-shield"/></svg></span><div><b>无状态 HMAC 令牌</b><span>跨 isolate 生效，页面令牌 403 自动静默续期，不再整页刷新。</span></div></div>
+            <div class="eng-item"><span class="ic"><svg class="icon"><use href="#i-lock"/></svg></span><div><b>默认零出站</b><span>能由浏览器完成的探测全部留在客户端；DoH、证书与监控仅在你显式使用时发生。</span></div></div>
+            <div class="eng-item"><span class="ic"><svg class="icon"><use href="#i-chart"/></svg></span><div><b>可观测但不昂贵</b><span>per-isolate 计数器、KV 写预算、大响应配额与端点开关，免费套餐也能安全运行。</span></div></div>
+            <div class="eng-item"><span class="ic"><svg class="icon"><use href="#i-terminal"/></svg></span><div><b>可复现的构建</b><span>源码拆分 + 构建脚本 + CI；每次构建校验运行时资产逐字节一致，164 项回归。</span></div></div>
+          </div>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- ==================== 部署 ==================== -->
-  <section id="deploy">
+  <!-- ================= 多语言 ================= -->
+  <section class="section" id="i18n">
     <div class="wrap">
-      <div class="shead reveal">
-        <div class="kicker" data-i18n="dep.kicker">部署</div>
-        <h2 data-i18n="dep.title">3 步拥有自己的诊断站</h2>
-        <p data-i18n="dep.desc">不需要服务器、不需要构建、不需要 npm 依赖。绑定 KV 与管理密钥都是可选的。</p>
+      <div class="i18n-card reveal">
+        <div>
+          <span class="kicker">International</span>
+          <h2 class="h2" style="margin-bottom:10px">六种语言，<br><span class="grad">同一套诊断。</span></h2>
+          <p class="lead" style="max-width:520px">界面、日期、标题与提示全部本地化。语言可跟随浏览器，也可以在页面里随时切换。</p>
+          <div class="lang-pills" id="langPills">
+            <button class="on" data-lang="zh-CN">简体中文</button>
+            <button data-lang="zh-TW">繁體中文</button>
+            <button data-lang="en">English</button>
+            <button data-lang="ja">日本語</button>
+            <button data-lang="ko">한국어</button>
+            <button data-lang="es">Español</button>
+          </div>
+        </div>
+        <div class="i18n-preview" aria-live="polite">
+          <div class="i18n-line" id="i18nLine">把网络诊断，装进一个 Worker 文件。</div>
+          <div class="i18n-sub" id="i18nSub">实时延迟 · 带宽测速 · DNS 对比 · 域名体检 · 站点监控</div>
+        </div>
       </div>
-      <div class="steps" id="stepList"></div>
-      <div class="codewrap reveal rv-s">
-        <button class="copybtn" id="copyBtn" data-i18n="dep.copy">复制</button>
-        <pre id="code"><span class="c" data-i18n="dep.c1"># 1) 克隆仓库（或点上方一键部署按钮）</span>
-git clone https://github.com/BlueDriftHK/CF-workers-netdiag.git
-cd CF-workers-netdiag
-
-<span class="c" data-i18n="dep.c2"># 2) 本地预览 / 部署上线</span>
-npx wrangler dev
-npx wrangler deploy
-
-<span class="c" data-i18n="dep.c3"># 可选：绑定 KV（站点监控状态 / 测速历史）</span>
-npx wrangler kv namespace create SPEED_HISTORY
-<span class="c" data-i18n="dep.c4"># 可选：设置管理密钥（站点监控配置与手动巡检）</span>
-npx wrangler secret put MONITOR_ADMIN_KEY
-
-<span class="c" data-i18n="dep.c5"># 3) 验证部署（/health 需要页面会话令牌，脚本探活请用 /node-ping）</span>
-curl https://your-worker.workers.dev/node-ping
-<span class="s"># =&gt; {"ok":true,"version":"4.7.1","time":1730000000000}</span></pre>
-      </div>
-      <div class="reveal" style="margin-top:16px">
-        <a class="btn btn-primary" href="https://deploy.workers.cloudflare.com/?url=https://github.com/BlueDriftHK/CF-workers-netdiag" target="_blank" rel="noopener">
-          <svg><use href="#i-cloud"/></svg><span data-i18n="dep.oneClick">一键部署到 Cloudflare</span>
-        </a>
-      </div>
-      <table class="envtable reveal" id="envTable"></table>
-      <p class="heroNote" style="text-align:left;margin-top:12px" data-i18n="dep.note">提示：`/health` 需要主页面签发的会话令牌（防爬虫），所以用 curl 直接访问会得到 403 —— 探活请用 `/node-ping`。</p>
     </div>
   </section>
 
-  <!-- ==================== FAQ ==================== -->
-  <section id="faq">
+  <!-- ================= 部署 ================= -->
+  <section class="section" id="deploy">
     <div class="wrap">
-      <div class="shead reveal">
-        <div class="kicker" data-i18n="faq.kicker">常见问题</div>
-        <h2 data-i18n="faq.title">部署与使用问答</h2>
+      <div class="section-head">
+        <span class="kicker reveal">Deploy</span>
+        <h2 class="h2 reveal" style="--d:60ms">三步，拥有你自己的<br><span class="grad">边缘诊断站。</span></h2>
+        <p class="lead reveal" style="--d:120ms">不需要服务器，不需要数据库。绑定 KV 与管理密钥都是可选项；不配置也能获得完整的浏览器侧诊断能力。</p>
       </div>
-      <div class="faq" id="faqList"></div>
+      <div class="deploy-step">
+        <div class="dstep reveal"><span class="no">STEP 01</span><h4>准备配置</h4><p>复制 wrangler 模板，按需修改 SITE_CONFIG：站点名、默认语言、禁用工具与指标密钥。</p></div>
+        <div class="dstep reveal" style="--d:70ms"><span class="no">STEP 02</span><h4>写入密钥</h4><p>设置 <code>PAGE_TOKEN_SECRET</code> 与 <code>MONITOR_ADMIN_KEY</code>，开启跨 isolate 令牌与监控管理。</p></div>
+        <div class="dstep reveal" style="--d:140ms"><span class="no">STEP 03</span><h4>部署上线</h4><p>一条命令发布到 Cloudflare Workers，几分钟内获得属于你的诊断入口与监控能力。</p></div>
+      </div>
+      <div class="deploy-cmd reveal" style="--d:180ms">
+        <span class="p">$</span>
+        <span id="deployCommand">npm run build &amp;&amp; npx wrangler deploy</span>
+        <button class="copy" id="copyCmd">复制</button>
+      </div>
     </div>
   </section>
 
-  <!-- ==================== 许可与文档 ==================== -->
-  <section id="docs" style="padding-top:0">
+  <!-- ================= 终章 ================= -->
+  <section class="final">
     <div class="wrap">
-      <div class="shead reveal">
-        <div class="kicker" data-i18n="lic.kicker">开源</div>
-        <h2 data-i18n="lic.title">AGPL-3.0 许可</h2>
-        <p data-i18n="lic.desc">可自由使用、修改、再分发。如果你修改后把它作为网络服务对外提供，需要向使用者提供对应源代码（AGPL §13）——部署修改版时请把页脚源码链接换成你自己的仓库。</p>
+      <h2 class="reveal">现在，<span class="grad">把网络看透。</span></h2>
+      <p class="lead reveal" style="--d:80ms">把它部署到你自己的域名，从第一次采样开始，建立属于你的网络基线。</p>
+      <div class="final-cta reveal" style="--d:140ms">
+        <a class="btn" href="#top">回到顶部<svg class="icon icon-sm"><use href="#i-arrow"/></svg></a>
+        <a class="btn btn-ghost" href="#engineering">查看工程细节</a>
       </div>
-      <div class="docs" id="docLinks"></div>
+      <div class="final-meta reveal" style="--d:200ms">单文件 Worker · 25+ 工具 · 6 语言 · 默认零出站</div>
     </div>
   </section>
 </main>
 
 <footer>
-  <div class="wrap fwrap">
-    <div>
-      <div class="brand" style="margin-bottom:6px"><span class="logo"><svg><use href="#i-pulse"/></svg></span><span>NetSight&nbsp;Pro</span></div>
-      <div id="footLine"></div>
+  <div class="wrap">
+    <div class="foot-grid">
+      <div class="foot-brand"><svg class="brand-icon"><use href="#i-wave"/></svg> NetSight Pro</div>
+      <div class="foot-links">
+        <a href="#capabilities">能力</a><a href="#showcase">交互</a><a href="#engineering">工程化</a><a href="#deploy">部署</a>
+      </div>
     </div>
-    <div class="flinks" id="footLinks"></div>
+    <div class="foot-note">
+      <span>v5.1 · Cloudflare Workers 边缘网络诊断工具 · 本页为静态视觉演示，数据为模拟。</span>
+      <span>Apple-inspired design · 无外部依赖 · 系统字体渲染</span>
+    </div>
   </div>
 </footer>
 
 <script>
-/* ============================================================================
-   常量：改这里即可（仓库地址 / 版本号）
-   ============================================================================ */
-const REPO_URL = 'https://github.com/BlueDriftHK/CF-workers-netdiag';
-const VERSION = '4.7.1';
-const CONTACT = 'admin@bjhr.space';
+/* ============================================================
+   NetSight Pro showcase · 交互与动画
+   ============================================================ */
+(function(){
+  'use strict';
+  var $ = function(s, r){ return (r || document).querySelector(s); };
+  var $$ = function(s, r){ return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
+  var root = document.documentElement;
+  var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-/* ============================================================================
-   文案字典（三语）。新增文案必须在三个语言里都补齐。
-   ============================================================================ */
-const I18N = {
-  'zh-CN': {
-    'nav.highlights':'亮点','nav.tools':'工具','nav.ui':'界面','nav.privacy':'隐私','nav.deploy':'部署','nav.faq':'问答',
-    'hero.eyebrow':'v4.7.1 · 23 项工具 · 默认零 Worker 出站',
-    'hero.title':'把网络诊断，','hero.titleDim':'装进一个 Worker 文件',
-    'hero.lead':'单文件 Cloudflare Worker：23 项诊断工具、三语界面、实时延迟监控、DNS 与安全体检。<b>零构建、零依赖、零埋点</b>，几分钟即可拥有自己的诊断站。',
-    'hero.ctaDeploy':'3 步自部署','hero.ctaTools':'查看 23 项工具',
-    'hero.note':'本项目不自带公开演示实例：部署一个属于你自己的，数据只留在你的账号里。',
-    'mock.overview':'概览','mock.edge':'边缘节点','mock.worker':'Worker 耗时','mock.live':'实时监控中','mock.lang':'界面语言',
-    'mock.rttNow':'当前 RTT','mock.jitter':'抖动','mock.rttMin':'最低 RTT','mock.rttMax':'最高 RTT',
-    'mock.quality':'连接质量','mock.qualityVal':'优秀','mock.stability':'网络稳定性','mock.stabilityVal':'非常稳定','mock.samples':'样本数量','mock.loss':'丢包率',
-    'stats.tools':'诊断工具','stats.groups':'功能分组','stats.langs':'界面语言','stats.deps':'运行时依赖',
-    'hi.kicker':'设计原则','hi.title':'为什么这样做','hi.desc':'四条取舍贯穿整个项目：能用浏览器做的就不放到服务端；会花别人钱的事情必须有硬上限。',
-    'tools.kicker':'诊断能力','tools.title':'23 项工具，6 个分组','tools.desc':'按用途分组，打开即用。标签表示数据流向：绿色为浏览器侧（零 Worker 出站），黄色需要 Worker 代你发起请求。',
-    'ui.kicker':'界面','ui.title':'真实布局，矢量复刻','ui.desc':'下面三张不是截图，而是用 HTML/CSS 按应用实际布局绘制，因此不会随版本过期，也只有几 KB 大小。',
-    'tab.tools':'工具分组','tab.modal':'两栏弹层','tab.quality':'质量监控',
-    'ui.tabTools':'诊断工具 · 按 6 类分组','ui.tabModal':'工具结果弹层 · 左参数 / 右结果','ui.tabQuality':'长时质量监控 · 分位与卡顿时间线',
-    'shot.capTools':'23 项工具 · 6 组','shot.capModal':'宽屏两栏 · ≤860px 折叠','shot.capQuality':'1/5/10 分钟 · 每秒 1 次',
-    'ui.rerun':'重新运行','ui.sideDesc':'左侧固定为「说明 + 参数 + 操作」，右侧是结果。参数区永远在同一位置，不会随工具跳来跳去。',
-    'ui.certOpt':'同时检查证书到期（+1 次出站）','ui.run':'开始检测','ui.score':'安全评分','ui.status':'状态码','ui.ttfb':'首字节','ui.redirects':'重定向',
-    'ui.pass':'通过','ui.warn':'警告','ui.cert':'证书','ui.adviceTitle':'诊断与建议',
-    'ui.adviceCause':'可能原因：CSP 允许 unsafe-inline，注入风险上升。','ui.adviceAction':'建议动作：移除内联脚本或改用 nonce / hash 白名单。',
-    'ui.stalls':'卡顿次数','ui.timeline':'时间线（每 5 秒取最差值）',
-    'ui.timelineNote':'绿色为正常、黄色为明显升高、红色为超过中位值 3 倍的卡顿。样本按每秒 1 次采集，1/5/10 分钟可选。',
-    'priv.title':'数据去向','sec.title':'安全模型',
-    'dep.kicker':'部署','dep.title':'3 步拥有自己的诊断站','dep.desc':'不需要服务器、不需要构建、不需要 npm 依赖。绑定 KV 与管理密钥都是可选的。',
-    'dep.copy':'复制','dep.c1':'# 1) 克隆仓库（或点上方一键部署按钮）','dep.c2':'# 2) 本地预览 / 部署上线',
-    'dep.c3':'# 可选：绑定 KV（站点监控状态 / 测速历史）','dep.c4':'# 可选：设置管理密钥（站点监控配置与手动巡检）',
-    'dep.c5':'# 3) 验证部署（/health 需要页面会话令牌，脚本探活请用 /node-ping）',
-    'dep.oneClick':'一键部署到 Cloudflare',
-    'dep.note':'提示：`/health` 需要主页面签发的会话令牌（防爬虫），所以用 curl 直接访问会得到 403 —— 探活请用 `/node-ping`。',
-    'faq.kicker':'常见问题','faq.title':'部署与使用问答',
-    'lic.kicker':'开源','lic.title':'AGPL-3.0 许可',
-    'lic.desc':'可自由使用、修改、再分发。如果你修改后把它作为网络服务对外提供，需要向使用者提供对应源代码（AGPL §13）——部署修改版时请把页脚源码链接换成你自己的仓库。',
-    'foot.line':'v4.7.1 · Cloudflare Workers 边缘网络诊断工具 · 静态介绍页，可部署到任意静态托管',
-    'grp.quality':'网络质量与延迟','grp.bandwidth':'带宽与吞吐','grp.dns':'DNS','grp.security':'安全与合规','grp.reach':'可达性与多节点','grp.monitor':'监控与系统',
-    'filter.all':'全部',
-    'cost.zero':'浏览器侧 · 零出站','cost.egress':'Worker 出站','cost.opt':'可选 +1 次出站','cost.heavy':'流量较大',
-    't.quickcheck':'一键体检','t.quality':'长时质量监控','t.loss':'丢包率','t.ttfb':'TTFB 分析','t.ws':'WebSocket 延迟','t.proxy':'代理/VPN 检测','t.webrtc':'WebRTC 泄漏',
-    't.speed':'带宽测速','t.multispeed':'多流并发测速','t.upload':'上传测速','t.bufferbloat':'缓冲膨胀','t.stream':'流式传输','t.concurrent':'并发测试',
-    't.dns':'DNS 解析','t.dnslookup':'DNS 工具箱','t.dnscompare':'多解析器对比',
-    't.audit':'站点体检','t.domaincheck':'域名安全体检',
-    't.media':'流媒体连通性','t.reach':'网络可达性','t.multi':'多节点对比',
-    't.monitor':'站点监控','t.cpu':'CPU 性能',
-    'd.quickcheck':'串跑 6 项检测，给出评分、评级与原因建议','d.quality':'1/5/10 分钟每秒探测，输出 p50/p95/p99 与卡顿时间线',
-    'd.loss':'连续探测统计丢包，自动剔除限流样本','d.ttfb':'DNS/TCP/TLS/等待/下载 五阶段耗时拆解',
-    'd.ws':'真实 WebSocket 往返延迟','d.proxy':'比对 HTTP 出口 IP 与 WebRTC 暴露 IP，识别分流',
-    'd.webrtc':'检测浏览器是否暴露内网/公网真实 IP','d.speed':'3 档位下载测速，读取完整响应体再计时',
-    'd.multispeed':'4 条并行流 + 实时速率曲线，报告平均与 p95 峰值','d.upload':'3 档位上传，服务端流式读取',
-    'd.bufferbloat':'空闲与满载延迟对比，A–F 评级','d.stream':'分块流式下载持续吞吐','d.concurrent':'多档位并发请求观察耗时变化',
-    'd.dns':'主流站点解析耗时（优先取浏览器真实 DNS 耗时）','d.dnslookup':'DoH 记录查询 + IP 黑名单检测','d.dnscompare':'四家公共解析器结果一致性判定',
-    'd.audit':'安全响应头审计评分，可选证书到期检查','d.domaincheck':'MX / SPF / DMARC / DKIM 与声誉库',
-    'd.media':'浏览器侧探测流媒体站点可达性','d.reach':'浏览器直连境内外站点，识别本地阻断','d.multi':'对比多个自建节点延迟',
-    'd.monitor':'Cron 定时巡检 + Webhook 告警，仅状态变化时写存储','d.cpu':'Worker 端计算基准（独立限流 3 次/分）',
-    'hi.1.t':'零出站优先','hi.1.d':'能由浏览器完成的探测都放在浏览器侧。IP 风险评分已停用，证书检查是可选的一次出站。',
-    'hi.2.t':'KV 写入总闸','hi.2.d':'所有 KV 写入经过统一闸门：20 次/分、600 次/日、同键 10 秒去抖；测速历史用单键环形缓冲，无 list、无 delete。',
-    'hi.3.t':'单文件 · 零依赖','hi.3.d':'一个 _workers.js 同时是 Worker 和前端，没有构建步骤、没有 npm、没有框架。',
-    'hi.4.t':'安全默认加固','hi.4.d':'页面会话令牌、SSRF 全链路校验、出站端口仅 80/443、nonce CSP、上传与请求体上限。',
-    'hi.5.t':'历史只留本机','hi.5.d':'测试历史存在浏览器 localStorage（最近 20 条，可一键清空），默认不写 KV。',
-    'hi.6.t':'不只给分数','hi.6.d':'诊断建议引擎把问题映射为「可能原因 + 建议动作」，而不是丢给你一个数字。',
-    'priv.1.k':'RTT / 抖动 / 质量样本','priv.1.v':'仅存在于浏览器内存与图表，不上传',
-    'priv.2.k':'测试历史','priv.2.v':'localStorage（最近 20 条，可一键清空）',
-    'priv.3.k':'出口 IP / 地理位置','priv.3.v':'由你的浏览器直连 ipify / icanhazip / ipapi.co；Worker 只用 Cloudflare 提供的 request.cf',
-    'priv.4.k':'测速历史 / 用量统计','priv.4.v':'默认不写 KV；开启后受写入闸门约束',
-    'priv.5.k':'站点监控配置','priv.5.v':'仅在你绑定 KV 并设置管理密钥时保存',
-    'priv.6.k':'第三方统计 / 广告','priv.6.v':'没有。项目不引入任何埋点、分析或广告脚本',
-    'sec.1.t':'页面会话令牌','sec.1.d':'取代可被伪造的 Origin/Referer 判断；失效时前端自动刷新重领',
-    'sec.2.t':'SSRF 全链路校验','sec.2.d':'私网/本机判定（含 IPv6 与 IPv4 映射）、DNS 解析必须全为公网、重定向逐跳复检',
-    'sec.3.t':'出站端口白名单','sec.3.d':'Worker 侧所有用户可控目标仅放行 80 / 443',
-    'sec.4.t':'CSP nonce + 严格响应头','sec.4.d':'HSTS、nosniff、DENY、Referrer-Policy、Permissions-Policy 全站注入',
-    'sec.5.t':'体积与频率上限','sec.5.d':'上传 ≤32MB、日志 ≤10KB、域名与 URL 白名单校验、限流分桶（60/180/30/3 次每分钟）',
-    'sec.6.t':'管理密钥只走请求头','sec.6.d':'仅接受 x-admin-key，绝不接受查询参数（避免进入日志与历史）',
-    'sec.7.t':'端点开关','sec.7.d':'无引用或已废弃端点统一返回 410，且短路在令牌校验与限流之前',
-    'sec.8.t':'配额防护','sec.8.d':'KV 写入超预算时静默丢弃非关键数据并计数，宁可丢数据也不打爆额度',
-    'dep.s1.t':'准备账号','dep.s1.d':'登录 Cloudflare，用 wrangler login 或直接使用「一键部署」按钮。',
-    'dep.s2.t':'部署 Worker','dep.s2.d':'npx wrangler deploy，或把 _workers.js 粘贴进 Dashboard 编辑器保存。',
-    'dep.s3.t':'验证','dep.s3.d':'访问 /node-ping 确认版本；打开首页看到 RTT 曲线即可用。',
-    'env.name':'名称','env.type':'类型','env.purpose':'用途',
-    'env.kv':'KV 绑定','env.kv.d':'测速历史、用量统计（kv 模式）、站点监控状态与日志',
-    'env.secret':'Secret','env.secret.d':'站点监控管理密钥，仅接受 x-admin-key 请求头',
-    'env.var':'变量','env.var.d':'跨域白名单（逗号分隔），留空即只允许同源访问',
-    'env.cron':'Cron','env.cron.d':'站点监控定时巡检，建议 */5 * * * *',
-    'opt':'可选',
-    'faq.1.q':'用 curl 访问 /health 返回 403？','faq.1.a':'这是设计：/health 需要主页面签发的会话令牌，用于挡掉盲目爬虫与扫描器。脚本化探活请改用 /node-ping（无令牌、响应极小）。',
-    'faq.2.q':'某些端点返回 410？','faq.2.a':'那是我主动停用的端点：/dns-proxy、/api/ip-fraud、/api/reach-check、/static/*。实现代码保留，需要时可在端点开关里恢复。',
-    'faq.3.q':'必须绑定 KV 吗？','faq.3.a':'不必须。不绑定 KV 时用量统计退化为内存模式，测速历史与站点监控会提示未绑定，其余 20 多项工具全部可用。',
-    'faq.4.q':'会消耗我的流量吗？','faq.4.a':'看工具。RTT、丢包、WebRTC、可达性几乎不耗流量；带宽测速、多流并发、缓冲膨胀会按带宽消耗（可达数百 MB），界面上都有明确提示。',
-    'faq.5.q':'会把 KV 额度写爆吗？','faq.5.a':'不会。所有写入经过统一闸门（20 次/分、600 次/日、同键 10 秒去抖），测速历史用单键环形缓冲，全项目没有 list 与 batch delete。',
-    'faq.6.q':'会上报我的数据吗？','faq.6.a':'不会。没有账号、没有埋点、没有第三方分析脚本；测试历史只存你自己的浏览器，IP 查询由浏览器直连第三方完成。',
-    'faq.7.q':'部署后可以改吗？','faq.7.a':'可以，AGPL-3.0 允许修改与再分发。但若你把修改版作为网络服务对外提供，需要提供对应源代码（§13），并把页面上的源码链接换成你自己的仓库。',
-    'faq.8.q':'为什么不做一个公开演示站？','faq.8.a':'公开实例的配额与费用由部署者承担，也容易被刷。自部署只要几分钟，而且数据只留在你自己的账号里。',
-    'doc.repo':'GitHub 仓库','doc.repo.d':'源码、Issues 与发布说明',
-    'doc.readme':'README','doc.readme.d':'功能、端点表、部署与配额说明',
-    'doc.contrib':'CONTRIBUTING','doc.contrib.d':'开发规范、模板与测试清单',
-    'doc.security':'SECURITY','doc.security.d':'漏洞披露流程与已知限制',
-    'doc.coc':'CODE_OF_CONDUCT','doc.coc.d':'行为准则与工程红线',
-    'foot.contact':'联系：'
-  },
-  'zh-TW': {
-    'nav.highlights':'亮點','nav.tools':'工具','nav.ui':'介面','nav.privacy':'隱私','nav.deploy':'部署','nav.faq':'問答',
-    'hero.eyebrow':'v4.7.1 · 23 項工具 · 預設零 Worker 出站',
-    'hero.title':'把網路診斷，','hero.titleDim':'裝進一個 Worker 檔案',
-    'hero.lead':'單檔 Cloudflare Worker：23 項診斷工具、三語介面、即時延遲監控、DNS 與安全健檢。<b>零建置、零依賴、零埋點</b>，幾分鐘就能擁有自己的診斷站。',
-    'hero.ctaDeploy':'3 步自架','hero.ctaTools':'查看 23 項工具',
-    'hero.note':'本專案不提供公開展示站：部署一個屬於你自己的，資料只留在你的帳號裡。',
-    'mock.overview':'總覽','mock.edge':'邊緣節點','mock.worker':'Worker 耗時','mock.live':'即時監控中','mock.lang':'介面語言',
-    'mock.rttNow':'當前 RTT','mock.jitter':'抖動','mock.rttMin':'最低 RTT','mock.rttMax':'最高 RTT',
-    'mock.quality':'連線品質','mock.qualityVal':'優秀','mock.stability':'網路穩定性','mock.stabilityVal':'非常穩定','mock.samples':'樣本數量','mock.loss':'丟包率',
-    'stats.tools':'診斷工具','stats.groups':'功能分組','stats.langs':'介面語言','stats.deps':'執行時依賴',
-    'hi.kicker':'設計原則','hi.title':'為什麼這樣做','hi.desc':'四條取捨貫穿整個專案：能在瀏覽器做的就不放到伺服端；會花別人錢的事情必須有硬上限。',
-    'tools.kicker':'診斷能力','tools.title':'23 項工具，6 個分組','tools.desc':'依用途分組，打開即用。標籤代表資料流向：綠色為瀏覽器端（零 Worker 出站），黃色需要 Worker 代你發起請求。',
-    'ui.kicker':'介面','ui.title':'真實版面，向量重繪','ui.desc':'下面三張不是截圖，而是用 HTML/CSS 依實際版面繪製，因此不會隨版本過期，也只有幾 KB。',
-    'tab.tools':'工具分組','tab.modal':'兩欄彈層','tab.quality':'品質監控',
-    'ui.tabTools':'診斷工具 · 依 6 類分組','ui.tabModal':'工具結果彈層 · 左參數 / 右結果','ui.tabQuality':'長時品質監控 · 分位與卡頓時間線',
-    'shot.capTools':'23 項工具 · 6 組','shot.capModal':'寬螢幕兩欄 · ≤860px 折疊','shot.capQuality':'1/5/10 分鐘 · 每秒 1 次',
-    'ui.rerun':'重新執行','ui.sideDesc':'左側固定為「說明 + 參數 + 操作」，右側是結果。參數區永遠在同一位置，不會隨工具跳來跳去。',
-    'ui.certOpt':'同時檢查憑證到期（+1 次出站）','ui.run':'開始檢測','ui.score':'安全評分','ui.status':'狀態碼','ui.ttfb':'首位元組','ui.redirects':'重新導向',
-    'ui.pass':'通過','ui.warn':'警告','ui.cert':'憑證','ui.adviceTitle':'診斷與建議',
-    'ui.adviceCause':'可能原因：CSP 允許 unsafe-inline，注入風險上升。','ui.adviceAction':'建議動作：移除內嵌腳本或改用 nonce / hash 白名單。',
-    'ui.stalls':'卡頓次數','ui.timeline':'時間線（每 5 秒取最差值）',
-    'ui.timelineNote':'綠色為正常、黃色為明顯升高、紅色為超過中位值 3 倍的卡頓。樣本每秒 1 次，可選 1/5/10 分鐘。',
-    'priv.title':'資料去向','sec.title':'安全模型',
-    'dep.kicker':'部署','dep.title':'3 步擁有自己的診斷站','dep.desc':'不需要伺服器、不需要建置、不需要 npm 依賴。綁定 KV 與管理金鑰都是選用的。',
-    'dep.copy':'複製','dep.c1':'# 1) 複製倉庫（或點上方一鍵部署）','dep.c2':'# 2) 本機預覽 / 部署上線',
-    'dep.c3':'# 選用：綁定 KV（站點監控狀態 / 測速歷史）','dep.c4':'# 選用：設定管理金鑰（站點監控設定與手動巡檢）',
-    'dep.c5':'# 3) 驗證部署（/health 需要工作階段權杖，指令稿探活請用 /node-ping）',
-    'dep.oneClick':'一鍵部署到 Cloudflare',
-    'dep.note':'提醒：`/health` 需要主頁面簽發的工作階段權杖（防爬蟲），用 curl 直接存取會得到 403 —— 探活請用 `/node-ping`。',
-    'faq.kicker':'常見問題','faq.title':'部署與使用問答',
-    'lic.kicker':'開源','lic.title':'AGPL-3.0 授權',
-    'lic.desc':'可自由使用、修改、再散布。如果你修改後把它當成網路服務對外提供，必須向使用者提供對應原始碼（AGPL §13）——部署修改版時請把頁尾原始碼連結換成你自己的倉庫。',
-    'foot.line':'v4.7.1 · Cloudflare Workers 邊緣網路診斷工具 · 靜態介紹頁，可部署到任何靜態託管',
-    'grp.quality':'網路品質與延遲','grp.bandwidth':'頻寬與吞吐','grp.dns':'DNS','grp.security':'安全與合規','grp.reach':'可達性與多節點','grp.monitor':'監控與系統',
-    'filter.all':'全部',
-    'cost.zero':'瀏覽器端 · 零出站','cost.egress':'Worker 出站','cost.opt':'選用 +1 次出站','cost.heavy':'流量較大',
-    't.quickcheck':'一鍵體檢','t.quality':'長時品質監控','t.loss':'丟包率','t.ttfb':'TTFB 分析','t.ws':'WebSocket 延遲','t.proxy':'代理/VPN 檢測','t.webrtc':'WebRTC 洩漏',
-    't.speed':'頻寬測速','t.multispeed':'多流併發測速','t.upload':'上傳測速','t.bufferbloat':'緩衝膨脹','t.stream':'串流傳輸','t.concurrent':'併發測試',
-    't.dns':'DNS 解析','t.dnslookup':'DNS 工具箱','t.dnscompare':'多解析器對比',
-    't.audit':'站點健檢','t.domaincheck':'網域安全檢查',
-    't.media':'串流媒體連通性','t.reach':'網路可達性','t.multi':'多節點對比',
-    't.monitor':'站點監控','t.cpu':'CPU 效能',
-    'd.quickcheck':'串跑 6 項檢測，給出評分、評級與原因建議','d.quality':'1/5/10 分鐘每秒探測，輸出 p50/p95/p99 與卡頓時間線',
-    'd.loss':'連續探測統計丟包，自動剔除限流樣本','d.ttfb':'DNS/TCP/TLS/等待/下載 五階段耗時拆解',
-    'd.ws':'真實 WebSocket 往返延遲','d.proxy':'比對 HTTP 出口 IP 與 WebRTC 暴露 IP，識別分流',
-    'd.webrtc':'檢測瀏覽器是否暴露內網/公網真實 IP','d.speed':'3 檔位下載測速，讀完完整回應再計時',
-    'd.multispeed':'4 條並行流 + 即時速率曲線，報告平均與 p95 峰值','d.upload':'3 檔位上傳，伺服端串流讀取',
-    'd.bufferbloat':'閒置與滿載延遲對比，A–F 評級','d.stream':'分塊串流下載持續吞吐','d.concurrent':'多檔位併發請求觀察耗時變化',
-    'd.dns':'主流站點解析耗時（優先取瀏覽器真實 DNS 耗時）','d.dnslookup':'DoH 記錄查詢 + IP 黑名單檢測','d.dnscompare':'四家公共解析器結果一致性判定',
-    'd.audit':'安全回應標頭稽核評分，可選憑證到期檢查','d.domaincheck':'MX / SPF / DMARC / DKIM 與聲譽庫',
-    'd.media':'瀏覽器端探測串流媒體站點可達性','d.reach':'瀏覽器直連境內外站點，識別本地阻斷','d.multi':'對比多個自架節點延遲',
-    'd.monitor':'Cron 定時巡檢 + Webhook 告警，僅狀態變化時寫入儲存','d.cpu':'Worker 端運算基準（獨立限流 3 次/分）',
-    'hi.1.t':'零出站優先','hi.1.d':'能在瀏覽器完成的探測都放在瀏覽器端。IP 風險評分已停用，憑證檢查是可選的一次出站。',
-    'hi.2.t':'KV 寫入總閘','hi.2.d':'所有 KV 寫入都經過統一閘門：20 次/分、600 次/日、同鍵 10 秒去抖；測速歷史用單鍵環形緩衝，沒有 list、沒有 delete。',
-    'hi.3.t':'單檔 · 零依賴','hi.3.d':'一個 _workers.js 同時是 Worker 與前端，沒有建置步驟、沒有 npm、沒有框架。',
-    'hi.4.t':'安全預設加固','hi.4.d':'工作階段權杖、SSRF 全鏈路驗證、出站連接埠僅 80/443、nonce CSP、上傳與請求主體上限。',
-    'hi.5.t':'歷史只留本機','hi.5.d':'測試歷史存在瀏覽器 localStorage（最近 20 筆，可一鍵清除），預設不寫 KV。',
-    'hi.6.t':'不只給分數','hi.6.d':'診斷建議引擎把問題對應成「可能原因 + 建議動作」，而不是丟給你一個數字。',
-    'priv.1.k':'RTT / 抖動 / 品質樣本','priv.1.v':'僅存在瀏覽器記憶體與圖表，不上傳',
-    'priv.2.k':'測試歷史','priv.2.v':'localStorage（最近 20 筆，可一鍵清除）',
-    'priv.3.k':'出口 IP / 地理位置','priv.3.v':'由你的瀏覽器直連 ipify / icanhazip / ipapi.co；Worker 只用 Cloudflare 提供的 request.cf',
-    'priv.4.k':'測速歷史 / 用量統計','priv.4.v':'預設不寫 KV；開啟後受寫入閘門約束',
-    'priv.5.k':'站點監控設定','priv.5.v':'僅在你綁定 KV 並設定管理金鑰時儲存',
-    'priv.6.k':'第三方統計 / 廣告','priv.6.v':'沒有。專案不引入任何埋點、分析或廣告指令稿',
-    'sec.1.t':'工作階段權杖','sec.1.d':'取代可被偽造的 Origin/Referer 判斷；失效時前端自動重新整理重取',
-    'sec.2.t':'SSRF 全鏈路驗證','sec.2.d':'私網/本機判定（含 IPv6 與 IPv4 映射）、DNS 解析必須全為公網、逐跳重新驗證轉址',
-    'sec.3.t':'出站連接埠白名單','sec.3.d':'Worker 端所有使用者可控目標僅放行 80 / 443',
-    'sec.4.t':'CSP nonce + 嚴格標頭','sec.4.d':'HSTS、nosniff、DENY、Referrer-Policy、Permissions-Policy 全站注入',
-    'sec.5.t':'體積與頻率上限','sec.5.d':'上傳 ≤32MB、日誌 ≤10KB、網域與 URL 白名單、限流分桶（60/180/30/3 次每分）',
-    'sec.6.t':'管理金鑰只走標頭','sec.6.d':'僅接受 x-admin-key，絕不接受查詢參數（避免進入日誌與歷史）',
-    'sec.7.t':'端點開關','sec.7.d':'無引用或已廢棄端點統一回應 410，且在權杖驗證與限流之前短路',
-    'sec.8.t':'配額防護','sec.8.d':'KV 寫入超預算時靜默丟棄非關鍵資料並計數，寧可丟資料也不打爆額度',
-    'dep.s1.t':'準備帳號','dep.s1.d':'登入 Cloudflare，使用 wrangler login 或直接按「一鍵部署」。',
-    'dep.s2.t':'部署 Worker','dep.s2.d':'npx wrangler deploy，或把 _workers.js 貼進 Dashboard 編輯器儲存。',
-    'dep.s3.t':'驗證','dep.s3.d':'存取 /node-ping 確認版本；打開首頁看到 RTT 曲線即可用。',
-    'env.name':'名稱','env.type':'類型','env.purpose':'用途',
-    'env.kv':'KV 綁定','env.kv.d':'測速歷史、用量統計（kv 模式）、站點監控狀態與日誌',
-    'env.secret':'Secret','env.secret.d':'站點監控管理金鑰，僅接受 x-admin-key 標頭',
-    'env.var':'變數','env.var.d':'跨網域白名單（逗號分隔），留空即只允許同源存取',
-    'env.cron':'Cron','env.cron.d':'站點監控定時巡檢，建議 */5 * * * *',
-    'opt':'選用',
-    'faq.1.q':'用 curl 存取 /health 回應 403？','faq.1.a':'這是設計：/health 需要主頁面簽發的工作階段權杖，用來擋掉盲目爬蟲與掃描器。指令稿探活請改用 /node-ping（無權杖、回應極小）。',
-    'faq.2.q':'某些端點回應 410？','faq.2.a':'那是我主動停用的端點：/dns-proxy、/api/ip-fraud、/api/reach-check、/static/*。實作保留，需要時可在端點開關裡恢復。',
-    'faq.3.q':'一定要綁 KV 嗎？','faq.3.a':'不必。未綁 KV 時用量統計退化為記憶體模式，測速歷史與站點監控會提示未綁定，其餘 20 多項工具都能用。',
-    'faq.4.q':'會消耗我的流量嗎？','faq.4.a':'看工具。RTT、丟包、WebRTC、可達性幾乎不耗流量；頻寬測速、多流併發、緩衝膨脹會隨頻寬消耗（可達數百 MB），介面上都有明確提示。',
-    'faq.5.q':'會把 KV 額度寫爆嗎？','faq.5.a':'不會。所有寫入都經過統一閘門（20 次/分、600 次/日、同鍵 10 秒去抖），測速歷史用單鍵環形緩衝，全專案沒有 list 與批次 delete。',
-    'faq.6.q':'會上報我的資料嗎？','faq.6.a':'不會。沒有帳號、沒有埋點、沒有第三方分析指令稿；測試歷史只存在你自己的瀏覽器，IP 查詢由瀏覽器直連第三方完成。',
-    'faq.7.q':'部署後可以改嗎？','faq.7.a':'可以，AGPL-3.0 允許修改與再散布。但若你把修改版當成網路服務對外提供，必須提供對應原始碼（§13），並把頁面上的原始碼連結換成你自己的倉庫。',
-    'faq.8.q':'為什麼不做一個公開展示站？','faq.8.a':'公開實例的配額與費用由部署者承擔，也容易被刷。自架只要幾分鐘，而且資料只留在你自己的帳號裡。',
-    'doc.repo':'GitHub 倉庫','doc.repo.d':'原始碼、Issues 與發行說明',
-    'doc.readme':'README','doc.readme.d':'功能、端點表、部署與配額說明',
-    'doc.contrib':'CONTRIBUTING','doc.contrib.d':'開發規範、範本與測試清單',
-    'doc.security':'SECURITY','doc.security.d':'漏洞揭露流程與已知限制',
-    'doc.coc':'CODE_OF_CONDUCT','doc.coc.d':'行為準則與工程紅線',
-    'foot.contact':'聯絡：'
-  },
-  'en': {
-    'nav.highlights':'Why','nav.tools':'Tools','nav.ui':'UI','nav.privacy':'Privacy','nav.deploy':'Deploy','nav.faq':'FAQ',
-    'hero.eyebrow':'v4.7.1 · 23 tools · zero Worker egress by default',
-    'hero.title':'Network diagnostics,','hero.titleDim':'in a single Worker file',
-    'hero.lead':'A single-file Cloudflare Worker: 23 diagnostic tools, trilingual UI, live latency monitoring, DNS and security audits. <b>No build step, no dependencies, no tracking</b> — deploy your own in minutes.',
-    'hero.ctaDeploy':'Self-deploy in 3 steps','hero.ctaTools':'See all 23 tools',
-    'hero.note':'There is no public demo instance: deploy your own, and keep all data inside your own account.',
-    'mock.overview':'Overview','mock.edge':'Edge node','mock.worker':'Worker time','mock.live':'Live monitoring','mock.lang':'Languages',
-    'mock.rttNow':'Current RTT','mock.jitter':'Jitter','mock.rttMin':'Min RTT','mock.rttMax':'Max RTT',
-    'mock.quality':'Quality','mock.qualityVal':'Excellent','mock.stability':'Stability','mock.stabilityVal':'Very stable','mock.samples':'Samples','mock.loss':'Loss',
-    'stats.tools':'Diagnostic tools','stats.groups':'Tool groups','stats.langs':'UI languages','stats.deps':'Runtime dependencies',
-    'hi.kicker':'Design principles','hi.title':'Why it works this way','hi.desc':'Four trade-offs run through the whole project: anything the browser can do stays in the browser, and anything that costs someone money gets a hard cap.',
-    'tools.kicker':'Capabilities','tools.title':'23 tools in 6 groups','tools.desc':'Grouped by purpose and ready to run. Tags show data flow: green means browser-side (zero Worker egress), amber means the Worker sends the request for you.',
-    'ui.kicker':'Interface','ui.title':'Real layouts, drawn in CSS','ui.desc':'The three panels below are not screenshots — they are HTML/CSS recreations of the actual layout, so they never go stale and cost only a few KB.',
-    'tab.tools':'Tool groups','tab.modal':'Result modal','tab.quality':'Quality monitor',
-    'ui.tabTools':'Diagnostic tools · 6 groups','ui.tabModal':'Result modal · params left, results right','ui.tabQuality':'Quality monitor · percentiles and stall timeline',
-    'shot.capTools':'23 tools · 6 groups','shot.capModal':'Wide two-column · collapses ≤860px','shot.capQuality':'1/5/10 min · 1 sample per second',
-    'ui.rerun':'Re-run','ui.sideDesc':'The left column is always "description + parameters + actions"; results go on the right. Parameters never move around between tools.',
-    'ui.certOpt':'Also check certificate expiry (+1 outbound request)','ui.run':'Run audit','ui.score':'Security score','ui.status':'Status','ui.ttfb':'TTFB','ui.redirects':'Redirects',
-    'ui.pass':'Pass','ui.warn':'Warn','ui.cert':'Certificate','ui.adviceTitle':'Diagnosis & advice',
-    'ui.adviceCause':'Likely cause: CSP allows unsafe-inline, which increases injection risk.','ui.adviceAction':'Suggested action: remove inline scripts or switch to a nonce / hash allowlist.',
-    'ui.stalls':'Stalls','ui.timeline':'Timeline (worst value per 5s)',
-    'ui.timelineNote':'Green is normal, amber is a clear increase, red marks stalls above 3x the median. Samples are taken once per second for 1/5/10 minutes.',
-    'priv.title':'Where your data goes','sec.title':'Security model',
-    'dep.kicker':'Deploy','dep.title':'Your own diagnostics site in 3 steps','dep.desc':'No server, no build step, no npm dependencies. KV binding and the admin key are both optional.',
-    'dep.copy':'Copy','dep.c1':'# 1) Clone the repo (or use the one-click deploy button above)','dep.c2':'# 2) Preview locally / deploy',
-    'dep.c3':'# Optional: bind KV (monitor state / speed history)','dep.c4':'# Optional: set the admin key (monitor config and manual checks)',
-    'dep.c5':'# 3) Verify ( /health needs a page session token — use /node-ping for scripted probes )',
-    'dep.oneClick':'Deploy to Cloudflare',
-    'dep.note':'Note: `/health` requires the session token issued by the main page (anti-crawler), so a plain curl request returns 403 — use `/node-ping` for uptime checks.',
-    'faq.kicker':'FAQ','faq.title':'Deployment & usage questions',
-    'lic.kicker':'Open source','lic.title':'AGPL-3.0 licensed',
-    'lic.desc':'Free to use, modify and redistribute. If you modify it and offer it as a network service, you must provide the corresponding source to your users (AGPL §13) — point the footer source link at your own repository when you deploy a modified build.',
-    'foot.line':'v4.7.1 · Edge network diagnostics on Cloudflare Workers · Static intro page, deployable to any static host',
-    'grp.quality':'Network quality & latency','grp.bandwidth':'Bandwidth & throughput','grp.dns':'DNS','grp.security':'Security & compliance','grp.reach':'Reachability & nodes','grp.monitor':'Monitoring & system',
-    'filter.all':'All',
-    'cost.zero':'Browser-side · zero egress','cost.egress':'Worker egress','cost.opt':'Optional +1 outbound','cost.heavy':'Heavy traffic',
-    't.quickcheck':'Health check','t.quality':'Quality monitor','t.loss':'Packet loss','t.ttfb':'TTFB analysis','t.ws':'WebSocket latency','t.proxy':'Proxy & VPN check','t.webrtc':'WebRTC leak',
-    't.speed':'Bandwidth test','t.multispeed':'Multi-stream speed','t.upload':'Upload test','t.bufferbloat':'Bufferbloat','t.stream':'Stream throughput','t.concurrent':'Concurrency',
-    't.dns':'DNS lookup time','t.dnslookup':'DNS toolbox','t.dnscompare':'Resolver compare',
-    't.audit':'Site audit','t.domaincheck':'Domain security',
-    't.media':'Streaming reachability','t.reach':'Reachability','t.multi':'Node compare',
-    't.monitor':'Site monitor','t.cpu':'CPU benchmark',
-    'd.quickcheck':'Runs six checks in sequence with a score, grade and advice','d.quality':'1/5/10-minute probing with p50/p95/p99 and a stall timeline',
-    'd.loss':'Repeated probes for loss, with rate-limited samples excluded','d.ttfb':'Breaks timing into DNS / TCP / TLS / wait / download',
-    'd.ws':'Real WebSocket round-trip latency','d.proxy':'Compares HTTP egress IP with the WebRTC-exposed IP',
-    'd.webrtc':'Detects whether your real IP leaks via WebRTC','d.speed':'Three download sizes, timed after reading the full body',
-    'd.multispeed':'Four parallel streams with a live rate curve, average and p95','d.upload':'Three upload sizes, streamed on the server side',
-    'd.bufferbloat':'Idle vs loaded latency with an A–F grade','d.stream':'Chunked streaming download throughput','d.concurrent':'Requests at several concurrency levels',
-    'd.dns':'Lookup time for popular sites (uses real browser DNS timing)','d.dnslookup':'DoH record lookup plus IP blocklist checks','d.dnscompare':'Consistency check across four public resolvers',
-    'd.audit':'Security header audit with scoring, optional certificate expiry','d.domaincheck':'MX / SPF / DMARC / DKIM plus reputation lists',
-    'd.media':'Browser-side reachability probe for streaming services','d.reach':'Direct browser probes to spot local blocking','d.multi':'Latency comparison across your own nodes',
-    'd.monitor':'Scheduled cron checks with webhook alerts; storage written only on change','d.cpu':'Worker-side compute benchmark (rate limited to 3/min)',
-    'hi.1.t':'Zero egress first','hi.1.d':'Anything the browser can do stays in the browser. IP risk scoring is disabled and the certificate check is a single optional outbound request.',
-    'hi.2.t':'One KV write gate','hi.2.d':'Every KV write goes through one gate: 20/min, 600/day, 10s per-key debounce. Speed history is a single-key ring buffer — no list, no delete.',
-    'hi.3.t':'Single file, zero deps','hi.3.d':'One _workers.js is both the Worker and the front end: no build step, no npm, no framework.',
-    'hi.4.t':'Hardened by default','hi.4.d':'Session-token gate, full-chain SSRF validation, outbound ports limited to 80/443, nonce CSP, upload and body limits.',
-    'hi.5.t':'History stays local','hi.5.d':'Test history lives in browser localStorage (last 20 entries, one-click clear) and is never written to KV by default.',
-    'hi.6.t':'More than a score','hi.6.d':'The advice engine turns each finding into a likely cause plus a suggested action, instead of leaving you with a number.',
-    'priv.1.k':'RTT / jitter / quality samples','priv.1.v':'Kept in browser memory and charts only — never uploaded',
-    'priv.2.k':'Test history','priv.2.v':'localStorage (last 20 entries, one-click clear)',
-    'priv.3.k':'Egress IP / geolocation','priv.3.v':'Fetched by your browser directly from ipify / icanhazip / ipapi.co; the Worker only uses Cloudflare\'s request.cf',
-    'priv.4.k':'Speed history / usage stats','priv.4.v':'Not written to KV by default; when enabled it is bounded by the write gate',
-    'priv.5.k':'Monitor configuration','priv.5.v':'Stored only if you bind KV and set the admin key',
-    'priv.6.k':'Third-party analytics / ads','priv.6.v':'None. The project ships no tracking, analytics or ad scripts',
-    'sec.1.t':'Page session token','sec.1.d':'Replaces the spoofable Origin/Referer check; the front end re-issues it automatically when it expires',
-    'sec.2.t':'Full-chain SSRF validation','sec.2.d':'Private/loopback detection (IPv6 and IPv4-mapped included), all DNS answers must be public, every redirect hop re-checked',
-    'sec.3.t':'Outbound port allowlist','sec.3.d':'Every user-controlled target on the Worker side is limited to ports 80 / 443',
-    'sec.4.t':'Nonce CSP + strict headers','sec.4.d':'HSTS, nosniff, DENY, Referrer-Policy and Permissions-Policy on every response',
-    'sec.5.t':'Size and rate limits','sec.5.d':'Uploads ≤32MB, logs ≤10KB, host/URL allowlists, separate rate buckets (60/180/30/3 per minute)',
-    'sec.6.t':'Admin key via header only','sec.6.d':'Accepts x-admin-key only — never a query parameter, so it never lands in logs or history',
-    'sec.7.t':'Endpoint kill switch','sec.7.d':'Unused or retired endpoints return 410, short-circuited before token checks and rate limiting',
-    'sec.8.t':'Quota protection','sec.8.d':'Over-budget KV writes are dropped and counted: better to lose non-critical data than to blow the quota',
-    'dep.s1.t':'Prepare the account','dep.s1.d':'Sign in to Cloudflare and either run wrangler login or use the one-click deploy button.',
-    'dep.s2.t':'Deploy the Worker','dep.s2.d':'Run npx wrangler deploy, or paste _workers.js into the dashboard editor and save.',
-    'dep.s3.t':'Verify','dep.s3.d':'Hit /node-ping for the version; open the site and watch the RTT chart start streaming.',
-    'env.name':'Name','env.type':'Type','env.purpose':'Purpose',
-    'env.kv':'KV binding','env.kv.d':'Speed history, usage stats (kv mode), monitor state and log',
-    'env.secret':'Secret','env.secret.d':'Monitor admin key, accepted only via the x-admin-key header',
-    'env.var':'Variable','env.var.d':'Comma-separated CORS allowlist; leave empty to allow same-origin only',
-    'env.cron':'Cron','env.cron.d':'Scheduled monitor checks, e.g. */5 * * * *',
-    'opt':'optional',
-    'faq.1.q':'curl on /health returns 403?','faq.1.a':'By design: /health requires the session token issued by the main page to keep blind crawlers and scanners out. Use /node-ping for scripted uptime checks — no token, tiny response.',
-    'faq.2.q':'Some endpoints return 410?','faq.2.a':'Those are deliberately retired: /dns-proxy, /api/ip-fraud, /api/reach-check and /static/*. The implementation is kept, so they can be re-enabled in the endpoint switch.',
-    'faq.3.q':'Do I have to bind KV?','faq.3.a':'No. Without KV, usage stats fall back to per-isolate memory and speed history plus the site monitor report "not bound" — the other 20+ tools work fully.',
-    'faq.4.q':'Will it use much data?','faq.4.a':'It depends on the tool. RTT, loss, WebRTC and reachability use almost nothing; bandwidth, multi-stream and bufferbloat scale with your bandwidth (hundreds of MB), and the UI warns you beforehand.',
-    'faq.5.q':'Can it blow my KV quota?','faq.5.a':'No. All writes pass one gate (20/min, 600/day, 10s per-key debounce) and speed history is a single-key ring buffer. The project contains no list or batch delete calls.',
-    'faq.6.q':'Does it report my data anywhere?','faq.6.a':'No accounts, no telemetry, no third-party analytics. Test history stays in your browser and IP lookups are made by the browser directly.',
-    'faq.7.q':'Can I modify it after deploying?','faq.7.a':'Yes — AGPL-3.0 allows modification and redistribution. But if you offer a modified version as a network service, you must provide the corresponding source (§13) and point the source link at your own repository.',
-    'faq.8.q':'Why is there no public demo site?','faq.8.a':'Public instances cost the deployer quota and money and are easy to abuse. Self-deploying takes minutes and keeps all data in your own account.',
-    'doc.repo':'GitHub repository','doc.repo.d':'Source, issues and release notes',
-    'doc.readme':'README','doc.readme.d':'Features, endpoint table, deployment and quotas',
-    'doc.contrib':'CONTRIBUTING','doc.contrib.d':'Dev conventions, templates and test checklist',
-    'doc.security':'SECURITY','doc.security.d':'Disclosure process and known limitations',
-    'doc.coc':'CODE_OF_CONDUCT','doc.coc.d':'Community rules and engineering red lines',
-    'foot.contact':'Contact: '
+  /* ---------- 主题 ---------- */
+  var themeBtn = $('#themeBtn'), themeIcon = $('#themeIcon');
+  function setTheme(mode, persist){
+    if (mode === 'light') root.setAttribute('data-theme', 'light');
+    else root.removeAttribute('data-theme');
+    if (themeIcon) themeIcon.setAttribute('href', mode === 'light' ? '#i-sun' : '#i-moon');
+    if (themeBtn) themeBtn.setAttribute('aria-label', mode === 'light' ? '切换为深色主题' : '切换为浅色主题');
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', mode === 'light' ? '#f5f5f7' : '#050506');
+    if (persist) { try { localStorage.setItem('netsight-theme', mode); } catch (e) {} }
+    drawHeroChart();
+    drawPaneChart();
   }
-};
+  var savedTheme = null;
+  try { savedTheme = localStorage.getItem('netsight-theme'); } catch (e) {}
+  setTheme(savedTheme || (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'), false);
+  if (themeBtn) themeBtn.addEventListener('click', function(){
+    var next = root.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    if (document.startViewTransition && !reduceMotion) document.startViewTransition(function(){ setTheme(next, true); });
+    else setTheme(next, true);
+  });
 
-/* ============================================================================
-   数据定义（名称与说明从 I18N 取，避免三份重复结构）
-   ============================================================================ */
-const GROUPS = [
-  { k:'quality',   icon:'i-wave'    },
-  { k:'bandwidth', icon:'i-gauge'   },
-  { k:'dns',       icon:'i-server'  },
-  { k:'security',  icon:'i-shield'  },
-  { k:'reach',     icon:'i-globe'   },
-  { k:'monitor',   icon:'i-cpu'     }
-];
-const TOOLS = [
-  { k:'quickcheck',  g:'quality',   icon:'i-heart',     cost:'zero'  },
-  { k:'quality',     g:'quality',   icon:'i-chart',     cost:'zero'  },
-  { k:'loss',        g:'quality',   icon:'i-pulse',     cost:'zero'  },
-  { k:'ttfb',        g:'quality',   icon:'i-stopwatch', cost:'zero'  },
-  { k:'ws',          g:'quality',   icon:'i-bolt',      cost:'zero'  },
-  { k:'proxy',       g:'quality',   icon:'i-mask',      cost:'zero'  },
-  { k:'webrtc',      g:'quality',   icon:'i-shield',    cost:'zero'  },
-  { k:'speed',       g:'bandwidth', icon:'i-gauge',     cost:'heavy' },
-  { k:'multispeed',  g:'bandwidth', icon:'i-layers',    cost:'heavy' },
-  { k:'upload',      g:'bandwidth', icon:'i-upload',    cost:'heavy' },
-  { k:'bufferbloat', g:'bandwidth', icon:'i-wave',      cost:'heavy' },
-  { k:'stream',      g:'bandwidth', icon:'i-stream',    cost:'zero'  },
-  { k:'concurrent',  g:'bandwidth', icon:'i-layers',    cost:'zero'  },
-  { k:'dns',         g:'dns',       icon:'i-server',    cost:'zero'  },
-  { k:'dnslookup',   g:'dns',       icon:'i-search',    cost:'egress'},
-  { k:'dnscompare',  g:'dns',       icon:'i-compare',   cost:'egress'},
-  { k:'audit',       g:'security',  icon:'i-lock',      cost:'opt'   },
-  { k:'domaincheck', g:'security',  icon:'i-finger',    cost:'egress'},
-  { k:'media',       g:'reach',     icon:'i-play',      cost:'zero'  },
-  { k:'reach',       g:'reach',     icon:'i-globe',     cost:'zero'  },
-  { k:'multi',       g:'reach',     icon:'i-compare',   cost:'zero'  },
-  { k:'monitor',     g:'monitor',   icon:'i-bell',      cost:'egress'},
-  { k:'cpu',         g:'monitor',   icon:'i-cpu',       cost:'zero'  }
-];
-const HIGHLIGHTS = [
-  { icon:'i-bolt',   k:'1' }, { icon:'i-lock',   k:'2' }, { icon:'i-layers', k:'3' },
-  { icon:'i-shield', k:'4' }, { icon:'i-chart',  k:'5' }, { icon:'i-heart',  k:'6' }
-];
-const PRIV_ROWS = ['1','2','3','4','5','6'];
-const SEC_ROWS = ['1','2','3','4','5','6','7','8'];
-const FAQ_ITEMS = ['1','2','3','4','5','6','7','8'];
-const ENV_ROWS = [
-  { name:'SPEED_HISTORY',      type:'env.kv',     desc:'env.kv.d',     opt:true },
-  { name:'MONITOR_ADMIN_KEY',  type:'env.secret', desc:'env.secret.d', opt:true },
-  { name:'ALLOWED_ORIGINS',    type:'env.var',    desc:'env.var.d',    opt:true },
-  { name:'Cron Triggers',      type:'env.cron',   desc:'env.cron.d',   opt:true }
-];
-const DOC_LINKS = [
-  { file:'README.md',            icon:'i-doc',    k:'readme'   },
-  { file:'CONTRIBUTING.md',      icon:'i-doc',    k:'contrib'  },
-  { file:'SECURITY.md',          icon:'i-shield', k:'security' },
-  { file:'CODE_OF_CONDUCT.md',   icon:'i-check',  k:'coc'      }
-];
-const COST_CLASS = { zero:'zero', egress:'exit', opt:'exit', heavy:'heavy' };
-
-/* ============================================================================
-   渲染与交互
-   ============================================================================ */
-const $ = (s, r = document) => r.querySelector(s);
-const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
-const esc = (s) => String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
-const icon = (id, cls) => '<svg' + (cls ? ' class="' + cls + '"' : '') + '><use href="#' + id + '"/></svg>';
-/* 重新触发一次性动画（先移除类并强制重排） */
-const flash = (el) => { if (!el) return; el.classList.remove('swap'); void el.offsetWidth; el.classList.add('swap'); };
-
-let LANG = 'zh-CN';
-let FILTER = 'all';
-let PANE = 0;
-const t = (k) => (I18N[LANG] && I18N[LANG][k]) || (I18N['en'] && I18N['en'][k]) || k;
-
-function renderHighlights() {
-  $('#highlightGrid').innerHTML = HIGHLIGHTS.map((h, i) => `
-    <article class="hi panel reveal" style="--d:${i * 55}ms">
-      <div class="tile">${icon(h.icon)}</div>
-      <h3>${esc(t('hi.' + h.k + '.t'))}</h3>
-      <p>${esc(t('hi.' + h.k + '.d'))}</p>
-    </article>`).join('');
-}
-
-function renderFilters() {
-  const items = [{ k:'all', label:t('filter.all') }].concat(GROUPS.map(g => ({ k:g.k, label:t('grp.' + g.k) })));
-  $('#filters').innerHTML = items.map(i =>
-    `<button data-f="${i.k}" class="${i.k === FILTER ? 'active' : ''}">${esc(i.label)}</button>`).join('');
-  $$('#filters button').forEach(b => b.addEventListener('click', () => {
-    FILTER = b.dataset.f; renderFilters(); renderTools();
-  }));
-}
-
-function renderTools() {
-  const html = GROUPS.filter(g => FILTER === 'all' || g.k === FILTER).map((g, gi) => {
-    const list = TOOLS.filter(x => x.g === g.k);
-    if (!list.length) return '';
-    return `<div class="tgroup reveal" style="--d:${gi * 70}ms">
-      <div class="tg-head">${icon(g.icon)}<span>${esc(t('grp.' + g.k))}</span><span class="cnt">${list.length}</span></div>
-      <div class="tgrid">${list.map((x, i) => `
-        <article class="tcard" style="--i:${i}">
-          <span class="ic">${icon(x.icon)}</span>
-          <div>
-            <div class="nm">${esc(t('t.' + x.k))} <span class="tag ${COST_CLASS[x.cost]}">${esc(t('cost.' + x.cost))}</span></div>
-            <div class="ds">${esc(t('d.' + x.k))}</div>
-          </div>
-        </article>`).join('')}</div>
-    </div>`;
-  }).join('');
-  $('#toolGroups').innerHTML = html;
-  observeReveals();   // 换分组 / 换语言后重新绑定入场动画
-}
-
-function renderShowcase() {
-  const tabs = [
-    { k:'tab.tools', title:'ui.tabTools', cap:'shot.capTools' },
-    { k:'tab.modal', title:'ui.tabModal', cap:'shot.capModal' },
-    { k:'tab.quality', title:'ui.tabQuality', cap:'shot.capQuality' }
-  ];
-  $('#showTabs').innerHTML = tabs.map((x, i) =>
-    `<button data-p="${i}" class="${i === PANE ? 'active' : ''}">${esc(t(x.k))}</button>`).join('');
-  $$('#showTabs button').forEach(b => b.addEventListener('click', () => {
-    PANE = +b.dataset.p;
-    $$('#showTabs button').forEach(x => x.classList.toggle('active', x === b));
-    $$('.pane').forEach((p, i) => p.classList.toggle('on', i === PANE));
-    $('#shotTitle').textContent = t(tabs[PANE].title);
-    $('#shotCap').textContent = t(tabs[PANE].cap);
-    flash($('#shotTitle')); flash($('#shotCap'));
-  }));
-  $('#shotTitle').textContent = t(tabs[PANE].title);
-  $('#shotCap').textContent = t(tabs[PANE].cap);
-}
-
-function renderPrivacy() {
-  $('#privTable').innerHTML = PRIV_ROWS.map(n =>
-    `<tr><td>${esc(t('priv.' + n + '.k'))}</td><td>${esc(t('priv.' + n + '.v'))}</td></tr>`).join('');
-}
-
-function renderSecurity() {
-  $('#secList').innerHTML = SEC_ROWS.map(n => `
-    <li><span class="tick">${icon('i-check')}</span><span><b>${esc(t('sec.' + n + '.t'))}</b> · ${esc(t('sec.' + n + '.d'))}</span></li>`).join('');
-}
-
-function renderSteps() {
-  $('#stepList').innerHTML = ['1','2','3'].map((n, i) => `
-    <div class="step panel reveal" style="--d:${i * 90}ms">
-      <span class="no">STEP ${n}</span>
-      <h4>${esc(t('dep.s' + n + '.t'))}</h4>
-      <p>${esc(t('dep.s' + n + '.d'))}</p>
-    </div>`).join('');
-}
-
-function renderEnv() {
-  $('#envTable').innerHTML = `
-    <thead><tr><th>${esc(t('env.name'))}</th><th>${esc(t('env.type'))}</th><th>${esc(t('env.purpose'))}</th></tr></thead>
-    <tbody>${ENV_ROWS.map(r => `
-      <tr>
-        <td>${esc(r.name)}${r.opt ? '<span class="opt">' + esc(t('opt')) + '</span>' : ''}</td>
-        <td>${esc(t(r.type))}</td>
-        <td>${esc(t(r.desc))}</td>
-      </tr>`).join('')}</tbody>`;
-}
-
-/* 手风琴：用 .acc 的 0fr↔1fr 做高度过渡，收起时延迟移除 open 才看得到折叠过程 */
-function initAccordion(root) {
-  $$('details', root || document).forEach(d => {
-    const sum = $('summary', d), acc = $('.acc', d);
-    if (!sum || !acc) return;
-    let closing = 0;
-    sum.addEventListener('click', (e) => {
-      e.preventDefault();
-      clearTimeout(closing);
-      if (d.open) {
-        acc.classList.remove('on');
-        closing = setTimeout(() => { d.open = false; }, 460);
-      } else {
-        d.open = true;
-        void acc.offsetHeight;                      // 强制先算出 0fr 起始态，再打开才能看到过渡
-        acc.classList.add('on');
+  /* ---------- 导航 ---------- */
+  var nav = $('#nav'), progress = $('#progress');
+  var navLinks = $$('#navLinks a');
+  var sections = navLinks.map(function(a){ return $(a.getAttribute('href')); });
+  var raf = 0;
+  function onScroll(){
+    if (raf) return;
+    raf = requestAnimationFrame(function(){
+      raf = 0;
+      var y = window.scrollY || 0;
+      if (nav) nav.classList.toggle('scrolled', y > 10);
+      if (progress) {
+        var max = Math.max(1, root.scrollHeight - window.innerHeight);
+        progress.querySelector('i').style.transform = 'scaleX(' + Math.min(1, Math.max(0, y / max)) + ')';
+        progress.classList.toggle('on', y > 30);
       }
+      var current = null;
+      sections.forEach(function(s){ if (s && s.getBoundingClientRect().top <= window.innerHeight * 0.35) current = s; });
+      navLinks.forEach(function(a, i){ a.classList.toggle('active', !!current && sections[i] === current); });
+    });
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  window.addEventListener('resize', onScroll, { passive: true });
+  onScroll();
+
+  var menuBtn = $('#menuBtn'), navLinksEl = $('#navLinks'), menuIcon = $('#menuIcon');
+  if (menuBtn) menuBtn.addEventListener('click', function(){
+    var open = navLinksEl.classList.toggle('open');
+    menuBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (menuIcon) menuIcon.setAttribute('href', open ? '#i-close' : '#i-menu');
+  });
+  navLinks.forEach(function(a){ a.addEventListener('click', function(){
+    if (navLinksEl) navLinksEl.classList.remove('open');
+    if (menuBtn) menuBtn.setAttribute('aria-expanded', 'false');
+    if (menuIcon) menuIcon.setAttribute('href', '#i-menu');
+  }); });
+
+  /* ---------- 入场动画 ---------- */
+  var io = null;
+  if (!reduceMotion && 'IntersectionObserver' in window) {
+    io = new IntersectionObserver(function(entries){
+      entries.forEach(function(en){
+        if (!en.isIntersecting) return;
+        en.target.classList.add('in');
+        io.unobserve(en.target);
+      });
+    }, { threshold: .12, rootMargin: '0px 0px -6% 0px' });
+    $$('.reveal').forEach(function(el){ io.observe(el); });
+  } else {
+    $$('.reveal').forEach(function(el){ el.classList.add('in'); });
+  }
+
+  /* ---------- 数字计数 ---------- */
+  function animateCount(el){
+    var target = parseInt(el.getAttribute('data-count') || '0', 10);
+    var start = performance.now(), dur = 1100;
+    if (reduceMotion) { el.textContent = String(target); return; }
+    function step(now){
+      var p = Math.min(1, (now - start) / dur);
+      var eased = 1 - Math.pow(1 - p, 3);
+      el.textContent = String(Math.round(target * eased));
+      if (p < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+  var counted = false;
+  if ('IntersectionObserver' in window) {
+    var counterIO = new IntersectionObserver(function(entries){
+      entries.forEach(function(en){
+        if (en.isIntersecting && !counted) {
+          counted = true;
+          $$('[data-count]').forEach(animateCount);
+          counterIO.disconnect();
+        }
+      });
+    }, { threshold: .3 });
+    var statsSection = $('.stats');
+    if (statsSection) counterIO.observe(statsSection);
+  } else {
+    $$('[data-count]').forEach(animateCount);
+  }
+
+  /* ---------- 高光跟随 ---------- */
+  $$('[data-spotlight]').forEach(function(card){
+    card.addEventListener('pointermove', function(e){
+      var r = card.getBoundingClientRect();
+      card.style.setProperty('--mx', (e.clientX - r.left) + 'px');
+      card.style.setProperty('--my', (e.clientY - r.top) + 'px');
     });
   });
-}
 
-function renderFaq() {
-  $('#faqList').innerHTML = FAQ_ITEMS.map((n, i) => `
-    <details class="reveal" style="--d:${i * 45}ms">
-      <summary>${esc(t('faq.' + n + '.q'))}</summary>
-      <div class="acc"><div class="acc-in"><p>${esc(t('faq.' + n + '.a'))}</p></div></div>
-    </details>`).join('');
-  initAccordion($('#faqList'));
-}
-
-function renderDocs() {
-  $('#docLinks').innerHTML = DOC_LINKS.map((d, i) => `
-    <a class="doclink reveal" style="--d:${i * 70}ms" href="${REPO_URL}/blob/main/${d.file}" target="_blank" rel="noopener">
-      ${icon(d.icon)}
-      <span>${esc(t('doc.' + d.k))}<small>${esc(t('doc.' + d.k + '.d'))}</small></span>
-    </a>`).join('') + `
-    <a class="doclink reveal" style="--d:${DOC_LINKS.length * 70}ms" href="${REPO_URL}/blob/main/LICENSE" target="_blank" rel="noopener">
-      ${icon('i-lock')}<span>LICENSE<small>GNU AGPL-3.0</small></span>
-    </a>`;
-}
-
-function renderFooter() {
-  $('#footLine').textContent = t('foot.line');
-  $('#footLinks').innerHTML =
-    `<a href="#tools">${esc(t('nav.tools'))}</a>
-     <a href="#ui">${esc(t('nav.ui'))}</a>
-     <a href="#deploy">${esc(t('nav.deploy'))}</a>
-     <a href="${REPO_URL}" target="_blank" rel="noopener">GitHub</a>
-     <a href="mailto:${CONTACT}">${esc(t('foot.contact'))}${CONTACT}</a>`;
-}
-
-/* 语言应用：静态节点用 data-i18n / data-i18n-html，动态区块整体重渲染 */
-function applyLang(lang) {
-  if (!I18N[lang]) lang = 'zh-CN';
-  LANG = lang;
-  document.documentElement.lang = lang;
-  $$('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
-  $$('[data-i18n-html]').forEach(el => { el.innerHTML = t(el.dataset.i18nHtml); });
-  $$('#langsw button').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
-  renderHighlights(); renderFilters(); renderTools(); renderShowcase();
-  renderPrivacy(); renderSecurity(); renderSteps(); renderEnv(); renderFaq();
-  renderDocs(); renderFooter();
-  observeReveals();
-  try { localStorage.setItem('ns-lang', lang); } catch (e) {}
-}
-
-/* ==================== 主题（auto / dark / light，与应用一致） ==================== */
-const THEME_ORDER = ['auto', 'dark', 'light'];
-const THEME_ICON = { auto:'i-auto', dark:'i-sun', light:'i-moon' };
-let theme = 'auto';
-function applyTheme(mode) {
-  theme = THEME_ORDER.includes(mode) ? mode : 'auto';
-  const html = document.documentElement;
-  const dark = theme === 'dark' || (theme === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
-  if (dark) html.removeAttribute('data-theme'); else html.setAttribute('data-theme', 'light');
-  const mi = $('#themeIcon');
-  if (mi) mi.innerHTML = '<use href="#' + THEME_ICON[theme] + '"/>';
-  const btn = $('#themeBtn');
-  if (btn) btn.title = 'Theme: ' + theme;
-  const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.setAttribute('content', dark ? '#0a0b0d' : '#f4f5f6');
-  try { localStorage.setItem('ns-theme', theme); } catch (e) {}
-}
-
-/* ==================== 入场动画 / 数字滚动 / 导航 ==================== */
-let io = null;
-let sweepCounters = null;
-
-/* 入场过渡结束后交回常规过渡，避免 --d 错峰延时影响 hover 反馈 */
-function releaseReveal(el) {
-  if (el.classList.contains('rv-done')) return;
-  let done = false;
-  const finish = () => {
-    if (done) return;
-    done = true;
-    el.removeEventListener('transitionend', onEnd);
-    el.classList.add('rv-done');
-  };
-  const onEnd = (e) => {
-    if (e.target === el && (e.propertyName === 'opacity' || e.propertyName === 'transform')) finish();
-  };
-  el.addEventListener('transitionend', onEnd);
-  setTimeout(finish, 1500);   // 兜底：过渡被禁用 / 元素不可见时
-}
-
-function observeReveals() {
-  if (!('IntersectionObserver' in window)) {
-    $$('.reveal').forEach(el => { el.classList.add('in'); el.classList.add('rv-done'); });
-    return;
+  /* ---------- Canvas 工具 ---------- */
+  function cssVar(name, fallback){
+    var v = getComputedStyle(root).getPropertyValue(name).trim();
+    return v || fallback;
   }
-  if (!io) {
-    io = new IntersectionObserver(es => es.forEach(e => {
-      if (!e.isIntersecting) return;
-      e.target.classList.add('in');
-      releaseReveal(e.target);
-      io.unobserve(e.target);
-    }), { threshold:.12, rootMargin:'0px 0px -40px 0px' });
+  function setupCanvas(canvas){
+    if (!canvas) return null;
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var rect = canvas.getBoundingClientRect();
+    if (!rect.width) return null;
+    canvas.width = Math.round(rect.width * dpr);
+    canvas.height = Math.round(rect.height * dpr);
+    var ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { ctx: ctx, w: rect.width, h: rect.height };
   }
-  $$('.reveal:not(.in)').forEach(el => io.observe(el));
-}
-
-function initCounters() {
-  const nodes = $$('[data-count]');
-  if (!('IntersectionObserver' in window)) { nodes.forEach(n => n.textContent = n.dataset.count); return; }
-  const pending = new Set(nodes);
-  let co;
-  const settle = (el) => { pending.delete(el); el.textContent = el.dataset.count; co.unobserve(el); };
-  co = new IntersectionObserver(es => es.forEach(e => {
-    if (!e.isIntersecting) {
-      if (e.boundingClientRect.top < 0) settle(e.target);   // 已经滚过头
-      return;
+  function makeSeries(n, base, amp){
+    var arr = [], v = base;
+    var seed = Math.random() * 100;
+    for (var i = 0; i < n; i++) {
+      seed += .55;
+      v += (Math.sin(seed) * amp) + (Math.random() - .5) * amp * .9;
+      v = Math.max(base * .55, Math.min(base * 1.9, v));
+      arr.push(v);
     }
-    const el = e.target, target = +el.dataset.count, t0 = performance.now();
-    (function step(now) {
-      const p = Math.min(1, (now - t0) / 900);
-      el.textContent = Math.round(target * (1 - Math.pow(1 - p, 3)));
-      if (p < 1) requestAnimationFrame(step);
-    })(t0);
-    pending.delete(el); co.unobserve(el);
-  }), { threshold:.4 });
-  nodes.forEach(n => co.observe(n));
-  /* 锚点瞬移会整个跳过数字带（IO 不触发），滚动时补一次结算 */
-  sweepCounters = () => { if (!pending.size) return; pending.forEach(el => { if (el.getBoundingClientRect().top < 0) settle(el); }); };
-}
-
-/* 导航：收起状态、阅读进度条、当前分区高亮，统一在 rAF 里做 */
-function initNav() {
-  const nav = $('#nav'), prog = $('#progress');
-  const links = $$('.navlinks a');
-  const secs = links.map(a => $(a.getAttribute('href')));
-  let raf = 0;
-  const apply = () => {
-    raf = 0;
-    const y = scrollY || 0;
-    nav.classList.toggle('scrolled', y > 12);
-    if (prog) {
-      const max = Math.max(1, document.documentElement.scrollHeight - innerHeight);
-      prog.style.transform = 'scaleX(' + Math.min(1, Math.max(0, y / max)) + ')';
-      prog.classList.toggle('on', y > 40);
+    return arr;
+  }
+  function smoothPath(ctx, pts){
+    ctx.beginPath();
+    for (var i = 0; i < pts.length; i++) {
+      var p = pts[i], prev = pts[i - 1];
+      if (i === 0) { ctx.moveTo(p.x, p.y); continue; }
+      var cx = (prev.x + p.x) / 2;
+      ctx.bezierCurveTo(cx, prev.y, cx, p.y, p.x, p.y);
     }
-    let cur = null;
-    secs.forEach(s => { if (s && s.getBoundingClientRect().top <= innerHeight * 0.34) cur = s; });
-    links.forEach((a, i) => a.classList.toggle('active', !!cur && secs[i] === cur));
-    if (sweepCounters) sweepCounters();
-  };
-  const onScroll = () => { if (!raf) raf = requestAnimationFrame(apply); };
-  apply();
-  addEventListener('scroll', onScroll, { passive:true });
-  addEventListener('resize', onScroll, { passive:true });
-}
+  }
+  function drawLineChart(canvas, data, opts){
+    if (!canvas || !data || data.length < 2) return;
+    var c = setupCanvas(canvas);
+    if (!c) return;
+    var ctx = c.ctx, w = c.w, h = c.h;
+    var padX = 4, padTop = 10, padBottom = 8;
+    var min = Math.min.apply(null, data), max = Math.max.apply(null, data);
+    var span = Math.max(1, max - min);
+    var pts = data.map(function(v, i){
+      return {
+        x: padX + (i / (data.length - 1)) * (w - padX * 2),
+        y: padTop + (1 - (v - min) / span) * (h - padTop - padBottom)
+      };
+    });
+    ctx.clearRect(0, 0, w, h);
+    var line = cssVar('--g2', '#64d2ff');
+    var blue = cssVar('--g1', '#0a84ff');
+    var grad = ctx.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, 'rgba(100,210,255,.28)');
+    grad.addColorStop(1, 'rgba(10,132,255,0)');
+    smoothPath(ctx, pts);
+    ctx.lineTo(pts[pts.length - 1].x, h);
+    ctx.lineTo(pts[0].x, h);
+    ctx.closePath();
+    ctx.fillStyle = grad;
+    ctx.fill();
+    smoothPath(ctx, pts);
+    var stroke = ctx.createLinearGradient(0, 0, w, 0);
+    stroke.addColorStop(0, blue);
+    stroke.addColorStop(1, line);
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = (opts && opts.weight) || 2;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+    var last = pts[pts.length - 1];
+    ctx.beginPath();
+    ctx.arc(last.x - 1, last.y, 3.2, 0, Math.PI * 2);
+    ctx.fillStyle = line;
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(last.x - 1, last.y, 7, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(100,210,255,.14)';
+    ctx.fill();
+  }
 
-function initCopy() {
-  const btn = $('#copyBtn');
-  if (!btn) return;
-  btn.addEventListener('click', async () => {
-    const txt = $('#code').innerText;
-    try { await navigator.clipboard.writeText(txt); } catch (e) {}
-    btn.textContent = LANG === 'en' ? 'Copied ✓' : '已复制 ✓';
-    btn.classList.add('ok');
-    setTimeout(() => { btn.textContent = t('dep.copy'); btn.classList.remove('ok'); }, 1600);
+  /* ---------- 首屏仪表盘 ---------- */
+  var heroData = makeSeries(64, 24, 5.5);
+  var heroChart = $('#heroChart');
+  function drawHeroChart(){
+    drawLineChart(heroChart, heroData, { weight: 2.2 });
+  }
+  drawHeroChart();
+  if (!reduceMotion) {
+    setInterval(function(){
+      heroData.shift();
+      var last = heroData[heroData.length - 1];
+      heroData.push(Math.max(9, Math.min(46, last + (Math.random() - .5) * 8)));
+      drawHeroChart();
+      var rtt = $('#heroRtt');
+      if (rtt) rtt.textContent = String(Math.round(heroData[heroData.length - 1]));
+      var jitter = $('#heroJitter');
+      if (jitter) jitter.textContent = (Math.random() * 2.4 + .6).toFixed(1);
+      var samples = $('#heroSamples');
+      if (samples) samples.textContent = String(128 + Math.floor(Math.random() * 26));
+    }, 2600);
+  }
+  window.addEventListener('resize', function(){
+    drawHeroChart();
+    drawPaneChart();
+    drawSpark();
   });
-}
 
-/* ==================== 启动 ==================== */
-(function boot() {
-  const savedLang = (() => { try { return localStorage.getItem('ns-lang'); } catch (e) { return null; } })();
-  const nav = (navigator.languages || [navigator.language || '']).map(l => String(l).toLowerCase());
-  let lang = savedLang;
-  if (!lang || !I18N[lang]) {
-    lang = 'en';
-    for (const l of nav) {
-      if (/^zh-(cn|sg|my|hans)/.test(l)) { lang = 'zh-CN'; break; }
-      if (/^zh/.test(l)) { lang = 'zh-TW'; break; }
-      if (/^en/.test(l)) { lang = 'en'; break; }
+  /* ---------- 迷你折线 / 环 ---------- */
+  var cardSpark = $('#cardSpark');
+  function drawSpark(){
+    if (!cardSpark) return;
+    drawLineChart(cardSpark, makeSeries(40, 20, 4), { weight: 1.6 });
+  }
+  drawSpark();
+
+  var ringFg = document.querySelector('.ring .fg');
+  if (ringFg) {
+    setTimeout(function(){ ringFg.style.strokeDashoffset = '46'; }, 700);
+  }
+
+  /* ---------- 演示标签 ---------- */
+  var tabs = $$('.show-tabs button');
+  var panes = $$('.pane');
+  var currentTab = 'live';
+  function activateTab(key){
+    currentTab = key;
+    tabs.forEach(function(b){
+      var on = b.getAttribute('data-tab') === key;
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    panes.forEach(function(p){ p.classList.toggle('on', p.id === 'pane-' + key); });
+    if (key === 'live') { paneData = makeSeries(56, 22, 6); drawPaneChart(); }
+    if (key === 'speed') animateSpeed();
+    if (key === 'dns') animateDns(true);
+    if (key === 'monitor') animateMonitor(true);
+  }
+  tabs.forEach(function(b){ b.addEventListener('click', function(){ activateTab(b.getAttribute('data-tab')); }); });
+
+  /* ---------- 实时监控面板 ---------- */
+  var paneData = makeSeries(56, 22, 6);
+  var paneChart = $('#paneChart');
+  function drawPaneChart(){
+    if (!paneData || paneData.length < 2) return;
+    drawLineChart(paneChart, paneData, { weight: 2 });
+    var rtt = paneData[paneData.length - 1];
+    var el = $('#liveRtt');
+    if (el) el.textContent = String(Math.round(rtt));
+    var jitterEl = $('#liveJitter');
+    if (jitterEl) jitterEl.textContent = (Math.abs(paneData[paneData.length - 1] - paneData[paneData.length - 2])).toFixed(1);
+  }
+  drawPaneChart();
+  if (!reduceMotion) {
+    setInterval(function(){
+      if (currentTab !== 'live') return;
+      paneData.shift();
+      var last = paneData[paneData.length - 1];
+      paneData.push(Math.max(10, Math.min(44, last + (Math.random() - .5) * 7)));
+      drawPaneChart();
+      var loss = $('#liveLoss');
+      if (loss) loss.textContent = (Math.random() < .82 ? '0' : String(Math.floor(Math.random() * 3))) + '%';
+      var samples = $('#liveSamples');
+      if (samples) samples.textContent = String(128 + Math.floor(Math.random() * 40));
+    }, 2400);
+  }
+
+  /* ---------- 测速环 ---------- */
+  var gaugeValue = $('#gaugeValue');
+  function animateSpeed(){
+    var target = 238 + Math.floor(Math.random() * 58);
+    var el = $('#speedNum');
+    var median = $('#speedMedian');
+    var ttfb = $('#speedTtfb');
+    var std = $('#speedStd');
+    if (gaugeValue) {
+      var maxOffset = 408, ratio = Math.min(1, target / 420);
+      gaugeValue.style.strokeDashoffset = String(maxOffset - maxOffset * ratio);
+    }
+    if (el) {
+      if (reduceMotion) { el.textContent = String(target); }
+      else {
+        var start = performance.now();
+        (function step(now){
+          var p = Math.min(1, (now - start) / 1400);
+          el.textContent = String(Math.round(target * (1 - Math.pow(1 - p, 3))));
+          if (p < 1) requestAnimationFrame(step);
+        })(start);
+      }
+    }
+    if (median) median.textContent = String(target - Math.floor(Math.random() * 16));
+    if (ttfb) ttfb.textContent = String(28 + Math.floor(Math.random() * 22));
+    if (std) std.textContent = (Math.random() * 9 + 6).toFixed(1);
+  }
+  var speedRun = $('#speedRun');
+  if (speedRun) speedRun.addEventListener('click', animateSpeed);
+
+  /* ---------- DNS 对比 ---------- */
+  var dnsResolvers = [
+    { name: 'Cloudflare', dnssec: true },
+    { name: 'Google', dnssec: true },
+    { name: 'Quad9', dnssec: true },
+    { name: 'AdGuard', dnssec: true },
+    { name: 'DNS.SB', dnssec: true },
+    { name: 'AliDNS', dnssec: false }
+  ];
+  var dnsRows = $('#dnsRows');
+  function buildDnsRows(){
+    if (!dnsRows) return;
+    dnsRows.innerHTML = dnsResolvers.map(function(r){
+      return '<div class="dns-row"><span class="nm">' + r.name + (r.dnssec ? ' <span class="dnssec">AD</span>' : '') + '</span>' +
+        '<span class="track"><i class="fill"></i></span><span class="ms"></span></div>';
+    }).join('');
+  }
+  function animateDns(force){
+    if (!dnsRows) return;
+    var rows = $$('.dns-row', dnsRows);
+    rows.forEach(function(row, i){
+      var ms = 8 + Math.floor(Math.random() * 34);
+      var fill = row.querySelector('.fill'), label = row.querySelector('.ms');
+      if (force) fill.style.width = '0';
+      setTimeout(function(){
+        fill.style.width = Math.min(100, 90 - ms * 1.4) + '%';
+        label.textContent = ms + ' ms';
+      }, 80 + i * 70);
+    });
+  }
+  buildDnsRows();
+  var dnsRun = $('#dnsRun');
+  if (dnsRun) dnsRun.addEventListener('click', function(){ animateDns(true); });
+
+  /* ---------- 站点监控 ---------- */
+  function buildUptime(el, count){
+    if (!el) return;
+    var html = '';
+    for (var i = 0; i < count; i++) {
+      var rand = Math.random();
+      var cls = rand < .04 ? 'down' : (rand < .1 ? 'warn' : '');
+      html += '<i class="' + cls + '" style="opacity:' + (.28 + Math.random() * .4).toFixed(2) + ';height:' + (45 + Math.random() * 55).toFixed(0) + '%"></i>';
+    }
+    el.innerHTML = html;
+  }
+  buildUptime($('#bentoUptime'), 48);
+  buildUptime($('#monitorUptime'), 42);
+  function animateMonitor(force){
+    var el = $('#monitorUptime');
+    if (!el) return;
+    buildUptime(el, 42);
+    if (force) {
+      $$('i', el).forEach(function(bar, i){
+        bar.style.transform = 'scaleY(.2)';
+        setTimeout(function(){ bar.style.transform = 'scaleY(1)'; }, 60 + i * 12);
+      });
     }
   }
-  const savedTheme = (() => { try { return localStorage.getItem('ns-theme'); } catch (e) { return null; } })();
-  applyTheme(savedTheme || 'auto');
-  applyLang(lang);
+  var monitorRun = $('#monitorRun');
+  if (monitorRun) monitorRun.addEventListener('click', function(){ animateMonitor(true); });
 
-  $$('#langsw button').forEach(b => b.addEventListener('click', () => applyLang(b.dataset.lang)));
-  let themeTimer = 0;
-  $('#themeBtn').addEventListener('click', () => {
-    const html = document.documentElement, btn = $('#themeBtn');
-    html.classList.add('theme-x');                       // 短暂开启整页颜色过渡
-    applyTheme(THEME_ORDER[(THEME_ORDER.indexOf(theme) + 1) % THEME_ORDER.length]);
-    clearTimeout(themeTimer);
-    themeTimer = setTimeout(() => html.classList.remove('theme-x'), 420);
-    if (btn) { btn.classList.remove('spin'); void btn.offsetWidth; btn.classList.add('spin'); }
+  /* ---------- 语言切换演示 ---------- */
+  var langCopy = {
+    'zh-CN': ['把网络诊断，装进一个 Worker 文件。', '实时延迟 · 带宽测速 · DNS 对比 · 域名体检 · 站点监控'],
+    'zh-TW': ['把網路診斷，裝進一個 Worker 檔案。', '即時延遲 · 頻寬測速 · DNS 對比 · 網域健檢 · 站點監控'],
+    'en': ['Network diagnostics, inside a single Worker file.', 'Live latency · Bandwidth · DNS compare · Domain audit · Monitoring'],
+    'ja': ['ネットワーク診断を、1 つの Worker ファイルに。', 'リアルタイム遅延 · 帯域測定 · DNS 比較 · ドメイン監査 · 監視'],
+    'ko': ['네트워크 진단을 단일 Worker 파일에 담았습니다.', '실시간 지연 · 대역폭 · DNS 비교 · 도메인 점검 · 모니터링'],
+    'es': ['Diagnóstico de red, dentro de un único archivo Worker.', 'Latencia en vivo · Velocidad · Comparación DNS · Auditoría · Monitoreo']
+  };
+  var langPills = $('#langPills');
+  if (langPills) {
+    langPills.addEventListener('click', function(e){
+      var btn = e.target.closest('button');
+      if (!btn) return;
+      var lang = btn.getAttribute('data-lang');
+      $$('button', langPills).forEach(function(b){ b.classList.toggle('on', b === btn); });
+      var line = $('#i18nLine'), sub = $('#i18nSub');
+      if (!line) return;
+      line.classList.add('swap');
+      setTimeout(function(){
+        line.textContent = langCopy[lang][0];
+        if (sub) sub.textContent = langCopy[lang][1];
+        line.classList.remove('swap');
+      }, 180);
+    });
+  }
+
+  /* ---------- 复制 ---------- */
+  function copyText(text, btn, reset){
+    function done(){
+      if (!btn) return;
+      var old = btn.textContent;
+      btn.textContent = '已复制 ✓';
+      setTimeout(function(){ btn.textContent = old; }, 1600);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, function(){});
+    } else {
+      try {
+        var ta = document.createElement('textarea');
+        ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+        document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+        done();
+      } catch (e) {}
+    }
+  }
+  var copyCode = $('#copyCode');
+  if (copyCode) copyCode.addEventListener('click', function(){
+    var block = $('#codeBlock');
+    copyText(block ? block.innerText : '', copyCode);
   });
-  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (theme === 'auto') applyTheme('auto'); });
+  var copyCmd = $('#copyCmd');
+  if (copyCmd) copyCmd.addEventListener('click', function(){
+    var cmd = $('#deployCommand');
+    copyText(cmd ? cmd.textContent : '', copyCmd);
+  });
 
-  initCounters(); initNav(); initCopy();
+  /* ---------- 英雄区视差 ---------- */
+  var heroVisual = $('#heroVisual'), heroCopy = $('#heroCopy');
+  if (!reduceMotion && heroVisual && window.matchMedia('(pointer:fine)').matches) {
+    var targetX = 0, targetY = 0, curX = 0, curY = 0, ticking = false;
+    document.addEventListener('pointermove', function(e){
+      var cx = (e.clientX / window.innerWidth - .5) * 2;
+      var cy = (e.clientY / window.innerHeight - .5) * 2;
+      targetX = cx * 10; targetY = cy * 8;
+      if (!ticking) { ticking = true; requestAnimationFrame(loop); }
+    }, { passive: true });
+    function loop(){
+      curX += (targetX - curX) * .08;
+      curY += (targetY - curY) * .08;
+      heroVisual.style.transform = 'translate3d(' + curX.toFixed(2) + 'px,' + curY.toFixed(2) + 'px,0)';
+      if (heroCopy) heroCopy.style.transform = 'translate3d(' + (curX * -.35).toFixed(2) + 'px,' + (curY * -.35).toFixed(2) + 'px,0)';
+      if (Math.abs(targetX - curX) > .1 || Math.abs(targetY - curY) > .1) requestAnimationFrame(loop);
+      else ticking = false;
+    }
+  }
 
-  // 文档标题与描述跟随语言
-  const TITLES = {
-    'zh-CN': ['NetSight Pro · 边缘网络诊断工具', '单文件 Cloudflare Worker：23 项诊断工具、三语界面、零构建、零依赖、默认零出站。AGPL-3.0 开源。'],
-    'zh-TW': ['NetSight Pro · 邊緣網路診斷工具', '單檔 Cloudflare Worker：23 項診斷工具、三語介面、零建置、零依賴、預設零出站。AGPL-3.0 開源。'],
-    'en':    ['NetSight Pro · Edge network diagnostics', 'A single-file Cloudflare Worker with 23 diagnostic tools, trilingual UI, no build step, no dependencies and zero egress by default. AGPL-3.0.']
-  };
-  const setMeta = () => {
-    const m = TITLES[LANG] || TITLES.en;
-    document.title = m[0];
-    const d = document.querySelector('meta[name="description"]');
-    if (d) d.setAttribute('content', m[1]);
-  };
-  setMeta();
-  new MutationObserver(setMeta).observe(document.documentElement, { attributes:true, attributeFilter:['lang'] });
+  /* ---------- 主题切换时重绘 ---------- */
+  if (window.matchMedia) {
+    var scheme = window.matchMedia('(prefers-color-scheme: light)');
+    var onScheme = function(){ var saved = null; try { saved = localStorage.getItem('netsight-theme'); } catch (e) {} if (!saved) setTheme(scheme.matches ? 'light' : 'dark', false); };
+    if (scheme.addEventListener) scheme.addEventListener('change', onScheme);
+  }
 })();
 </script>
 </body>
