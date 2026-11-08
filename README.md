@@ -842,7 +842,7 @@ A：精准模式为 4 个尺寸 × 3 轮，用于降低噪声；日常使用快�
 ### 联系
 
 - 仓库：<https://github.com/BlueDriftHK/CF-workers-netdiag>
-- 邮箱：<admin@bjhr.space>
+- 邮箱：<asiacomk@gmail.com>
 - 版本：**5.1.0**
 
 ---
