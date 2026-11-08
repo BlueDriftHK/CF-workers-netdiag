@@ -1,641 +1,628 @@
-# 贡献指南 · Contributing to NetSight Pro / CF-workers-netdiag
+# 贡献指南（Contributing to NetSight Pro）
 
-**适用版本**：v4.7.x（`_workers.js` 单文件 Cloudflare Worker + PWA 前端）
-**代码许可**：GNU AGPL-3.0 · **本文档许可**：CC BY 4.0
-**行为规范**：参与本项目即表示你同意 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
-**本文档版本**：v1.0 · 最近更新：`<待填：2026-10-16>`
+**版本：5.1.0** · 最后更新：2026-11-08
 
-> **一句话**：先讨论再动手；一次 PR 只做一件事；不要削弱"零出站 / KV 写入预算 / 安全默认值"这三条取舍。
->
-> **English summary** — This project is a single-file Cloudflare Worker with an inline PWA front-end, no build step and no runtime dependencies. Contributions are welcome for bug fixes, diagnostics, translations (en / zh-CN / zh-TW) and docs. Before coding: open an issue for anything that touches endpoints, rate limits, KV writes, outbound requests, or security defaults. Keep DOM ids stable, add UI strings in all three languages, run `node --check _workers.js` and `wrangler deploy --dry-run`, and estimate the worst-case request/KV-write cost of your change. Contributions are licensed under AGPL-3.0 (inbound = outbound, no CLA).
+感谢你愿意为 NetSight Pro 做出贡献。这个项目从一个 7,000 行的单文件 Worker 起步，逐步长成了现在有模块化源码、构建脚本、测试套件与多语言界面的完整工程。它今天的质量，来自每一位提交 Issue、修 bug、写文档、翻译、做安全研究的人。
+
+本指南会告诉你：**能贡献什么、怎么本地跑起来、代码/测试/翻译/文档有哪些约定、PR 如何被评审、版本如何发布**。读完它，你应该可以独立完成一次符合项目规范的贡献。
+
+> 参与本项目即表示你同意遵守 [贡献者公约（CODE_OF_CONDUCT.md）](CODE_OF_CONDUCT.md)。
+> 安全漏洞请**不要**公开提交 Issue，请阅读 [安全贡献](#安全贡献) 一节。
 
 ---
 
 ## 目录
 
-1. [开始之前](#1-开始之前)
-2. [仓库结构](#2-仓库结构)
-3. [本地开发环境](#3-本地开发环境)
-4. [改代码的规矩](#4-改代码的规矩)
-5. [测试清单（提交前必过）](#5-测试清单提交前必过)
-6. [提交与 PR](#6-提交与-pr)
-7. [版本与发布（维护者）](#7-版本与发布维护者)
-8. [文档与翻译贡献](#8-文档与翻译贡献)
-9. [有问题去哪里问](#9-有问题去哪里问)
-- [附录 A：新增一个诊断工具的骨架](#附录-a新增一个诊断工具的骨架)
-- [附录 B：新增一个 API 端点的骨架](#附录-b新增一个-api-端点的骨架)
-- [附录 C：一页速查（提交前 30 秒）](#附录-c一页速查提交前-30-秒)
+- [你可以贡献什么](#你可以贡献什么)
+- [开始之前](#开始之前)
+- [开发环境](#开发环境)
+- [本地开发流程](#本地开发流程)
+- [代码规范](#代码规范)
+- [提交规范](#提交规范)
+- [Pull Request 指南](#pull-request-指南)
+- [Issue 规范](#issue-规范)
+- [测试指南](#测试指南)
+- [翻译指南](#翻译指南)
+- [文档与展示页贡献](#文档与展示页贡献)
+- [安全贡献](#安全贡献)
+- [发布流程（维护者）](#发布流程维护者)
+- [评审、治理与认可](#评审治理与认可)
+- [常见问题](#常见问题)
+- [English Version](#english-version)
 
 ---
 
-## 1. 开始之前
+## 你可以贡献什么
 
-### 1.1 这个项目是什么
-
-一个**单文件**的 Cloudflare Worker，把"网络诊断工具箱"和它的前端一起装在一个 `.js` 里：Worker 负责少量服务端能力（限流、可选 KV、少量可选出站），前端（内联 CSS/JS，作为 `/app.css`、`/app.js` 由 Worker 提供）负责绝大部分探测——RTT、质量监控、多流测速、WebRTC 检测、可达性探测等都在**你的浏览器**里完成。
-
-它**不是**：不是 SaaS，不带账号体系，不上报数据，不依赖任何前端框架或构建工具，也**不保证**任何服务可用性（公开实例由个人自费部署）。
-
-### 1.2 三条不可协商的取舍
-
-改动前请先理解这三条，它们在 [CODE_OF_CONDUCT.md 第 6 节](CODE_OF_CONDUCT.md#6-本项目特有的技术红线) 有完整说明：
-
-| 取舍 | 含义 | 你要做的事 |
+| 类型 | 具体内容 | 适合谁 |
 |---|---|---|
-| **零出站优先** | 能由浏览器做的探测，不放到 Worker 做 | 新功能先问"浏览器能不能做"；确实要出站则默认关闭 + 缓存 + 超时 |
-| **KV 写入有预算** | 所有 KV 写入经统一闸门（每分钟/每日上限 + 同键去抖） | 用 `kvPut()`，不要直接 `ns.put()`；不要引入 `list` / 批量 `delete` |
-| **安全默认值不可放宽** | CSP、安全头、会话令牌、SSRF 防护、体积上限 | 不要为了让自己的改动"跑通"而放开任何一项 |
+| **Bug 修复** | 复现问题、定位原因、提交修复 + 回归测试 | 所有人 |
+| **新功能** | 新诊断工具、新端点、新告警通道、PWA 改进 | 熟悉项目架构的贡献者 |
+| **测试** | 补充边缘用例、SSRF/令牌/限流/监控断言 | 测试/安全背景优先 |
+| **文档** | README、部署说明、FAQ、架构图、注释 | 写作/运维背景 |
+| **翻译** | 六种界面语言（en / zh-CN / zh-TW / ja / ko / es）的翻译与审校 | 母语/流利使用者 |
+| **设计与前端** | 界面细节、无障碍、动效、展示页 | 设计师/前端 |
+| **安全研究** | 负责任的漏洞披露、威胁建模、安全加固 | 安全研究者 |
+| **部署反馈** | 真实网络环境、不同套餐、不同地区的行为差异 | 用户/运维 |
+| **社区** | 回答问题、整理 Issue、帮助新人、写使用案例 | 所有人 |
 
-### 1.3 贡献类型与入口
-
-| 你想做的事 | 怎么做 |
-|---|---|
-| 报 bug | 用 `.github` 里的 issue 模板；按 [§4.3 脱敏要求](CODE_OF_CONDUCT.md#43-贴日志与数据的脱敏要求) 附证据 |
-| 提新功能 | **先开 issue 讨论**（尤其涉及端点、限流、KV、出站、安全时） |
-| 修 bug / 实现功能 | fork → 分支 → 小步提交 → PR（见第 6 节） |
-| 翻译 / 文案修正 | 直接 PR，务必三语同步（见 [4.8](#48-国际化与本地化)） |
-| 文档改进 | 直接 PR；改动 README 的端点表时请与代码保持一致 |
-| 部署踩坑反馈 | 开 issue，注明托管方式（Workers 直连 / 自定义域 / CI 部署） |
-| **安全漏洞** | **不要开公开 issue**，走私密渠道，见 [SECURITY.md](SECURITY.md) 与 [CoC 第 8 节](CODE_OF_CONDUCT.md#8-安全漏洞与敏感数据上报) |
-
-### 1.4 先搜索、先讨论
-
-- 搜索已有 issue/PR（含**已关闭**的——本项目的取舍类问题经常被反复提出）。
-- 以下改动**必须先有 issue 共识**再动手：
-  - 新增或恢复端点、调整限流阈值、调整 KV 策略
-  - 新增 Worker 出站请求、放宽 SSRF/端口策略
-  - 新增依赖或外链资源
-  - 改版本策略、改端点开关默认值
+**不需要写代码也可以贡献。** 一个高质量的 Bug 报告、一段准确的翻译、一次真实的部署反馈，和一行代码同样重要。
 
 ---
 
-## 2. 仓库结构
+## 开始之前
 
-| 文件 | 作用 | 可否直接改 |
-|---|---|---|
-| `_workers.js` | **唯一权威源文件**：Worker 逻辑 + 内联 CSS + 内联前端 JS + HTML 模板 | ✅ 是主要工作面 |
-| `index.html` | 静态副本 / 展示页（用途 `<待填：请维护者确认>`） | ⚠️ 若与 `_workers.js` 内容重叠，改动需同步，否则会出现"两份代码两种行为" |
-| `README.md` | 项目介绍、端点表、部署说明 | ✅ |
-| `CONTRIBUTING.md` | 本文档 | ✅ |
-| `CODE_OF_CONDUCT.md` | 行为准则 + 工程红线 + 许可与 AGPL 合规说明 | ✅ |
-| `SECURITY.md` | 漏洞披露策略 | ✅ |
-| `LICENSE` | AGPL-3.0 | ❌ 不要改 |
-| `.github/` | issue / PR 模板、Actions（如有） | ✅ |
-| `CNAME` | 自定义域 | ⚠️ 改前确认域名归属 |
+请按顺序完成以下检查，这能帮你节省大量时间：
 
-### 2.1 为什么没有构建步骤
-
-Worker 直接把 `APP_CSS` / `APP_JS` 两个模板字符串作为静态资源返回，前端不打包、不转译。代价是所有前端代码必须写在模板字符串里（见 [4.2 转义陷阱](#42-app_js-模板字符串的三个转义陷阱)），好处是**改一行、推一次就能上线**，没有工具链腐化问题。
-
-### 2.2 代码地图（`_workers.js` 内的分区）
-
-从上到下的主要区块，便于定位：
-
-| 区块 | 内容 |
-|---|---|
-| 常量与安全头 | `CORS_HEADERS`、`SECURITY_HEADERS`、`isSameOriginNavigation`、会话令牌（`issuePageToken` / `getRequestToken` / `isValidPageToken`） |
-| 限流与配额 | `isRateLimited`、`cleanupRateLimit`、各类 bucket 常量、`COUNTED_ENDPOINTS`、`DISABLED_ENDPOINTS` |
-| 安全校验工具 | `isIpLiteral` / `parseIPv6ToGroups` / `isPrivateIp` / `isPrivateHost` / `isAllowedTargetPort` / `resolvesToPublicOnly` |
-| KV 层 | `kvWriteGateOk` / `kvPut`（写入总闸）、`recordUsage`、测速历史环形缓冲、`statsCache` |
-| 站点监控 | `handleMonitorCheck`、`runMonitorChecks`、`postMonitorWebhook`、Cron 入口 |
-| 前端资源 | `APP_CSS`、`APP_JS`（含 `i18n`、工具表、各工具 runner） |
-| 请求路由 | `handleRequest()`：令牌/限流 → 停用端点短路 → 各端点 → 主页面 HTML |
-| 主页面模板 | 内联 HTML（含 `${...}` 服务端插值）与 CSP nonce |
-
-### 2.3 前端代码的组织方式（`APP_JS` 内）
-
-| 部分 | 说明 |
-|---|---|
-| `i18n` | 三语字典（`en` / `zh-CN` / `zh-TW`），含 `toolDesc`、`advice`、`auditIssueMap` 等嵌套表 |
-| `elements` | DOM 引用表（含结果区回退到 `#toolModalBody`） |
-| 通用 UI 工具 | `escapeHTML`、`showResult`、`resultTitle`、`metricCard`、`metricGrid`、`rowItem`、`adviceBlock` |
-| 弹层两栏 | `openToolModal`、`setToolParams`、`setToolActions`、`primaryAction`、`secondaryAction` |
-| 工具表 | `TOOL_GROUPS`、`TOOL_LIST`、`TOOL_RUNNERS`、`renderToolCards` |
-| 各工具实现 | `runXxxTool()` 负责"渲染左栏参数 + 绑定事件"，`startXxx()` 负责执行与结果渲染 |
-| 本地历史 | `pushLocalHistory` / `renderLocalHistory`（localStorage，键名 `netsight-local-history`） |
+1. **读文档**：根目录 `README.md`、`project/README.md`、`deploy/README.md`；了解「浏览器侧优先 / 零出站 / 预算与上限」的设计原则。
+2. **读公约**：`CODE_OF_CONDUCT.md`。
+3. **搜索是否已有**：先用关键词搜索 Issues / PRs / Discussions，避免重复劳动。
+4. **确认版本**：当前发布版本为 **5.1.0**；如你基于旧版本，请先同步 `main`。
+5. **大改动先讨论**：新增工具、端点、配置字段、数据结构、依赖、许可证变更，请先开 Issue 描述动机与方案，达成一致后再写代码。
+6. **小改动直接提**：拼写错误、文档修正、明显的 bug 修复、翻译修正，可以直接提交 PR。
+7. **不要提交机密**：真实 token、Cookie、密钥、用户 IP、HAR、内网地址，永远不要进入 Issue/PR。
 
 ---
 
-## 3. 本地开发环境
+## 开发环境
 
-### 3.1 前置
+### 前置条件
 
-- Node.js ≥ 18（仅用于 `wrangler` 与 `node --check`，项目本身无 npm 依赖）
-- `wrangler`（`npm i -g wrangler` 或用 `npx wrangler`）
-- 一个 Cloudflare 账号（`wrangler login`）
+- **Node.js ≥ 20**（构建、测试、同步脚本均只依赖 Node 内置模块）；
+- **npm**（随 Node 提供）；
+- 可选：`wrangler`（`npx wrangler` 即可，不需要全局安装）；
+- 可选：Chrome / Edge 用于 UI 与展示页的手工验证；
+- 不需要数据库、不需要 Docker、不需要第三方服务。
 
-### 3.2 最小可跑
+### 获取代码
 
 ```bash
 git clone https://github.com/BlueDriftHK/CF-workers-netdiag.git
 cd CF-workers-netdiag
-wrangler dev            # 本地起一个 Worker，默认 http://localhost:8787
 ```
 
-`wrangler dev` 下没有 KV 绑定也能跑：用量统计退化为内存模式，测速历史与站点监控会各自提示未绑定/未配置。
+### 目录速览
 
-### 3.3 `wrangler.toml` 参考（按需增删）
-
-```toml
-name = "cf-workers-netdiag"
-main = "_workers.js"
-compatibility_date = "2024-11-01"
-
-# 可选：测速历史、用量统计（kv 模式）、站点监控状态都依赖它
-[[kv_namespaces]]
-binding = "SPEED_HISTORY"
-id = "<待填：你的 KV namespace id>"
-
-# 可选：/static/ 静态资源缓存（该前缀当前处于停用状态，见 §4.6）
-# [[kv_namespaces]]
-# binding = "CACHE_KV"
-# id = "<待填>"
-
-# 可选：站点监控定时巡检（建议 5 分钟一次）
-[triggers]
-crons = ["*/5 * * * *"]
-
-[vars]
-# 跨域白名单：逗号分隔；`*` 表示放开（会关闭令牌校验的跨域分支，慎用）
-ALLOWED_ORIGINS = ""
+```text
+.
+├── _workers.js                 # 单文件发行版（由 project 构建同步，不直接修改）
+├── index.html                  # 经典静态介绍页
+├── index-apple.html            # Apple 风格静态展示页
+├── docs/                       # README 截图
+└── project/                    # 源码与工程化流程
+    ├── src/
+    │   ├── server-core.js      # 常量 / 安全 / 令牌 / 限流 / 缓存 / KV / 监控 / 配置
+    │   ├── server-handler.js   # handleRequest 路由与端点
+    │   ├── lib/dns-wire.js     # RFC 8484 DoH 编解码
+    │   └── handlers/           # page / pwa / admin
+    ├── assets/
+    │   ├── app.css             # 前端 CSS（原始文件）
+    │   └── app.js              # 前端 JS（原始文件，无需模板转义）
+    ├── scripts/
+    │   ├── build.mjs           # 构建 + 校验
+    │   └── sync.mjs            # 同步构建产物到部署文件
+    ├── tests/worker.test.mjs   # 164 项回归
+    ├── deploy/                 # wrangler 模板与说明
+    └── dist/_workers.js        # 构建产物
 ```
 
-**必须在部署端设置（不要写进代码、不要提交）**：
+### 常用命令
 
-| 名称 | 类型 | 用途 |
-|---|---|---|
-| `MONITOR_ADMIN_KEY` | Secret | 站点监控的管理密钥；只走 `x-admin-key` 请求头 |
-| `ALLOWED_ORIGINS` | Var/Secret | 跨域白名单，留空即只允许同源 |
+```bash
+cd project
 
-本地调试把密钥放 `.dev.vars`（该文件必须在 `.gitignore` 里）：
-
+npm run build     # src + assets → dist/_workers.js（含语法与资产一致性校验）
+npm run check     # node --check dist/_workers.js
+npm test          # 164 项 Node vm 沙箱回归（无网络）
+npm run verify    # build + check + test
+npm run sync      # 需要时：同步构建产物到部署文件
 ```
-MONITOR_ADMIN_KEY="local-dev-key"
-```
 
-### 3.4 本地调试常用速查
-
-| 现象 | 原因 / 处理 |
-|---|---|
-| 访问 `/health` 返回 **403** | 会话令牌校验生效：先用浏览器打开主页面（会种下 `__ns_t` Cookie），或在请求里带 `x-ns-token` / `Referer` |
-| 页面工具全部报错 | 大概率是令牌失效（isolate 重建）→ 前端会在 RTT 探测收到 403 时自动刷新页面重新领取 |
-| 某端点返回 **410** | 该端点已被 `DISABLED_ENDPOINTS` 停用（正常行为，见 §4.6） |
-| KV 相关功能无效 | 未绑定 `SPEED_HISTORY`，或 `SPEED_HISTORY_KV_ENABLED` / `USAGE_BACKEND` 保持默认关闭 |
-| 请求被 **429** | 命中限流：默认 60/min/IP，`/health` 180/min，大响应 30/min，`/cpu-test` 3/min |
-| 想看 KV 写入预算 | 主页面控制台执行 `fetch('/health').then(r=>r.json()).then(d=>console.log(d.kvWrite))` |
+> 项目没有第三方运行时依赖；`npm install` 只用于准备 npm 环境（可跳过）。
 
 ---
 
-## 4. 改代码的规矩
+## 本地开发流程
 
-### 4.1 代码风格
+### 1. 选择一个任务
 
-- **缩进**：Worker 侧 2 空格；`APP_JS` / `APP_CSS` 模板内沿用 4 空格（与现有代码保持一致）。
-- **引号**：字符串统一单引号；模板字符串仅在需要插值时使用。
-- **命名**：常量 `UPPER_SNAKE`；函数 `camelCase`；DOM id 用 `kebab-case`；`data-*` 只用于工具键（`data-tool`）。
-- **注释**：中文，说明"为什么这么做"（取舍、配额、安全原因），而不是复述代码。
-- **不要引入运行时依赖**，不要引入构建步骤，不要新增未讨论的外链。
-- **一次 PR 只做一件事**：格式化、重命名不要与功能改动混在一起。
+- 从 `good first issue` / `help wanted` 标签开始；
+- 或修复你实际遇到的问题（附上复现步骤会大大加速评审）；
+- 大功能先开 Issue 对齐方案。
 
-### 4.2 `APP_JS` 模板字符串的三个转义陷阱
+### 2. 创建分支
 
-这是本项目**最容易踩**的坑：`APP_JS` 本身是 Worker 里的模板字符串，里面再写前端代码时，以下字符必须转义。
-
-| 你想在前端代码里写 | 在 `_workers.js` 里必须写成 | 原因 |
-|---|---|---|
-| 反引号 `` ` ``（前端模板字符串） | `` \` `` | 否则会提前结束 `APP_JS` |
-| `${expr}`（前端插值） | `\${expr}` | 否则会被 Worker 侧提前求值 |
-| 正则里的 `\d`、`\.`、`\/` | `\\d`、`\\.`、`\\/` | 模板字符串会吃掉一层反斜杠 |
-| 字符串里的换行 `\n` | `\\n` | 同上 |
-
-示例（前端代码）：
-
-```js
-// _workers.js 中的实际写法
-const testUrl = node + '/node-ping';
-if (!/^https?:\\/\\//i.test(u)) u = 'https://' + u;
-el.innerHTML = '<div>' + escapeHTML(name) + ' \\n ' + value + '</div>';
-const arr = urls.split('\\n');
+```bash
+git checkout main
+git pull
+git checkout -b feat/monitor-content-assertions
+# 或 fix/token-refresh-loop、docs/deploy-typo、i18n/ja-terminology ...
 ```
 
-> 自检：改完 `APP_JS` 后跑 `node --check _workers.js`；若报 `Unexpected token` 或 `Invalid or unexpected token`，几乎都是这里的转义漏了。
+命名建议：`feat/`、`fix/`、`docs/`、`i18n/`、`test/`、`security/`、`refactor/`。
 
-**HTML 模板**（主页面那段）里的 `${...}` 是**真插值**，只能插入服务端准备好的两种值：
+### 3. 修改源码
 
-- `data.*` → 已经过 `escapeForJS()`，用于 `<script>` 里
-- `h.*` → 已经过 `escapeHtml()`，用于 HTML 文本/属性
+- **前端**：`project/assets/app.js`、`project/assets/app.css`；
+- **服务端**：`project/src/server-core.js`、`server-handler.js`、`src/lib/**`、`src/handlers/**`；
+- **不要直接改** `project/dist/_workers.js`，也不要直接改根目录 `_workers.js`（它是同步产物）；
+- 保持改动聚焦：一个 PR 尽量只做一件事。
 
-不要直接把 `request.cf.*` 或用户输入插进 HTML 模板。
+### 4. 本地验证
 
-### 4.3 DOM 契约
+```bash
+cd project
+npm run verify
+```
 
-**既有 id 不允许改名或删除**（前端逻辑、分享链接、`updateUI` 的 id→i18n 映射都依赖它们）。需要调整结构时：
+### 5. 手工回归
 
-- ✅ 新增包裹层、新增 id（例如 `#toolModalSide`、`#toolModalParams`）
-- ✅ 用 CSS 重排、改样式
-- ❌ 重命名 `#toolModalBody`、`#toolGrid`、`#speed-history-panel`、`#qmOut`、`#bbResult`、`#qcResult` 等
+在浏览器中打开部署/本地预览，至少验证：
 
-| 区域 | 关键 id |
-|---|---|
-| 概览 | `v4` `v6` `rtt-num` `jitter-val` `min-rtt` `max-rtt` `chart` `quality-badge` `stability-badge` `sample-count` `loss-rate` |
-| 网络信息 | `s-dc` `s-risk` `proto-val` `ech-val` `compress-val` `http2-val` `bot-score-val` `user-geo-info` `hw-info` |
-| 工具区 / 弹层 | `toolGrid` `toolModal` `toolModalTitle` `toolModalDesc` `toolModalBody` `toolModalSide` `toolModalParams` `toolModalSideActions` `toolModalRerun` `toolModalClose` |
-| 结果容器 | `toolModalBody`（默认）、`qmOut`、`bbResult`、`qcResult`、`msOut`、`dcOut`、`dnsLookupOut`、`dnsblOut`、`monOut` |
-| 历史页 | `speed-history-panel`、`usage-stats-panel` |
-| i18n 文本 | 统一前缀 `t-*`（由 `updateUI()` 的映射表驱动） |
+- 页面正常加载，无 CSP / JS 报错；
+- 你改动的工具/端点可正常使用；
+- 切换深/浅主题与 6 种语言无明显异常；
+- 移动端宽度（390px）不溢出；
+- 涉及安全（令牌/SSRF/限流/管理员端点）时，补做边界测试。
 
-新增 id 请遵循：`t-xxx` 表示可国际化文本节点，其余用语义化 kebab-case。
+### 6. 本地预览 Worker
 
-### 4.4 新增一个诊断工具的标准流程
+```bash
+cd project
+cp deploy/wrangler.toml.example wrangler.toml   # 按需修改
+npm run build
+npx wrangler dev
+```
 
-1. **判断归属分组**：`quality`（质量与延迟） / `bandwidth`（带宽与吞吐） / `dns` / `security`（安全与合规） / `reach`（可达性与多节点） / `monitor`（监控与系统）。
-2. **三语加键**：`xxxBtn`（名称）、`toolDesc.xxx`（说明，会作为卡片 tooltip），以及结果区需要的文案。
-3. **登记工具表**：在 `TOOL_LIST` 加 `{ key, group, icon, nameKey }`（图标用 Font Awesome 6 类名）。
-4. **注册 runner**：在 `TOOL_RUNNERS` 加 `xxx: runXxxTool`。
-5. **实现 `runXxxTool()`**：`setToolParams(...)` 渲染左栏参数（无参数则留空）、`setToolActions(primaryAction(...))` 渲染主操作按钮，右栏只放输出容器。
-6. **实现执行逻辑**：优先纯浏览器实现；必须访问同源端点时确认它已接入令牌校验与限流。
-7. **可选**：用 `adviceBlock(findings)` 输出"可能原因 + 建议"（需在 `i18n.<lang>.advice` 里补规则），用 `pushLocalHistory(...)` 记录一条本地历史。
-8. **自测**：见第 5 节矩阵 + 手机宽度 + 三语。
+> `/health` 需要页面令牌；用浏览器访问首页即可获得 Cookie，再用 DevTools 调接口。
+> 可视化展示页（`index-apple.html`）可直接 `start` 打开，无需服务器。
 
-完整骨架见 [附录 A](#附录-a新增一个诊断工具的骨架)。
+### 7. 同步单文件发行版（如需要）
 
-### 4.5 新增一个 API 端点的标准流程
+仓库仍维护根目录的 `_workers.js` 作为单文件发行版：
 
-1. **先论证必要性**：能否用浏览器侧完成？能否复用现有端点（例如探活复用 `/node-ping`）？
-2. **默认安全**：必须调用 `isSameOriginNavigation(request)`（除非是像 `/node-ping` 那样经过讨论的匿名端点）。
-3. **接入限流**：走默认桶即可；若是高成本端点（大响应、CPU 密集、外部请求），申请独立桶。
-4. **登记统计**：如需要计入用量统计，加入 `COUNTED_ENDPOINTS`。
-5. **出站目标校验**：协议 → `isPrivateHost()` → `isAllowedTargetPort()` → `resolvesToPublicOnly()`，重定向**每一跳**都校验。
-6. **限制输入**：参数用正则白名单校验，长度上限明确（参考：域名 ≤253、URL ≤300、请求体 ≤10KB/32MB）。
-7. **返回统一形状**：成功返回 JSON；错误用 `{ error: 'machine_readable_code' }` + 恰当状态码（400/403/404/410/429/503），并带上 `...corsHeaders(request), ...SECURITY_HEADERS`。
-8. **三语错误文案**：前端按 `error` 码映射到 i18n（不要直接展示英文错误）。
-9. **文档**：更新 README 的端点表（方法、参数、说明、限制）。
+```bash
+cd project
+node scripts/sync.mjs ../_workers.js
+```
 
-完整骨架见 [附录 B](#附录-b新增一个-api-端点的骨架)。
+### 8. 提交并推送
 
-### 4.6 停用端点与开关
+```bash
+git add -A
+git commit -m "feat(monitor): support content assertions"
+git push origin feat/monitor-content-assertions
+```
 
-已停用并统一返回 **410 Gone** 的端点（`DISABLED_ENDPOINTS` / `DISABLED_PATH_PREFIXES`）：`/dns-proxy`、`/api/ip-fraud`、`/api/reach-check`、`/static/*`。
+---
 
-- **不要"顺手恢复"**：如需恢复请在 issue 中说明用途、成本与安全影响。
-- 新增停用项只需把路径加进集合（实现代码保留），并在 README 标注状态。
-- 停用判断在 `handleRequest()` 最前面短路，先于令牌、限流与统计——新端点若被停用，不应再产生任何副作用。
+## 代码规范
 
-### 4.7 KV 写入要求
+### 通用
+
+- 保持文件现有风格：缩进、引号、分号与周边一致；**不要顺手格式化整个文件**；
+- 优先小函数、纯函数；服务端逻辑尽量可测试；
+- 命名清晰，避免魔法数字（可提取常量并注释原因）；
+- 注释解释「为什么」，而不是复述「做了什么」；
+- 删除死代码与调试输出，不要提交 `console.log` 噪音（关键错误日志除外）；
+- 不引入运行时第三方依赖，除非经过讨论且确有需要；
+- 不提交构建产物之外的大型二进制文件。
+
+### 前端（`assets/app.js` / `app.css`）
+
+- 原生 HTML / CSS / JS，**不引入框架**（React/Vue/Tailwind 等）；
+- 所有用户可见文案走 i18n，不硬编码中文/英文；
+- 动态拼接 HTML 时正确使用 `escapeHTML` / `escapeForJS`，不要直接拼用户数据；
+- 网络请求统一走 `fetchWithTimeout`（带超时/Abort），长任务使用 `AbortController`；
+- 轮询/定时器必须在页面隐藏或弹层关闭时暂停/清理；
+- CSS 使用现有变量（颜色、圆角、间距），深浅主题都必须可读；
+- 遵循 `prefers-reduced-motion`；动画不应阻塞操作；
+- 移动端 320–768px 优先检查。
+
+### 服务端（`src/**`）
+
+- Service Worker 语法（`addEventListener('fetch'/'scheduled')`），构建后单文件分发；
+- 新端点必须在路由中显式放置，处理 `OPTIONS`、方法校验、鉴权、限流、错误响应；
+- 涉及用户输入的出站请求，必须经过 SSRF 校验（协议/端口/私网/DoH），并设置超时；
+- 涉及 KV 的写入必须经过 `kvPut` / `kvWriteGateOk`，不要绕过预算；
+- 响应头统一带 no-store（动态接口）或明确缓存策略（静态资产）；
+- 不泄露内部信息（异常堆栈、KV ID、密钥、内部路径）；
+- 新增环境变量/绑定必须有默认值与缺失时降级。
+
+### 安全敏感代码
+
+以下区域的 PR 会被额外审查，并需要补充测试：
+
+- 页面令牌 / HMAC / Cookie / 管理员鉴权；
+- SSRF 判定、DoH 校验、重定向处理、webhook；
+- 限流、KV 写预算、大响应配额；
+- HTML 模板注入点、CSP、内联脚本；
+- 管理面板 / metrics 暴露面；
+- 依赖与许可证变更。
+
+### 静态展示页
+
+- `index.html` / `index-apple.html` 必须保持**零外部依赖**（系统字体、内联 SVG、原生 Canvas）；
+- 深/浅主题、移动端、`prefers-reduced-motion`、无 JS 降级都要考虑；
+- 新增动效需可解释、可关闭、不闪烁；
+- 截图素材放在 `docs/`，README 引用相对路径。
+
+---
+
+## 提交规范
+
+### 分支
+
+| 前缀 | 用途 | 示例 |
+|---|---|---|
+| `feat/` | 新功能 | `feat/dns-wire-resolver` |
+| `fix/` | Bug 修复 | `fix/monitor-quiet-hours` |
+| `docs/` | 文档 | `docs/contributing-guide` |
+| `i18n/` | 翻译/本地化 | `i18n/ja-terminology` |
+| `test/` | 测试 | `test/ssrf-ipv6-cases` |
+| `security/` | 安全加固（非漏洞细节） | `security/token-timing-safe` |
+| `refactor/` | 无行为变化的重构 | `refactor/split-handlers` |
+
+### Commit Message
+
+建议使用 Conventional Commits：
+
+```text
+feat(monitor): support body/keyword assertions
+fix(token): avoid infinite reload on 403
+docs(readme): document SITE_CONFIG fields
+i18n(ja): revise network terminology
+test(ssrf): add IPv4-mapped IPv6 cases
+refactor(handler): extract page renderer
+```
+
+规则：
+
+- 首行 ≤72 字符，使用祈使语气（add / fix / document / refactor）；
+- 正文说明「为什么」与「影响范围」；
+- 关联 Issue：`Closes #123` / `Refs #456`；
+- 一个 commit 只做一件事；大改动可拆多个 commit，但每个都应可独立理解。
+
+---
+
+## Pull Request 指南
+
+### PR 应包含什么
+
+1. **标题**：与 commit 风格一致，能看出模块与结果；
+2. **描述**：
+   - 动机 / 解决的问题；
+   - 方案要点与取舍（为什么这样做）；
+   - 涉及端点、配置、数据结构变更；
+   - 测试方式与结果（命令、断言数、截图/录屏）；
+   - 是否影响安全/隐私/免费额度；
+   - 关联 Issue。
+3. **变更类型**：Bug 修复 / 新功能 / 文档 / 翻译 / 重构 / 安全加固；
+4. **Checklist**：见下。
+
+### PR Checklist
+
+```markdown
+- [ ] 已阅读 README / project/README / CONTRIBUTING / CODE_OF_CONDUCT
+- [ ] 改动聚焦于一个目的，未混入无关格式化
+- [ ] 已在 project/ 中修改源码，未直接改 dist 或根目录 _workers.js
+- [ ] 已运行 `npm run verify`，164 项回归通过
+- [ ] 新增/修改逻辑已补充测试（如适用）
+- [ ] 新增文案已补齐 6 种语言，key 对齐（如适用）
+- [ ] 已手工验证受影响的页面/端点（附截图或命令）
+- [ ] 未提交任何密钥、token、真实 IP、用户数据或 HAR
+- [ ] 涉及安全/隐私/配额变更时，已在描述中说明
+```
+
+### 评审流程
+
+- CI（build → `node --check` → 164 项测试）必须通过；
+- 至少一位维护者 review；
+- 维护者可能要求拆分 PR、补测试、补 i18n、补文档；
+- 评审意见聚焦代码、行为、安全与可维护性，不针对个人；
+- 如对结论有异议，请讨论依据与替代方案，必要时由维护者裁决；
+- 合并后恭喜你成为项目贡献者 🎉
+
+### PR 大小建议
+
+- 理想：**< 400 行**改动、可在一个 review 轮次内理解；
+- 大功能可以拆成多个 PR（例如：先数据结构，再接口，再 UI）；
+- 纯格式化/重命名请单独提交，避免淹没真实改动。
+
+---
+
+## Issue 规范
+
+### Bug 报告
+
+请包含：
+
+- 版本（`/health` 或页面版本号）；
+- 部署方式（单文件 / 模块化 / 自定义配置）；
+- 浏览器、系统、网络环境（是否代理/VPN/IPv6）；
+- 复现步骤（最小化）；
+- 期望结果 vs 实际结果；
+- 错误信息、控制台日志、截图（**已脱敏**）；
+- 是否绑定 KV / 设置 `PAGE_TOKEN_SECRET` / 管理密钥；
+- 是否可稳定复现。
+
+**请勿**包含：真实 token、Cookie、IP、HAR、用户数据、内网地址。如需提供敏感信息，先私信维护者。
+
+### 功能建议
+
+请包含：
+
+- 需求场景（谁、在什么网络环境下、解决什么问题）；
+- 现有替代方案与不足；
+- 期望的交互/API/配置形态；
+- 对成本（请求/CPU/KV/出站）、隐私、安全的影响；
+- 是否愿意实现/测试/翻译。
+
+### 标签建议
+
+`bug`、`enhancement`、`documentation`、`i18n`、`security`、`good first issue`、`help wanted`、`question`、`deployment`、`design`。
+
+---
+
+## 测试指南
+
+### 自动化测试
+
+- 测试文件：`project/tests/worker.test.mjs`；
+- 运行：`cd project && npm test`（或 `npm run verify`）；
+- 测试在 Node `vm` 沙箱中加载 Worker，不访问网络；通过 mock 的 `fetch`、KV、Request/Response 验证行为；
+- 当前 **164 项**，任何修复/新功能都应补充断言；
+- 不允许为了通过测试而弱化断言；如确需调整既有断言，请在 PR 中说明原因。
+
+### 写测试的方式
 
 ```js
-// ✅ 唯一正确写法
-const ok = await kvPut(SPEED_HISTORY, 'speed:history', JSON.stringify(arr), { expirationTtl: 86400 * 7 });
-if (!ok) { /* 被预算拦截或写入失败：非关键路径可直接忽略 */ }
+// 例：为新的 DNS wire 解析补充 fixture
+const parsed = T.dnsParseResponse(makeDnsWireResponse());
+eq('dns wire rcode', parsed.status, 0);
+eq('dns wire A record', parsed.answers[0].data, '1.2.3.4');
 
-// ❌ 禁止
-await SPEED_HISTORY.put('speed:' + ts, json);          // 绕过闸门
-const keys = await SPEED_HISTORY.list({ prefix: 'x' }); // list 按量计费
-await SPEED_HISTORY.delete(k.name);                     // 批量 delete 同理
+// 例：为端点补充 mock fetch
+const T = await load({
+  fetch: async (url) => new Response(JSON.stringify({ Status: 0, Answer: [] }), {
+    headers: { 'content-type': 'application/json' }
+  })
+});
+const res = await T.handleRequest(makeEvent('/api/dns-lookup?name=example.com', {
+  headers: { 'x-ns-token': token }
+}));
+eq('dns-lookup 200', res.status, 200);
 ```
 
 要求：
 
-- 单键优先：用**一个键存数组/对象**（环形缓冲），不要"一条记录一个键"。
-- 必带节流：按客户端 + 全局双层（参考测速历史：15s/客户端 + 30 次/分/isolate）。
-- PR 中给出**最坏情况估算**：`写入次数/天 = ？`、`读取次数/天 = ？`、`单键体积 ≈ ？`。
-- 读取侧要有内存缓存（参考 `statsCache` 60s）或明确说明为什么不需要。
-- 新增 KV 键请在 README 或代码注释里登记用途与 TTL。
+- 使用 mock，不发起真实网络请求；
+- 覆盖正常、边界、异常、安全（SSRF/令牌/限流）路径；
+- 测试命名清晰，失败信息可定位；
+- 不依赖执行顺序与共享可变状态。
 
-### 4.8 国际化与本地化
+### 手工回归清单（涉及 UI/端点时）
 
-- **三语必须齐全**：`en` / `zh-CN` / `zh-TW`。评审会直接因此打回。
-- 术语以 [CODE_OF_CONDUCT.md 附录 A](CODE_OF_CONDUCT.md#附录-a术语表三语对照) 为准；需要新增术语时**同时更新那张表**。
-- 繁体中文用台湾/香港通行写法（網路、連線、資料、設定），不要简繁直接转码。
-- 不要硬编码语言、时区、日期格式：时间用 `Intl` / `toLocaleString(locale)`。
-- 动态拼接的句子注意语序差异：能用"标签 + 值"的行结构就别拼整句。
-- 新增 `advice` 规则时，三语都要写 `cause` 与 `action`，否则该语言下建议区会静默缺失。
-
-### 4.9 界面约定（4.7.1 起的布局）
-
-| 约定 | 说明 |
-|---|---|
-| 工具区 | 6 个分组，组头 = 图标 + 分组名 + 数量；卡片为「图标 + 名称」，说明放 `title`（tooltip） |
-| 结果弹层 | 宽屏两栏：左 `#toolModalParams`（参数）+ `#toolModalSideActions`（操作），右 `#toolModalBody`（结果）；≤860px 折叠为单栏 |
-| 按钮三级 | 主 `.btn.btn-primary`（执行/保存）、次 `.btn`（重跑/停止/复制）、幽灵 `.btn.btn-ghost`（关闭/次要链接） |
-| 尺寸 | `.btn-sm` / `.btn-xs` / `.btn-icon` / `.btn-block`；不要新造一套按钮样式 |
-| 结果渲染 | 用 `rowItem()` / `metricCard()` / `metricGrid()` / `resultTitle()`；所有插值必须 `escapeHTML()` |
-| 颜色 | 只用 CSS 变量（`var(--success)` 等），不要写死颜色，否则浅色主题会崩 |
-| 空态 | 用 `.no-data`；加载态用 `<span class="loading">`；错误态用 `.tool-error` |
+- [ ] 首页、`/app.js`、`/app.css`、`/sw.js`、`/manifest` 正常；
+- [ ] `/node-ping` 公开可访问；`/health` 从页面内 200、curl 403；
+- [ ] 6 种语言切换正常，文案不溢出；
+- [ ] 深/浅主题、390px 移动端正常；
+- [ ] 改动的工具：开始/中止/重复运行无异常；
+- [ ] 安全相关：私网目标被拒、无令牌 403、限流 429、管理员端点鉴权；
+- [ ] PWA：离线页可用、SW 不缓存 API。
 
 ---
 
-## 5. 测试清单（提交前必过）
+## 翻译指南
 
-本项目**没有自动化测试**，回归靠手动清单。请在 PR 描述里贴出你实际验证过的项目（没验证的注明"未测"比假装测过更好）。
+### 语言与位置
 
-### 5.1 语法与静态检查
+- 支持 6 种语言：`en`、`zh-CN`、`zh-TW`、`ja`、`ko`、`es`；
+- 文案位于 `project/assets/app.js` 中的 `I18N`、`I18N_EXTRA`、`I18N_MORE`、`I18N_EXTRA_V49`、`I18N_EXTRA_V51` 等对象；
+- 新增文案必须在 **6 种语言**中补齐，key 完全一致；
+- 工具描述、建议（advice）、issue 映射（auditIssueMap）、管理面板文案都属于 i18n 范围。
+
+### 翻译要求
+
+- 使用自然、简洁的界面语言，避免机翻腔；
+- 技术术语保持统一（见下表）；
+- 保留数字、单位、符号（`·`、`→`、`×`、`%`、`Mbps`、`ms`）；
+- 不改变语义、不添加原文没有的承诺或警示；
+- 避免地域歧视、政治敏感与冒犯性措辞；
+- 涉及安全提示的翻译要准确（如「静默时段」「维护窗口」「私网」）；
+- 欢迎母语者审校；PR 中说明语言背景与验证方式。
+
+### 术语参考
+
+| en | zh-CN | zh-TW | ja | ko | es |
+|---|---|---|---|---|---|
+| latency / RTT | 延迟 / RTT | 延遲 / RTT | レイテンシ / RTT | 지연 / RTT | latencia / RTT |
+| jitter | 抖动 | 抖動 | ジッター | 지터 | jitter |
+| packet loss | 丢包 | 封包遺失 | パケット損失 | 패킷 손실 | pérdida de paquetes |
+| bandwidth | 带宽 | 頻寬 | 帯域幅 | 대역폭 | ancho de banda |
+| resolver | 解析器 | 解析器 | リゾルバ | 리졸버 | resolutor |
+| domain audit | 域名体检 | 網域健檢 | ドメイン監査 | 도메인 점검 | auditoría de dominio |
+| uptime monitoring | 站点监控 | 站點監控 | 稼働監視 | 사이트 모니터링 | monitoreo de sitio |
+| alert | 告警 | 告警 | アラート | 경고 | alerta |
+| quiet hours | 静默时段 | 靜默時段 | 静かな時間帯 | 방해 금지 시간 | horas de silencio |
+| token | 令牌 | 權杖 | トークン | 토큰 | token |
+
+### 翻译 PR 流程
+
+1. 在 Issue/PR 中说明目标语言与范围；
+2. 修改对应 i18n 对象，补齐所有语言；
+3. `npm run verify`，确认 `APP_JS` 可编译；
+4. 打开页面逐项检查 6 种语言；
+5. 提交 PR，标题如 `i18n(ja): revise monitor terminology`。
+
+> 不接受「纯机器翻译、无法解释术语、拒绝回应评审」的批量 PR。
+
+---
+
+## 文档与展示页贡献
+
+- 文档文件：`README.md`、`CONTRIBUTING.md`、`CODE_OF_CONDUCT.md`、`project/README.md`、`deploy/README.md`；
+- 文档中的命令、版本号、端点、配置字段必须与实际代码一致；
+- 修改 README 截图时，同时更新 `docs/` 中的图片（建议 1440 宽、保留深/浅色）；
+- 展示页 `index-apple.html` 的设计规则：
+  - 零外部请求（系统字体、内联 SVG、原生 Canvas）；
+  - 深/浅主题、响应式、无障碍、`prefers-reduced-motion`；
+  - 动效服务信息层级，不做无意义闪烁；
+  - 修改后用 Chrome Headless 截图检查桌面 + 390px 移动端。
+- 文档 PR 也建议附「改了什么、为什么、影响哪些链接」。
+
+---
+
+## 安全贡献
+
+### 不要公开提交漏洞细节
+
+- 不要用公开 Issue/PR 披露可利用细节、PoC、用户数据或密钥；
+- 通过 GitHub **Private Security Advisory** 或邮件 <admin@bjhr.space>（标题 `[SECURITY]`）反馈；
+- 给维护者合理修复时间（通常 7–30 天）；
+- 我们会在修复后征得同意给予公开致谢。
+
+### 安全港
+
+在以下范围内，出于善意的安全研究不予追究：
+
+- 只测试你自己的部署；
+- 只测试你拥有或获得授权的目标；
+- 不访问/修改/删除他人数据；
+- 不做影响可用性的压测/DoS；
+- 不公开未修复漏洞。
+
+### 贡献代码时的安全底线
+
+- 永不提交真实密钥/token/Cookie/用户数据；
+- 新端点必须限流、鉴权、输入校验、SSRF 防护；
+- 不引入隐蔽数据外传、第三方统计、指纹或后门；
+- 不降低现有安全基线（CSP、令牌、KV 预算、限流）；
+- 涉及安全逻辑的改动必须补测试，并接受额外评审。
+
+---
+
+## 发布流程（维护者）
+
+1. **确定版本号**：语义化版本（`major.minor.patch`）；
+2. **更新出现版本号的位置**：
+   - `project/package.json`；
+   - `project/src/server-core.js` 顶部注释；
+   - `project/src/server-handler.js` 的 `/health`、`/node-ping` 版本字段与 `ASSET_VER` 前缀；
+   - README 徽章/版本、CoC/CONTRIBUTING 的版本说明（如涉及）；
+3. **更新文档**：README 更新日志、部署说明、API 变更；
+4. **完整验证**：
+
+   ```bash
+   cd project
+   npm run verify
+   ```
+
+5. **构建并同步发行文件**：
+
+   ```bash
+   npm run build
+   node scripts/sync.mjs ../_workers.js
+   ```
+
+6. **预发部署 + 冒烟**：
+   - `/node-ping` 200；
+   - 首页加载、`/app.js`、`/sw.js`、`/manifest` 正常；
+   - `/health` 页面内 200、curl 403；
+   - `/metrics` 鉴权正确；
+   - `/admin` 可加载；
+   - 至少一个诊断工具、一个 DNS 工具、监控保存/巡检正常；
+   - 6 语言 / 深色浅色 / 移动端；
+7. **部署**：`npx wrangler deploy`（`main` 指向 `dist/_workers.js`）；
+8. **Git tag + Release**：`git tag v5.x.y`，Release Notes 汇总变更与贡献者；
+9. **公告**：GitHub Discussions / 项目页面；
+10. **归档**：保留上一版本 tag；必要时更新 `_workers.js.bak` 或发布说明中的回滚方式。
+
+---
+
+## 评审、治理与认可
+
+- **维护者**：负责方向、评审、发布、安全响应与最终裁决；
+- **评审 SLA**：尽力在 7 天内首次响应；复杂问题可能更久，会在 Issue 中说明；
+- **利益冲突**：评审者与被评审内容存在利益关系时应回避；
+- **一致性**：相似问题应得到相似处理，避免选择性执法；
+- **透明度**：重要的架构/安全/许可证决策会在 Issue/Discussion 中记录理由；
+- **认可**：所有贡献者会在 Release Notes 中致谢；重要贡献可列入 README/AUTHORS（如建立）。
+
+---
+
+## 常见问题
+
+**Q：我不会 Cloudflare，能贡献吗？**
+A：可以。文档、翻译、展示页、测试用例、Issue 复现都很有价值；本地运行只需要 Node。
+
+**Q：必须用框架吗？**
+A：不。项目刻意保持原生 HTML/CSS/JS，零运行时依赖；请勿引入前端框架或 UI 库。
+
+**Q：为什么不能直接改 `_workers.js` / `dist/_workers.js`？**
+A：它们是构建产物（`dist` 生成后同步到根目录）。源码在 `project/src` 与 `project/assets`，直接改产物会在下次构建时被覆盖。
+
+**Q：测试必须联网吗？**
+A：不需要。测试使用 mock，禁止真实网络请求；真实环境验证请手动进行。
+
+**Q：我可以只改一个错别字吗？**
+A：当然，直接提 PR 即可。
+
+**Q：我的 PR 多久会被 review？**
+A：维护者尽力 7 天内首次响应；如果 CI 未通过或缺少必要信息，会先要求补齐。
+
+**Q：可以用 AI 写代码/翻译吗？**
+A：可以，但你必须理解并验证结果；涉及安全逻辑需人工复核；不接受未经验证的批量生成 PR（详见 `CODE_OF_CONDUCT.md`）。
+
+**Q：如何本地测试 Worker？**
+A：`cd project && npm run build && npx wrangler dev`；`/health` 需要浏览器页面令牌，用首页获取 Cookie 后再调。
+
+**Q：如何成为维护者？**
+A：持续、高质量地贡献（代码/安全/翻译/社区），理解项目原则，并在多个 PR 中展现判断力；由现有维护者邀请。
+
+---
+
+## English Version
+
+**Contributing to NetSight Pro (v5.1.0)**
+
+Thanks for your interest! NetSight Pro is a single-file Cloudflare Worker and a modular project. This guide covers how to contribute code, tests, docs, translations and security reports.
+
+**Ways to contribute.** Bug reports and fixes, new diagnostic tools or endpoints, tests (especially token/SSRF/rate-limit/monitoring edge cases), documentation, translations (en / zh-CN / zh-TW / ja / ko / es), UI/UX and accessibility, responsible security research, deployment feedback, and community support.
+
+**Before you start.** Read `README.md`, `project/README.md`, `deploy/README.md` and `CODE_OF_CONDUCT.md`. Search existing issues and PRs. For large changes (new tools, endpoints, config fields, data structures, dependencies or license changes), open an Issue first. Never post real tokens, cookies, keys, IPs, HAR files or user data.
+
+**Development environment.** Node.js ≥ 20. The project has no runtime dependencies. Source lives in `project/src/**` (server) and `project/assets/**` (frontend). Do not edit `project/dist/_workers.js` or the root `_workers.js` — they are build artifacts.
 
 ```bash
-node --check _workers.js        # 语法（模板字符串转义错误会在这里暴露）
-wrangler deploy --dry-run       # 打包与配置校验，不上线
+cd project
+npm run build     # build dist/_workers.js with validation
+npm run check     # syntax check
+npm test          # 164 sandbox tests, no network
+npm run verify    # build + check + test
+node scripts/sync.mjs ../_workers.js   # when syncing the single-file release
 ```
 
-### 5.2 工具回归矩阵（改动涉及哪块就测哪块）
+**Coding standards.** Keep the existing style; no frontend frameworks or runtime dependencies; use existing CSS variables and support dark/light themes; all user-facing strings go through the six-language i18n dictionaries; escape HTML/JS output correctly; use timeouts and AbortController for network requests; new endpoints must implement auth, rate limiting, input validation and SSRF protection; KV writes must go through the budget gate; never weaken the security baseline. Security-sensitive changes require tests and extra review.
 
-| 分组 | 工具（23） | 备注 |
-|---|---|---|
-| 网络质量与延迟 | 一键体检 · 长时质量监控 · 丢包率 · TTFB 分析 · WebSocket · 代理/VPN 检测 · WebRTC 泄漏 | 一键体检会串跑多个子项，改动 `quickcheck` 相关代码务必整体跑一次 |
-| 带宽与吞吐 | 带宽测速 · 多流并发测速 · 上传测速 · 缓冲膨胀 · 流式传输 · 并发测试 | 多流与缓冲膨胀会消耗真实流量（数十 MB 起），注意移动网络 |
-| DNS | DNS 解析 · DNS 工具箱 · 多解析器对比 | 工具箱含"黑名单检测"子功能，两个按钮都要点一次 |
-| 安全与合规 | 站点体检（含可选证书检查） · 域名安全体检 | 证书检查勾选后会多 1 次出站（crt.sh），注意测两种情况 |
-| 可达性与多节点 | 流媒体连通性 · 网络可达性 · 多节点对比 | 后两者依赖外部网络环境，测不通时说明环境而非直接判失败 |
-| 监控与系统 | 站点监控 · CPU 性能 | 监控需要 KV + `MONITOR_ADMIN_KEY`；无绑定时应给出明确提示而非报错 |
+**Commits & PRs.** Use Conventional Commits (`feat(monitor): ...`, `fix(token): ...`, `docs(readme): ...`, `i18n(ja): ...`). Keep PRs focused (< ~400 lines when possible), include motivation, approach, affected endpoints/config, test evidence and screenshots for UI changes. PRs must pass `npm run verify`; at least one maintainer review is required. Never commit secrets or unredacted data.
 
-### 5.3 界面回归
+**Issues.** For bugs include version, deployment mode, browser/OS/network environment, repro steps, expected vs actual, redacted logs/screenshots, and whether KV/admin key are configured. For features include the scenario, alternatives, proposed API/UI, and impact on cost/privacy/security.
 
-- [ ] 桌面宽度（≥1200px）与手机宽度（≤480px）各看一遍
-- [ ] 深色 / 浅色主题各看一遍（不要写死颜色）
-- [ ] 三种语言各切一遍：分组名、按钮、结果标题、错误提示都在
-- [ ] 弹层：参数在左、结果在右；≤860px 折叠为单栏且参数区可正常输入
-- [ ] 长结果（如体检报告）在右栏可独立滚动，不会把左栏顶掉
-- [ ] 键盘可达：Tab 能到主操作按钮，回车能提交表单
+**Testing.** Add assertions to `project/tests/worker.test.mjs` using mocked fetch/KV/Request/Response; never make real network calls in tests. Cover success, boundary, failure and security paths. Manual smoke checks: page/assets, `/node-ping`, `/health` auth behavior, 6 languages, themes, mobile, changed tools, rate limiting, admin endpoints and PWA offline behavior.
 
-### 5.4 安全与配额回归（改了这些才需要）
+**Translations.** Six languages are required for every new string, with identical keys. Use natural, concise UI language; keep technical terms, numbers and symbols; avoid machine-only bulk PRs; native review is welcome.
 
-- [ ] 未带令牌访问受保护端点 → 403（且不是 200）
-- [ ] 停用端点 → 410
-- [ ] 超限 → 429，且不产生副作用
-- [ ] 内网/本机/超范围端口目标 → 403/400（`isPrivateHost` / `isAllowedTargetPort` 生效）
-- [ ] 大体积请求 → 413（上传 >32MB、`/api/log-speed` >10KB）
-- [ ] `/health` 的 `kvWrite.blocked` 没有异常增长
+**Security.** Do not disclose vulnerabilities publicly. Use GitHub Private Security Advisories or email <admin@bjhr.space> with `[SECURITY]`. Safe harbor: test only your own deployments or systems you are authorized to test, do not disrupt services, do not access third-party data, and allow 7–30 days for fixes.
 
-### 5.5 费用自查（在 PR 里贴出）
+**Release process (maintainers).** Bump the version in `project/package.json`, `src/server-core.js`, `src/server-handler.js` (`/health`, `/node-ping`, `ASSET_VER`), update docs/README, run `npm run verify`, build and sync, deploy to staging and smoke test, deploy with `wrangler`, tag the release and publish notes.
 
-```
-改动引入的额外请求：__ 次/用户操作
-最坏情况（单 IP 每分钟 / 单 isolate 每天）：
-  Worker 请求：__
-  KV 写入：__      （闸门上限：20/min、600/day/isolate）
-  KV 读取：__
-  出站请求（Worker→第三方）：__（若为 0 请注明）
-可观测性事件估算：__（本项目对事件量敏感）
-```
+**Governance & recognition.** Maintainers guide direction, review, releases and security response. Review SLA is best effort (first response within 7 days). Decisions should be consistent, transparent and conflict-free. All contributors are credited in release notes.
+
+**Questions?** Open a Discussion/Issue or email <admin@bjhr.space>. Please also read `CODE_OF_CONDUCT.md`. Thank you for helping make NetSight Pro better!
 
 ---
 
-## 6. 提交与 PR
-
-### 6.1 分支与提交信息
-
-- 分支名：`feat/xxx`、`fix/xxx`、`i18n/xxx`、`docs/xxx`、`perf/xxx`、`security/xxx`
-- 提交前缀（便于生成变更日志）：
-
-```
-feat(tools): 新增「端口连通性」工具（浏览器侧）
-fix(health): 令牌失效时前端未重载导致 RTT 停摆
-perf(kv): 测速历史改单键环形缓冲，去掉 list/delete
-security(ssrf): 站点体检重定向逐跳校验端口
-i18n(zh-TW): 统一「連線」用词
-docs(readme): 端点表补充 410 停用说明
-```
-
-- 提交信息用**祈使句**，说明"做了什么"；**为什么**写在正文里。
-
-### 6.2 PR 模板（建议放进 `.github/PULL_REQUEST_TEMPLATE.md`）
-
-```markdown
-## 改了什么
-<!-- 一句话；若是修 bug，请写根因 -->
-
-## 为什么这样改
-<!-- 涉及取舍时说明：为什么不能用更简单的做法 -->
-
-## 验证方式
-- [ ] `node --check _workers.js`
-- [ ] `wrangler deploy --dry-run`
-- [ ] 手动回归（列出你实际点过的工具）：
-- [ ] 手机宽度 / 三语 / 深浅色
-
-## 成本与安全影响
-- 新增出站请求：0 / 有（说明开关与默认值）
-- 新增 KV 读写：无 / 有（贴出 §5.5 的估算）
-- 是否触及安全默认值：否 / 是（说明并附 issue 链接）
-
-## 截图
-<!-- 界面改动请附改动前后 + 手机宽度 -->
-
-## 关联 issue
-Closes #
-```
-
-### 6.3 截图与录屏
-
-- 界面改动：**改动前 / 改动后**各一张，桌面 + 手机宽度各一组。
-- 截图必须**脱敏**（IP、RAY ID、Webhook 地址、密钥、Cookie），见 [CoC §4.3](CODE_OF_CONDUCT.md#43-贴日志与数据的脱敏要求)。
-- 动画/交互改动优先录屏（GIF/MP4），比静态图更省 review 时间。
-
-### 6.4 署名与许可
-
-- 本项目**不使用 CLA**，也不要求版权转让；提交被合并即视为同意以 **AGPL-3.0** 授权（inbound = outbound）。详见 [CoC §13.2](CODE_OF_CONDUCT.md#132-贡献的许可inbound--outbound)。
-- 欢迎（非强制）在提交信息里加 `Signed-off-by: 你的名字 <邮箱>`，便于追溯。
-- 不要提交你无权授权的代码；引用第三方片段请注明出处与许可。
-
-### 6.5 Review 流程与响应预期
-
-| 阶段 | 预期 |
-|---|---|
-| 首次回应 | 约 3–7 天（个人维护，尽力而为） |
-| 常见打回原因 | 一次改了太多事 / 三语缺项 / 动了安全默认值 / 无法验证 / 引入未讨论的依赖或外链 |
-| 被要求修改 | 直接在同一分支追加提交即可，无需重开 PR |
-| PR 被关闭 | 通常会说明原因；可拆成更小 PR 再提，或先开 issue 讨论方案 |
-
-催办请礼貌地在原 PR 追加一次评论；不要连发、不要 @ 多人、不要跨 issue 重复粘贴（见 [CoC §4.5](CODE_OF_CONDUCT.md#45-响应预期非-sla)）。
-
-### 6.6 好消息：适合上手的改动
-
-- 文案与术语统一（三语）、错别字
-- 移动端布局细节（表格溢出、按钮换行）
-- 错误提示的可读性（把机器码换成用户能懂的话 + 建议动作）
-- 新增 `advice` 规则（针对某个已知问题给出"原因 + 建议"）
-- 端点表 / README 的准确性修正
-
----
-
-## 7. 版本与发布（维护者）
-
-### 7.1 版本号必须同步的 4 个位置
-
-改版本号时**四处一起改**，漏掉会导致缓存或版本识别不一致：
-
-1. 文件头部注释：`// 版本: x.y.z | 变更摘要`
-2. `const ASSET_VER = 'x.y.z';`（前端资源缓存键）
-3. `/health` 返回的 `version`
-4. `/node-ping` 返回的 `version`
-
-> 只改前端资源时才必须动 `ASSET_VER`；纯 Worker 逻辑改动可只改其余三处——但保持同步更省心。
-
-### 7.2 发布检查清单
-
-- [ ] `node --check _workers.js`
-- [ ] `wrangler deploy --dry-run` 通过
-- [ ] 分阶段部署或先在 `wrangler dev` 验证
-- [ ] 部署后访问 `/health` 确认 `version` 已更新、`kvWrite.today` 正常
-- [ ] 抽查至少 3 个工具（含一个带参数工具）与一次语言切换
-- [ ] 若改了前端资源，确认 `ASSET_VER` 已递增（否则老客户端会拿缓存）
-- [ ] 更新 README 端点表与 CHANGELOG/Release Notes
-
-### 7.3 配额与费用巡检
-
-- Cloudflare 面板关注：**KV 写入/删除/列出**、**请求数**、**可观测性事件量**、CPU 时间。
-- 本项目设计上应接近"零 list、零 delete"（历史遗留的 `speed:<ts>` 键带 7 天 TTL，会自行过期）。
-- 若 `kvWrite.blocked` 持续增长，说明有异常写入源被闸门拦下——先查原因再决定是否放宽阈值。
-- 免费额度下 KV 写入为 1000/天，闸门默认 600/天/isolate，留有余量；付费环境下也可据此控成本。
-
----
-
-## 8. 文档与翻译贡献
-
-- 改代码时顺手更新文档：端点表、限额、开关状态、新增的 i18n 键。
-- 文档三语策略：**README 与本文档以中文为主**（附英文摘要）；界面文案必须三语齐全。
-- 代码注释保持中文，说明取舍原因；不要在注释里写"以后可能支持 X"这类无主承诺。
-- 新增术语请同时更新 [CoC 附录 A 术语表](CODE_OF_CONDUCT.md#附录-a术语表三语对照)。
-
----
-
-## 9. 有问题去哪里问
-
-| 类型 | 渠道 |
-|---|---|
-| 使用问题 / 报 bug | GitHub Issues（按模板，附环境与脱敏证据） |
-| 功能建议 | GitHub Issues / Discussions（先描述场景与期望） |
-| 安全漏洞 | 私密报告（[SECURITY.md](SECURITY.md)、[CoC §8](CODE_OF_CONDUCT.md#8-安全漏洞与敏感数据上报)） |
-| 行为问题 | [CoC §9](CODE_OF_CONDUCT.md#9-举报渠道与保密) 的渠道 |
-| 部署踩坑 | Issues，标注托管方式与 `wrangler.toml` 关键片段（**去掉 id 与密钥**） |
-
----
-
-## 附录 A：新增一个诊断工具的骨架
-
-以下骨架可直接复制修改（注意 [4.2 转义规则](#42-app_js-模板字符串的三个转义陷阱)：`\``、`\${`、`\\d`）。
-
-```js
-// ① TOOL_GROUPS 已有分组；② TOOL_LIST 中登记
-{ key: 'mycheck', group: 'quality', icon: 'fa-satellite-dish', nameKey: 'mycheckBtn' },
-
-// ③ TOOL_RUNNERS 注册
-mycheck: runMyCheckTool,
-
-// ④ 左栏：参数 + 主操作；右栏：输出容器
-function runMyCheckTool() {
-    const t = i18n[currentLang];
-    const body = document.getElementById('toolModalBody');
-    if (!body) return;
-    setToolParams(
-        '<input type="text" id="myHost" class="tool-input" placeholder="example.com" autocomplete="off">' +
-        '<div class="side-desc" style="margin:0">' + escapeHTML(t.mycheckNote) + '</div>');
-    setToolActions(primaryAction('myGo', 'fa-play', t.mycheckStart));
-    body.innerHTML = '<div id="myOut"><div class="no-data">' + escapeHTML(t.mycheckIntro) + '</div></div>';
-    const go = document.getElementById('myGo');
-    if (go) go.addEventListener('click', startMyCheck);
-}
-
-// ⑤ 执行 + 渲染结果
-let myCheckRunning = false;
-async function startMyCheck() {
-    if (myCheckRunning) return;
-    myCheckRunning = true;
-    const t = i18n[currentLang];
-    const out = document.getElementById('myOut');
-    if (out) out.innerHTML = '<div class="tool-loading"><span class="loading"></span> ' + escapeHTML(t.running) + '</div>';
-    const findings = [];
-    try {
-        // 优先纯浏览器实现；必须同源时才 fetch('/api/...')
-        const value = 42;
-        if (out) out.innerHTML = resultTitle(t.mycheckBtn) + metricGrid([
-            metricCard(t.latency, value, 'ms', value < 100 ? 'ok' : 'warn', value)
-        ]) + adviceBlock(findings);
-        pushLocalHistory({ type: 'mycheck', label: t.mycheckBtn, value: value, unit: ' ms', tone: 'ok' });
-    } catch (e) {
-        if (out) out.innerHTML = '<div class="tool-error"><i class="fas fa-exclamation-triangle"></i> ' + escapeHTML(t.loadFailed) + '</div>';
-    }
-    myCheckRunning = false;
-}
-```
-
-配套 i18n（三语都要加）：
-
-```js
-mycheckBtn: '我的检测',
-mycheckIntro: '一句话说明这个工具做什么。',
-mycheckNote: '成本提示：会消耗多少流量 / 会不会读写 KV。',
-mycheckStart: '开始检测',
-```
-
-> 若需要"原因 + 建议"，在 `i18n.<lang>.advice` 里加 `{ cause, action }`，然后在 `findings` 里 push 对应 code。
-
----
-
-## 附录 B：新增一个 API 端点的骨架
-
-```js
-// ==================== 我的端点 ====================
-if (url.pathname === '/api/my-endpoint') {
-  // ① 默认要令牌
-  if (!isSameOriginNavigation(request)) return forbiddenResponse(request);
-
-  // ② 输入校验（白名单 + 长度上限）
-  const name = (url.searchParams.get('name') || '').trim().toLowerCase();
-  if (!/^[a-z0-9_][a-z0-9_.-]{0,251}$/.test(name)) {
-    return new Response(JSON.stringify({ error: 'invalid_name' }), {
-      status: 400,
-      headers: { 'content-type': 'application/json', ...corsHeaders(request), ...SECURITY_HEADERS }
-    });
-  }
-
-  // ③ 若需要出站：协议 → 私网 → 端口 → 公网解析，且重定向逐跳复检
-  //    const p = new URL(target);
-  //    if (!['http:', 'https:'].includes(p.protocol) || isPrivateHost(p.hostname) ||
-  //        !isAllowedTargetPort(p) || !(await resolvesToPublicOnly(p.hostname))) { ...403... }
-
-  // ④ 内存缓存（降低重复请求与 KV 读取）
-  const cacheKey = 'my:' + name;
-  const hit = myCache.get(cacheKey);
-  if (hit && Date.now() - hit.at < 60000) {
-    return new Response(JSON.stringify(hit.data), {
-      headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...corsHeaders(request), ...SECURITY_HEADERS }
-    });
-  }
-
-  // ⑤ 结果 + 缓存 + 统一错误码
-  const payload = { ok: true, name: name };
-  if (myCache.size > 200) myCache.clear();
-  myCache.set(cacheKey, { at: Date.now(), data: payload });
-  return new Response(JSON.stringify(payload), {
-    headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...corsHeaders(request), ...SECURITY_HEADERS }
-  });
-}
-```
-
-新增端点检查项：
-
-- [ ] 令牌校验（或已在 issue 中说明为何匿名，且响应极小无敏感信息）
-- [ ] 限流：默认桶即可，高成本端点申请独立桶
-- [ ] 输入白名单 + 长度上限
-- [ ] 出站目标全链路校验（含重定向跳）
-- [ ] 需要计入统计则加入 `COUNTED_ENDPOINTS`
-- [ ] 错误码机器可读，前端三语映射
-- [ ] README 端点表已更新
-- [ ] 若成本高，考虑加入 `DISABLED_ENDPOINTS` 的可停用设计
-
----
-
-## 附录 C：一页速查（提交前 30 秒）
-
-- [ ] 只做了一件事；需要先讨论的改动已有 issue 共识
-- [ ] `node --check _workers.js` 通过（转义陷阱已避开）
-- [ ] `wrangler deploy --dry-run` 通过
-- [ ] 三语文案齐全；术语与术语表一致；没有硬编码语言/时区
-- [ ] 既有 DOM id 未被改名；新增 id 命名规范
-- [ ] 按钮用三级体系；颜色用 CSS 变量；结果全部 `escapeHTML()`
-- [ ] 若新增 KV 写入：走 `kvPut()`，无 `list`/`delete`，已贴最坏情况估算
-- [ ] 若新增出站：默认关闭 + 缓存 + 超时 + 体积上限 + 端口/私网校验
-- [ ] 没有放宽 CSP / 安全头 / 令牌 / 体积上限 / SSRF 防护
-- [ ] 没有"顺手恢复"已停用端点
-- [ ] 截图/日志已脱敏；PR 描述含根因与验证方式
-- [ ] 许可：我可授权这些代码（AGPL-3.0，inbound = outbound）
+<p align="center">
+  <sub>Code is read more often than it is written. Thanks for contributing.</sub>
+</p>
