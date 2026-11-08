@@ -205,7 +205,7 @@ NetSight Pro 是一个**网络诊断工具**，它的能力可以被用于合法
 ### 报告方式
 
 - 首选：GitHub **Private Security Advisory**（仓库 → Security → Advisories）；
-- 备选：邮件 <admin@bjhr.space>，标题注明 `[SECURITY]`；
+- 备选：邮件 <asiacomk@gmail.com>，标题注明 `[SECURITY]`；
 - 请包含：受影响版本、复现步骤、影响评估、可能的修复建议、是否已公开；
 - 我们会在 **7 天内**确认收到，并在修复后征得同意给予公开致谢。
 
@@ -244,7 +244,7 @@ NetSight Pro 是一个**网络诊断工具**，它的能力可以被用于合法
 
 如果你经历或目击了违反本公约的行为，请通过以下渠道举报：
 
-- **常规行为问题**：邮件至 <admin@bjhr.space>，标题注明 `[CoC]`；
+- **常规行为问题**：邮件至 <asiacomk@gmail.com>，标题注明 `[CoC]`；
 - **安全漏洞**：优先 GitHub Private Security Advisory，或邮件标题 `[SECURITY]`；
 - **涉及维护者本人**：请发送邮件并说明「需要回避」，由其他维护者或平台渠道处理；若项目暂无其他维护者，请使用 GitHub 平台举报/滥用报告渠道。
 
@@ -305,7 +305,7 @@ NetSight Pro 是一个**网络诊断工具**，它的能力可以被用于合法
 ## 报复与申诉
 
 - **禁止报复**：对举报人、证人、处理者进行任何形式的报复，本身即属严重违规，可直接适用第 3–4 级；
-- **申诉**：当事人可在收到处理通知后 14 天内，向 <admin@bjhr.space> 提交一次申诉，说明事实与理由；由未参与原处理的维护者复核；
+- **申诉**：当事人可在收到处理通知后 14 天内，向 <asiacomk@gmail.com> 提交一次申诉，说明事实与理由；由未参与原处理的维护者复核；
 - **复核结果**：维持、减轻、撤销或加重；复核结论为最终结果；
 - **记录**：申诉与复核记录仅维护者可见，不公开个人隐私。
 
@@ -384,7 +384,7 @@ NetSight Pro 是一个**网络诊断工具**，它的能力可以被用于合法
 - 本公约改编自 [Contributor Covenant v2.1](https://www.contributor-covenant.org/version/2/1/code_of_conduct/)，采用 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) 许可；
 - 感谢所有让这个项目变得更好的贡献者、翻译者、安全研究者与用户。
 
-如有疑问，请联系：<admin@bjhr.space> · 项目：<https://github.com/BlueDriftHK/CF-workers-netdiag>
+如有疑问，请联系：<asiacomk@gmail.com> · 项目：<https://github.com/BlueDriftHK/CF-workers-netdiag>
 
 ---
 
@@ -402,13 +402,13 @@ This Code of Conduct is adapted from the [Contributor Covenant v2.1](https://www
 
 **Network-specific rules.** Only diagnose systems you own or are authorized to test. Do not abuse `/speedtest`, `/upload-test`, `/stream-test` or deployed instances. Respect the project's privacy-by-default and zero-egress design: no third-party analytics, no hidden data collection. Do not introduce dependencies with incompatible licenses. AGPL-3.0 applies to the project.
 
-**Security research.** Responsible disclosure only: test your own deployments, avoid service disruption, do not access or exfiltrate third-party data, and give maintainers reasonable time to fix (typically 7–30 days). Report via GitHub Private Security Advisory or email <admin@bjhr.space> with `[SECURITY]` in the subject.
+**Security research.** Responsible disclosure only: test your own deployments, avoid service disruption, do not access or exfiltrate third-party data, and give maintainers reasonable time to fix (typically 7–30 days). Report via GitHub Private Security Advisory or email <asiacomk@gmail.com> with `[SECURITY]` in the subject.
 
-**Reporting.** Contact <admin@bjhr.space> with `[CoC]` for behavior issues. Reports are acknowledged within 7 days and handled confidentially. If the report concerns a maintainer, that maintainer will recuse themselves; use an alternative channel if needed. We will not tolerate retaliation against reporters or witnesses.
+**Reporting.** Contact <asiacomk@gmail.com> with `[CoC]` for behavior issues. Reports are acknowledged within 7 days and handled confidentially. If the report concerns a maintainer, that maintainer will recuse themselves; use an alternative channel if needed. We will not tolerate retaliation against reporters or witnesses.
 
 **Enforcement guidelines.** 1) **Correction** — private clarification and apology; 2) **Warning** — formal warning with a 30-day observation period; 3) **Temporary ban** — 30–90 days from project spaces; 4) **Permanent ban** — for severe or repeated violations, including threats, doxxing, harassment or abuse of project capabilities. Security incidents may be handled immediately to limit harm.
 
-**Appeals.** A decision may be appealed once within 14 days by emailing <admin@bjhr.space>; an uninvolved maintainer will review. The review decision is final. Retaliation is itself a serious violation.
+**Appeals.** A decision may be appealed once within 14 days by emailing <asiacomk@gmail.com>; an uninvolved maintainer will review. The review decision is final. Retaliation is itself a serious violation.
 
 **Maintainer responsibilities.** Maintainers must model this Code, handle reports promptly and consistently, protect confidentiality, recuse themselves from conflicts of interest, explain decisions, and never use moderation powers to silence legitimate criticism.
 
