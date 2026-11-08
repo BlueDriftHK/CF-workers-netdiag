@@ -1,505 +1,472 @@
-# 安全策略 · Security Policy
+# 安全策略（Security Policy）
 
-**项目**：NetSight Pro / CF-workers-netdiag —— 单文件 Cloudflare Worker 网络诊断工具
-**适用版本**：`v4.7.1`（仅最新版本接受安全修复）
-**漏洞报告**：`admin@bjhr.space` · 或 GitHub 私密报告（仓库 **Security → Report a vulnerability**）
-**首次响应承诺**：**3 个工作日内**
-**本文档版本**：v1.0 · 最近更新：`<2026-10-16>`
+**项目：NetSight Pro** · 版本 **1.0** · 生效日期：2026-11-08
+**当前发布版本：5.1.0** · 维护者：NetSight Pro maintainers
 
-> **一句话**：安全问题请走私密渠道；不要对公开实例做压测/破坏性验证；报告时带上版本号与影响面。
->
-> **English summary** — Please report vulnerabilities privately to `admin@bjhr.space` or via GitHub's private vulnerability reporting. We acknowledge within 3 business days, fix or mitigate before public disclosure, and credit you on request. Do not run destructive or load tests against public instances, do not touch other people's data, and do not scan third-party sites through this tool. The project is a single-file AGPL-3.0 Cloudflare Worker with a deliberate security model: session-token gate, strict SSRF guards (public hosts, ports 80/443 only), nonce CSP and hardened headers, per-IP rate limits, and a hard KV write budget. Known accepted limitations are listed in section 9.
+> 如果你发现了安全漏洞，**请不要公开提交 Issue、PR 或 Discussion**。请按 [漏洞报告](#漏洞报告) 中的方式私下联系我们。
+> 本文同时给出项目的威胁模型、安全设计、自托管加固清单与漏洞披露流程，供用户、部署者与安全研究者参考。
 
 ---
 
 ## 目录
 
-1. [支持范围](#1-支持范围)
-2. [如何报告漏洞](#2-如何报告漏洞)
-3. [我们的处理流程](#3-我们的处理流程)
-4. [安全模型与威胁模型](#4-安全模型与威胁模型)
-5. [已实现的安全控制](#5-已实现的安全控制)
-6. [部署者安全清单](#6-部署者安全清单)
-7. [运维安全](#7-运维安全)
-8. [不接受的测试方式](#8-不接受的测试方式)
-9. [已知限制与已接受的风险](#9-已知限制与已接受的风险)
-10. [依赖与供应链](#10-依赖与供应链)
-11. [关于仿冒实例与分支](#11-关于仿冒实例与分支)
-12. [安全相关 FAQ](#12-安全相关-faq)
-13. [修订记录](#13-修订记录)
-- [附录 A：漏洞报告模板](#附录-a漏洞报告模板)
-- [附录 B：部署上线前检查清单](#附录-b部署上线前检查清单)
-- [附录 C：应急响应速查](#附录-c应急响应速查)
+- [支持的版本](#支持的版本)
+- [漏洞报告](#漏洞报告)
+- [报告之后会发生什么](#报告之后会发生什么)
+- [安全研究安全港](#安全研究安全港)
+- [严重程度分级](#严重程度分级)
+- [威胁模型](#威胁模型)
+- [安全设计与现有防护](#安全设计与现有防护)
+- [安全相关配置](#安全相关配置)
+- [自托管加固清单](#自托管加固清单)
+- [已知限制与接受的风险](#已知限制与接受的风险)
+- [隐私与数据流](#隐私与数据流)
+- [供应链与依赖安全](#供应链与依赖安全)
+- [事件响应流程](#事件响应流程)
+- [安全更新与版本支持](#安全更新与版本支持)
+- [不在范围内的问题](#不在范围内的问题)
+- [致谢与披露政策](#致谢与披露政策)
+- [English Version](#english-version)
 
 ---
 
-## 1. 支持范围
+## 支持的版本
 
-| 项目 | 说明 |
-|---|---|
-| 接受修复的版本 | **仅最新发布版本**（当前 `v4.7.x`）。旧版本请先升级再复现 |
-| 修复方式 | 直接提交到主分支并随下一次发布生效（本项目无 LTS 分支） |
-| 公开实例 | 由个人自费部署，**不承诺可用性**；见第 8 节的测试红线 |
-| 自托管实例 | 属于**部署者自己的责任域**：配置、密钥、配额、合规由部署者承担（见第 6 节） |
-| 分支 / fork | 第三方 fork 的安全问题请联系该 fork 的维护者；若同一问题也影响上游，欢迎一并报告 |
-| 不在范围内 | 缺少"最佳实践"类建议（如未启用某个可选头）、第三方服务（Cloudflare、crt.sh、DoH 解析器）自身的问题、需要物理接触或已攻陷 Cloudflare 账号的攻击、纯理论无影响面的问题 |
-
----
-
-## 2. 如何报告漏洞
-
-### 2.1 渠道（按优先级）
-
-1. **GitHub 私密报告**：仓库 → **Security** → **Report a vulnerability**（推荐，自带私密讨论与协作修复流程）
-2. **邮件**：`admin@bjhr.space`
-3. 若你已确认问题**不影响任何实例安全**（例如纯文档错误），也可以开公开 issue
-
-**加密**：目前**未提供 PGP 公钥**。若报告内容敏感，请使用 GitHub 私密报告，或先发一封"我想报告一个安全问题，请提供加密方式"的空壳邮件。
-
-### 2.2 报告请包含
-
-| 项 | 说明 |
-|---|---|
-| 受影响版本 | `/health` 返回的 `version`（例如 `4.7.1`）与获取方式（官方实例 / 自托管） |
-| 端点与参数 | 精确到路径与查询参数，例如 `GET /api/site-audit?url=...` |
-| 复现步骤 | 最小可复现步骤；若需要特定头部（`x-ns-token`、`x-admin-key`）请注明你如何获得 |
-| 影响面 | 能读到什么 / 能改什么 / 是否影响他人数据 / 是否消耗他人配额 |
-| 前置条件 | 是否需要一个有效的页面会话令牌？是否需要管理员密钥？ |
-| 建议缓解（可选） | 你的修复思路；不强制 |
-| 证据 | 请求/响应片段、截图（**请脱敏**：IP、RAY ID、密钥、Cookie、Webhook 地址） |
-
-可直接复制 [附录 A 的模板](#附录-a漏洞报告模板)。
-
-### 2.3 请不要做
-
-- ❌ 对公开实例做**压测、DoS、暴力枚举**（包括"验证限流是否存在"式的高频请求）
-- ❌ 读取、修改、删除**他人的数据**（KV 中的监控配置、Webhook、密钥）
-- ❌ 通过 `站点体检` / `站点监控` / `多节点对比` 去**扫描或探测第三方站点**
-- ❌ 留下后门、webshell、持久化测试代码或"仅供验证"的写操作
-- ❌ 社工维护者或其他用户；不要用公开渠道施压以加速修复
-- ❌ 在修复发布前公开细节（包括在社交媒体"预告"）
-
-> 如果你不确定某个测试是否越界，**先发邮件问**。善意的不确定性不是问题，先斩后奏才是。
-
----
-
-## 3. 我们的处理流程
-
-| 阶段 | 目标时间 | 内容 |
+| 版本 | 支持状态 | 说明 |
 |---|---|---|
-| 确认收到 | **3 个工作日内** | 回执并给出初步判断（是否在范围内、需要哪些补充信息） |
-| 复现与定级 | 7 天内 | 在本地/自托管实例复现（**不在公开实例上做破坏性验证**），按下面口径定级 |
-| 修复 | 视严重度 | 高危优先；必要时先发布**缓解措施**（例如临时停用端点，见 `DISABLED_ENDPOINTS`） |
-| 发布 | 修复合入后 | 版本号递增（4 处同步），发布说明中描述影响与缓解，**在修复可用后再公开细节** |
-| 致谢 | 发布时 | 经你同意后在发布说明/本文档致谢（**本项目不设漏洞赏金**） |
+| **5.1.x** | ✅ 活跃支持 | 当前发布版本，接收安全修复 |
+| 5.0.x | ⚠️ 有限支持 | 仅接收严重安全修复，建议升级 |
+| 4.x | ❌ 不再支持 | 请升级到 5.1.x |
+| `main` 分支 | ✅ 开发中 | 可能包含未发布修复；不建议直接用于生产 |
 
-### 3.1 严重度口径（简版）
-
-| 级别 | 例子 |
-|---|---|
-| 严重 | 无需任何令牌即可读取他人数据；绕过管理员密钥；RCE/代码注入；CSP/转义失效导致可稳定 XSS |
-| 高 | SSRF 绕过（访问内网/非白名单端口）；可导致他人配额被大量消耗的放大点；令牌体系可被跨站利用 |
-| 中 | 限流可被单 IP 大规模规避；错误信息泄露敏感内容（密钥、内部标识）；可被 CSRF 的状态变更 |
-| 低 | 需要极高前提条件的绕过；信息泄露影响极小；仅影响自托管者自身配置的问题 |
-| 信息 | 最佳实践建议、非默认配置下的加固建议 |
-
-**CVE**：本项目为单文件工具、非库依赖，一般**不申请 CVE**；若你认为有必要，可在报告中说明，我们会配合。
+安全修复会以 **patch 版本**（如 5.1.1）发布，并在 GitHub Security Advisories 中公告。升级方式见 [安全更新与版本支持](#安全更新与版本支持)。
 
 ---
 
-## 4. 安全模型与威胁模型
+## 漏洞报告
 
-### 4.1 资产（需要保护的东西）
+### 首选渠道
 
-1. **部署者的配额与费用**：Workers 请求量、KV 读写、可观测性事件、带宽
-2. **用户的网络隐私**：出口 IP、地理位置、测速结果、RTT 样本
-3. **管理员密钥**：`MONITOR_ADMIN_KEY`（可读写监控配置、触发巡检、配置 Webhook）
-4. **KV 中的配置数据**：监控目标列表、Webhook 地址（**本身就相当于一个凭据**，钉钉/飞书 token 在 URL 里）
-5. **实例可用性**：公开实例被滥用会导致限流拖慢所有用户
+**GitHub Private Security Advisory（推荐）**
 
-### 4.2 信任边界
+<https://github.com/BlueDriftHK/CF-workers-netdiag/security/advisories/new>
 
-```
-用户浏览器  ──(1)──▶  Worker（Cloudflare 边缘）  ──(2)──▶  第三方出站目标
-                                     │
-                                     └──(3)──▶  KV（可选绑定）
-维护者/部署者 ──(4)──▶ 管理端点（需 x-admin-key）
-```
+优点：私密、可附 PoC、可协调披露、可申请 CVE/GHSA。
 
-| 边界 | 关注点 |
-|---|---|
-| (1) 浏览器 → Worker | 跨站请求伪造/读取、令牌伪造、头部伪造、注入（HTML/JS） |
-| (2) Worker → 出站目标 | **SSRF**（内网、本机、云元数据、非标准端口）、被当作代理滥用 |
-| (3) Worker → KV | 写入放大导致费用爆炸、越权读取他人配置 |
-| (4) 管理端点 | 密钥泄露、密钥经 URL/日志外泄 |
+### 备选渠道
 
-### 4.3 攻击者假设
+- 邮件：**<asiacomk@gmail.com>**，标题请以 `[SECURITY]` 开头；
+- 如涉及维护者本人或邮件渠道不可用，请使用 GitHub 平台的滥用/安全报告渠道。
 
-- **匿名互联网用户**：能任意构造 HTTP 请求，可伪造 `Origin` / `Referer` / `User-Agent` / 自定义头，但**无法伪造** `CF-Connecting-IP`（由 Cloudflare 注入）
-- **恶意网页**：能诱导已登录用户浏览器发起跨站请求
-- **持有有效令牌的用户**：任何访问过主页面的人都会拿到 1 小时令牌（这是**设计如此**——令牌用于挡爬虫与脚本，不是用户认证）
-- **不受信任的输入源**：`request.cf` 字段、URL 参数、请求体、第三方 API 返回内容
+> 如需加密传输，请在首封邮件中说明，维护者会提供可用的安全传输方式。请勿在首封邮件中直接附带完整利用细节或用户数据。
 
-### 4.4 明确不防（非目标）
+### 报告中请尽量包含
 
-- **持有 Cloudflare 账号/部署权限的人**：能改代码、读 KV、换密钥是预期能力
-- **用户本机被攻陷**：本地恶意软件、浏览器扩展、代理中间人（HSTS/TLS 之外无额外防护）
-- **流量分析**：Cloudflare 与网络路径上的可见性不在防护范围
-- **DoS 的完全防护**：公开实例始终可能被大规模流量打慢，我们只做成本与滥用控制
-- **"用户认证"**：本项目没有账号体系，会话令牌**不是**身份凭证
+- **受影响版本**（`/health` 或页面版本号）与部署方式（单文件 / 模块化 / 自定义配置）；
+- **漏洞类型**（如鉴权绕过、SSRF、XSS、DoS、信息泄露、供应链）；
+- **复现步骤**（最小化、可重复）；
+- **影响评估**（能做什么、需要什么前置条件、影响哪些用户/数据/成本）；
+- **PoC 或关键请求/响应**（请脱敏；不要包含真实用户数据或第三方凭据）；
+- **是否已公开**、是否计划公开、希望的披露时间；
+- **你的联系方式与署名偏好**（真实姓名/昵称/匿名）；
+- 如果涉及配置，请说明 `PAGE_TOKEN_SECRET`、`MONITOR_ADMIN_KEY`、KV、`SITE_CONFIG` 是否启用（**不要发送密钥本身**）。
+
+### 不要做什么
+
+- 不要在公开 Issue / PR / Discussion / 社交媒体发布漏洞细节或可用 PoC；
+- 不要访问、修改、删除他人数据，不要扩大访问范围；
+- 不要进行 DoS、压测或影响服务可用性的测试；
+- 不要对第三方系统（包括演示站点、他人部署、真实用户目标）进行测试；
+- 不要以披露为威胁索取报酬、合并代码或其他利益。
 
 ---
 
-## 5. 已实现的安全控制
+## 报告之后会发生什么
 
-### 5.1 请求准入
-
-| 控制 | 实现 | 说明 |
+| 阶段 | 目标时间 | 说明 |
 |---|---|---|
-| **页面会话令牌** | `issuePageToken` / `getRequestToken` / `isValidPageToken` | 主页面签发；`HttpOnly` + `SameSite=Strict` Cookie `__ns_t`（HTTPS 下带 `Secure`），或 `x-ns-token` 请求头兜底；TTL 1 小时；per-isolate 内存 |
-| **取代 Origin/Referer 判断** | `isSameOriginNavigation` | `Origin`/`Referer` 可被脚本随意伪造，**不再作为放行依据**；仅保留显式配置的 `ALLOWED_ORIGINS` 白名单分支 |
-| **端点开关** | `DISABLED_ENDPOINTS` / `DISABLED_PATH_PREFIXES` | 停用端点返回 410，且短路在令牌、限流、统计**之前**（不产生任何副作用） |
-| **CORS** | `corsHeaders` / `handleOptions` | 仅对同源或白名单来源回 `Access-Control-Allow-Origin`；预检带 `Vary: Origin` |
-| **限流** | `isRateLimited` + 多个独立桶 | 默认 60/分/IP；`/health` 180/分；大响应下载 30/分；`/cpu-test` 3/分。IP 取自 `CF-Connecting-IP`（**不信任** `x-real-ip` 等可伪造头） |
+| 确认收到 | **7 天内** | 人工回复，说明正在处理；如有需要会请求更多信息 |
+| 初步分级 | **14 天内** | 与报告者确认严重程度、影响范围与复现条件 |
+| 修复与验证 | 视严重程度，通常 **30–90 天** | 复杂问题可能更久；会持续同步进展 |
+| 协调披露 | 修复发布后 | 征得报告者同意后发布 Advisory，并致谢 |
+| 复盘 | 发布后 | 必要时更新代码、文档或本策略 |
 
-### 5.2 SSRF 防护（出站）
+说明：
 
-| 控制 | 实现 | 说明 |
+- 这是个人维护的开源项目，以上为**目标时间**，不是商业 SLA；维护者会尽力在合理时间内响应；
+- 如漏洞正在被积极利用，请在报告中注明，会优先处理；
+- 修复发布前，请不要公开细节；如需提前向你的客户/团队说明，请先与维护者协调。
+
+---
+
+## 安全研究安全港
+
+在以下范围内，出于善意的安全研究**不会**被追究：
+
+- 只测试**你自己部署的** NetSight Pro 实例；
+- 只测试你拥有或获得**明确书面授权**的目标；
+- 不访问、修改、删除他人数据；不建立持久化访问；不扩大访问范围；
+- 不进行可能影响可用性的测试（DoS、压测、资源耗尽）；
+- 不公开未修复的漏洞细节；
+- 发现敏感数据时立即停止，删除本地副本，并告知维护者；
+- 给维护者合理的修复时间（通常 7–30 天，严重问题可协商）。
+
+**超出范围**的行为（包括但不限于）：扫描第三方、利用漏洞获取未授权数据、部署后门、把项目能力用于攻击、公开 0-day、以漏洞勒索。
+
+如果你不确定某个测试是否在安全港范围内，**先发邮件问**，不要先做。
+
+---
+
+## 严重程度分级
+
+使用 [CVSS v3.1](https://www.first.org/cvss/v3.1/specification-document) 作为参考，并结合项目实际影响：
+
+| 级别 | 典型问题 | 示例 |
 |---|---|---|
-| 协议白名单 | 各出站端点 | 仅 `http:` / `https:` |
-| IP 字面量判定 | `isIpLiteral` + `parseIPv6ToGroups` | 完整解析 IPv6（含 `::` 压缩、IPv4 尾段），覆盖 `::`、`::1`、`fc00::/7`、`fe80::/10`、`ff00::/8`、`2002::/16`、`2001::/32`、`2001:db8::/32`、**IPv4 映射 `::ffff:0:0/96`** 与 **NAT64 `64:ff9b::/96`** |
-| 内网/本机判定 | `isPrivateIp` / `isPrivateHost` | IPv4 覆盖 `0/8`、`10/8`、`127/8`、`169.254/16`、`172.16/12`、`192.168/16`、`100.64/10`、`192.0.0/24`、`198.18/15`、`≥224/4`；主机名覆盖 `localhost`、`.local`、`.internal`、`.home.arpa`、无点主机名；**解析失败按不安全处理**（fail-closed） |
-| **端口白名单** | `isAllowedTargetPort` | **仅 80 / 443**（含 URL 归一化后的默认端口）；堵住用任意端口探测第三方服务的能力 |
-| DNS 公网校验 | `resolvesToPublicOnly` | 通过 DoH 查询 A/AAAA，**所有**解析结果都必须是公网地址；**60 秒 TTL 缓存**（防止域名改解析到内网后仍被永久放行）；无结果视为不安全 |
-| 重定向逐跳校验 | 站点体检 ≤6 跳 | **每一跳**都重新做协议 + 私网 + 端口 + DNS 公网校验，防止用 3xx 绕过 |
-| 运行时兜底 | 监控巡检 / Webhook 发送 | 历史配置可能包含修复前保存的内网地址，运行时再次校验后才发起请求 |
+| **Critical** | 未授权即可完全控制 / 大规模数据泄露 | 页面令牌或管理员鉴权可被完全绕过；SSRF 可读取云元数据/内网敏感服务；远程代码执行 |
+| **High** | 严重权限提升 / 敏感数据或密钥泄露 / 可稳定 DoS | 持久化 XSS 可窃取管理员密钥；监控配置可被未授权修改；令牌伪造；可低成本打爆部署额度 |
+| **Medium** | 受限绕过 / 中等影响 | 限流可被特定方式绕过并造成明显成本；信息泄露帮助进一步攻击；CSP 绕过但需用户交互 |
+| **Low** | 低影响 / 纵深防御 | 配置错误提示、非敏感版本信息、缺少安全头但不构成利用链 |
+| **Informational** | 最佳实践建议 | 文档改进、可观测性建议、非漏洞的健壮性问题 |
 
-### 5.3 注入与内容安全
+> 最终分级由维护者结合可利用性、影响面、是否需要前置条件与项目实际部署情况判断。如果你不同意分级，欢迎补充论证。
 
-| 控制 | 实现 |
+---
+
+## 威胁模型
+
+### 资产（Assets）
+
+- **用户数据**：浏览器内的诊断结果、历史记录、本地设置（默认不离开浏览器）；
+- **会话令牌**：页面令牌（Cookie / `x-ns-token`）、`PAGE_TOKEN_SECRET`；
+- **管理能力**：`MONITOR_ADMIN_KEY`、`/api/monitor*`、`/api/admin/overview`、`/metrics`；
+- **持久化数据**：可选 KV 中的监控配置、状态、事件日志；
+- **部署可用性与成本**：Worker 请求额度、CPU、KV 读写、出站带宽；
+- **代码与构建链**：源码、构建脚本、CI、发布产物。
+
+### 参与者（Actors）
+
+- 未认证的互联网用户 / 爬虫 / 扫描器；
+- 正常使用页面的访客（拥有页面令牌）；
+- 恶意页面访客（试图越权/滥用/DoS/消耗配额）；
+- 部署者 / 管理员（拥有部署与密钥；也可能误配置）；
+- 被监控目标 / 第三方服务（可能返回恶意内容或异常响应）；
+- 供应链攻击者（依赖、构建、CI、发布渠道）；
+- 网络中间人（在无 TLS 或错误配置时）。
+
+### 信任边界（Trust Boundaries）
+
+1. **浏览器 ↔ Cloudflare 边缘**：TLS、CSP、同源策略、Cookie 属性；
+2. **Worker ↔ 上游**：DoH、crt.sh、监控目标、webhook；所有用户输入都在此跨越边界，必须校验；
+3. **Worker ↔ KV**：写入预算、去抖、失败处理；
+4. **管理员 ↔ 管理面**：页面令牌 + 管理员密钥双重校验；
+5. **源码 ↔ 构建产物**：构建可复现、CI 校验、发布来源可信。
+
+### 主要威胁与对应控制
+
+| 威胁 | 控制 |
 |---|---|
-| **CSP（nonce）** | 主页面 `script-src 'self' 'nonce-<每请求随机>'`，`object-src 'none'`、`base-uri 'none'`、`frame-ancestors 'none'`、`form-action 'none'` |
-| 安全响应头 | `SECURITY_HEADERS` 统一注入：HSTS（`max-age=31536000; includeSubDomains; preload`）、`X-Content-Type-Options: nosniff`、`X-Frame-Options: DENY`、`Referrer-Policy`、`Permissions-Policy` |
-| 输出转义 | 前端所有插值经 `escapeHTML()`；服务端 HTML 插值分两套：`data.*`（`escapeForJS`，用于 `<script>`）与 `h.*`（`escapeHtml`，用于 HTML） |
-| 无 `eval` / 无动态脚本 | 前端不使用 `eval`、`new Function`、`document.write`；不加载第三方脚本 |
-| 分享链路 | 分享链接为 URL 内嵌 base64 JSON，渲染时全部 `escapeHTML`，且校验结构（`total` 为数字、`lines` 为数组）后才展示 |
+| 伪造 Origin/Referer 绕过同源校验 | 页面令牌（HttpOnly Cookie + 自定义头）+ HMAC；不依赖 Origin |
+| 跨 isolate 令牌失效导致刷新风暴 | 可选无状态 HMAC 令牌；前端 403 静默续期重试 |
+| SSRF 访问内网/云元数据 | 协议/端口白名单、私网判定、DoH 公网解析、逐跳重定向校验 |
+| 恶意 URL/域名导致 XSS | HTML/JS 上下文分离转义、CSP nonce、无 `unsafe-inline` |
+| 恶意目标响应头注入页面 | 输出转义 + 截断 + CSP |
+| 接口滥用导致额度耗尽 | 限流（按 IP/端点）、大响应配额、KV 写预算、端点开关 |
+| 管理密钥泄露/爆破 | 恒定时间比较、`x-admin-key`、sessionStorage、限流 |
+| 第三方 webhook 被用于 SSRF | 保存时校验、发送前 DNS 复核、禁止跟随重定向 |
+| 静态资源被篡改 | 内容哈希版本、Cache API、可选的 SRI（外部字体） |
+| 供应链/构建污染 | 零运行时依赖、CI 校验、可复现构建、发布审计 |
 
-### 5.4 输入与资源限制
+---
 
-| 端点/入口 | 限制 |
+## 安全设计与现有防护
+
+### 1. 鉴权与会话
+
+- 主页面每次渲染签发页面令牌：
+  - 配置 `PAGE_TOKEN_SECRET` 时：`v1.<exp>.<nonce>.<HMAC-SHA256>` **无状态令牌**，跨 isolate 有效；
+  - 未配置时：per-isolate 内存 Map（TTL 1 小时、最多 8000 条、LRU 淘汰）；
+- 令牌写入 `HttpOnly; SameSite=Strict; Path=/; Max-Age=3600` Cookie，并注入 `window.__PAGE_KEY__`；
+- 前端对同源请求自动附加 `x-ns-token`；403 时调用 `/api/page-token` **静默续期并重试一次**，避免整页刷新循环；
+- `/health`、`/speedtest`、`/upload-test`、`/stream-test`、`/ws-test`、`/http2-test`、`/api/*`（除 `/api/page-token`）均要求令牌；
+- `/admin` 页面本身公开，但 `/api/admin/overview` 要求令牌 + 管理密钥；
+- `/api/monitor*` 要求令牌 + `x-admin-key`；
+- `/metrics` 要求 `SITE_CONFIG.metricsKey` 或 `MONITOR_ADMIN_KEY`。
+
+### 2. SSRF 防护
+
+面向用户输入的目标（站点体检、监控、webhook）：
+
+- 协议白名单：仅 `http:` / `https:`；
+- 端口白名单：仅 80 / 443；
+- 私网/特殊地址判定：IPv4 私网、回环、链路本地、组播、保留段；IPv6 ULA、链路本地、组播、6to4、Teredo、NAT64、IPv4-mapped、旧 site-local 等；
+- 域名先做 **DoH 公网解析校验**（缓存 60 秒）；
+- 站点体检与监控巡检**手动跟随重定向，每一跳重新校验**；
+- 监控 webhook：发送前重新做 DoH 校验，禁止重定向；
+- 超时、响应体大小与读取方式受限；仅取必要内容。
+
+### 3. 注入与输出
+
+- HTML 模板区分：
+  - `escapeHtml`：HTML 文本/属性上下文；
+  - `escapeForJS`：JS 字符串上下文（含 `<`、`>`、引号、反引号、`${}` 等）；
+- CSP：`default-src 'self'`、`script-src 'self' 'nonce-<random>'`、无 `unsafe-inline`；内联脚本必须带 nonce；
+- 安全响应头：`X-Frame-Options: DENY`、`X-Content-Type-Options: nosniff`、HSTS、Referrer-Policy、Permissions-Policy、`frame-ancestors 'none'` 等；
+- 用户可控数据（DNS TXT、响应头、重定向 URL、监控配置）在渲染前统一转义并截断；
+- 前端不加载第三方脚本。
+
+### 4. 滥用与成本防护
+
+| 端点/场景 | 限制 |
 |---|---|
-| 上传 | `content-length` 预检 + 流式读取双重限制，**≤ 32MB**，超限 413 并中断读取 |
-| `/api/log-speed` | 请求体 **≤ 10KB**（`content-length` 校验），数值字段做范围钳制 |
-| 域名 / DNS 查询 | 正则白名单 + 长度 ≤253 + 拒绝 `..`；查询类型白名单 |
-| DKIM 选择器 | 正则白名单 + 长度 ≤63 |
-| 黑名单检测 | 仅接受合法 IPv4 |
-| 监控目标 | ≤10 个、单个 ≤300 字符；Webhook ≤500 字符；**端口仅 80/443**；保存与运行双重校验 |
-| WebSocket | 消息 ≤4KB；服务端心跳与 **最长 5 分钟**生命周期 |
-| 并发/流式/测速 | 参数钳制（`clampInt`），大响应走独立限流桶 |
-| CPU 测试 | `n` 钳制 ≤20,000，独立限流 3/分 |
+| 默认请求 | 60 次 / 分 / IP；Map 硬上限 5000 键、30 秒增量清理 |
+| `/health` | 180 次 / 分 / IP（独立桶） |
+| 大响应（`/speedtest >2MB`、`/upload-test`、`/stream-test`） | 30 次 / 分 / IP（独立桶） |
+| `/cpu-test` | 3 次 / 分 / IP |
+| `/speedtest` | 单次 ≤64 MB |
+| `/upload-test` | ≤32 MB |
+| `/stream-test` | ≤5 MB |
+| `/api/log-speed` | body ≤10 KB（流式限长） |
+| `/api/monitor` | body ≤64 KB；最多 10 目标 |
+| KV 写入 | 20 次 / 分 / isolate、600 次 / 日 / isolate、同键去抖 10 秒、失败回滚 |
+| 监控 | 并发 3、证书检查 6 小时/目标、静默/维护窗口 |
+| 已停用端点 | `/dns-proxy`、`/api/ip-fraud`、`/api/reach-check` 返回 410 |
 
-### 5.5 密钥与配置
+### 5. 管理面
 
-| 控制 | 说明 |
-|---|---|
-| 管理密钥只走请求头 | `x-admin-key`；**不接受**查询参数（避免进入访问日志、浏览器历史、Referer） |
-| 密钥不入库、不入码 | 通过 `wrangler secret` 注入；代码中无任何硬编码密钥 |
-| 客户端保存行为 | 监控密钥可存于浏览器 `localStorage`，属于**便利性取舍**：共用设备请勿保存（见第 9 节） |
-| 缺省即安全 | 未设置 `MONITOR_ADMIN_KEY` 时管理端点返回 `key_not_set`；未绑定 KV 时相关功能提示不可用而非降级放行 |
+- 管理密钥使用**恒定时间比较**，前端仅存 `sessionStorage`；
+- `/admin` 只读，修改监控需回到主页面工具；
+- 管理员端点仍在令牌 + 密钥双重保护下；
+- `/metrics` 与 `/admin` 建议在反向代理/WAF 层再加访问控制。
 
-### 5.6 成本与配额防护
+### 6. 数据与隐私
 
-| 控制 | 说明 |
-|---|---|
-| **KV 写入总闸** | `kvPut` 统一入口：20 次/分、600 次/日（per-isolate）、同键 10 秒去抖；超限**静默丢弃非关键写入**（fail-safe，宁可丢数据也不打爆额度）；保存监控配置会返回 `503 write_budget_exceeded` |
-| 单键环形缓冲 | 测速历史用**一个键**存数组，**无 `list`、无 `delete`**，避免按量放大计费 |
-| 只读接口缓存 | `statsCache`（60s）降低前端 30s 轮询造成的读取放大 |
-| 出站缓存 | DNS 查 60s、黑名单 5 分钟、域名体检 120s、证书 30 分钟；证书查询有 **1.2MB 响应体积上限**（防大响应拖垮 CPU） |
-| 遥测 | `/health` 暴露 `kvWrite.{today, blocked, budgetPerDay, budgetPerMin}`，便于运维发现异常写入源 |
-
----
-
-## 6. 部署者安全清单
-
-### 6.1 部署前
-
-- [ ] 用 `wrangler secret put MONITOR_ADMIN_KEY` 设置**强随机**密钥（不要用 `local-dev-key` 之类）
-- [ ] `ALLOWED_ORIGINS` **留空**（仅同源）；除非确有多域需求，否则不要设 `*`
-- [ ] 确认站点通过 **HTTPS** 访问（否则会话 Cookie 的 `Secure` 不生效，只能依赖 `x-ns-token` 头兜底）
-- [ ] 若绑定 KV，确认命名空间**仅用于本项目**（本项目会写 `speed:history`、`usage:stats`、`monitor:*` 键）
-- [ ] 若配置 Webhook，确认接收端校验来源与内容（本项目的 Webhook 载荷是纯文本/JSON，接收端不应盲信）
-- [ ] 在 Cloudflare 面板设置**预算/用量告警**
-
-### 6.2 部署后
-
-- [ ] `fetch('/health')` 确认版本号与 `kvWrite` 正常
-- [ ] 抽查：未带令牌访问 `/api/usage-stats` 应返回 **403**；访问 `/dns-proxy` 应返回 **410**
-- [ ] 确认页脚源码链接指向**你自己那份**修改版仓库（AGPL-3.0 §13，见 [CODE_OF_CONDUCT.md 13.3](CODE_OF_CONDUCT.md#133-agpl-30-13-对本项目的实际含义部署者必读)）
-- [ ] 确认没有把 `.dev.vars`、密钥、KV id 提交进仓库
-- [ ] 若对外开放，准备一句话隐私说明（保留哪些数据、保留多久、是否记录访问日志）
-
-### 6.3 定期
-
-- [ ] 关注 KV 写入/删除/列出与可观测性事件量（异常增长往往是被人刷了）
-- [ ] 需要时轮换 `MONITOR_ADMIN_KEY`
-- [ ] 跟进上游安全修复（本仓库发布说明）
+- 诊断结果默认仅存浏览器（localStorage / 内存）；
+- 无第三方分析、广告、指纹、埋点；
+- 监控状态仅在显式配置 KV 后写入；
+- PWA Service Worker 只缓存静态资产，不缓存 API 响应与包含令牌的页面；
+- 日志中不记录令牌、Cookie、管理密钥。
 
 ---
 
-## 7. 运维安全
+## 安全相关配置
 
-| 场景 | 建议 |
-|---|---|
-| **密钥轮换** | 直接 `wrangler secret put MONITOR_ADMIN_KEY` 覆盖；旧密钥立即失效。客户端的 `localStorage` 缓存需用户重新输入 |
-| **发现异常流量** | 先看 Cloudflare 面板的请求量与 `/health` 的 `kvWrite.blocked`；必要时把对应端点加入 `DISABLED_ENDPOINTS` 临时下线 |
-| **被投诉滥用** | 本项目无法代表部署者行为；若你的实例被用来扫描他人站点，请立即停用 `站点体检` / `站点监控` 端点并检查日志 |
-| **日志与隐私** | 不要在 Worker 里 `console.log` 用户 IP/URL；本项目刻意不打日志（也降低可观测性事件量） |
-| **应急降级** | 极端情况下：停用 `/api/site-audit`、`/api/monitor*`（消除出站能力）→ 停用 KV 相关端点 → 只保留前端静态资源 |
-| **多实例** | 每个实例独立密钥、独立 KV；不要把同一个 KV 命名空间给多个对外实例共用 |
-
----
-
-## 8. 不接受的测试方式
-
-以下行为**不属于**安全测试，会被视为滥用（详见 [CODE_OF_CONDUCT.md 6.1 / 11.1](CODE_OF_CONDUCT.md#61-不要滥用公开实例)）：
-
-| 行为 | 为什么不行 |
-|---|---|
-| 对公开实例压测 / DoS / 高频轮询 | 消耗的是部署者自费的配额；限流存在与否不需要用攻击来验证 |
-| 伪造 `Origin`/`Referer`/`cf-connecting-ip` 绕限流或令牌 | 绕过安全机制后的使用行为本身即违规 |
-| 用 `站点体检`/`站点监控`/`多节点对比` 扫描第三方站点 | 把部署者暴露为攻击来源，可能触发投诉与封禁 |
-| 读取/修改 KV 中的他人配置或 Webhook | 直接侵犯他人数据 |
-| 在公开实例上做写操作验证 | 会污染真实配置 |
-| 社工维护者、索要密钥、假扮官方 | 见行为准则 |
-
-**允许且受欢迎的**：在**你自建的实例**上做任意深度的测试；阅读源码指出问题；用无害的 PoC 说明影响（例如"返回了 200 而不是 403"）。
-
----
-
-## 9. 已知限制与已接受的风险
-
-这一节是刻意公开的"诚实清单"。它们大多是**设计取舍**而非疏漏；如果你的场景需要更强保证，请自行加固或选择别的方案。
-
-### 9.1 令牌与限流的状态是 per-isolate
-
-- **限制**：会话令牌表、限流计数都存于 isolate 内存，**不跨 isolate 共享**。
-- **影响**：攻击者用大量 IP/大量并发可能使总量超过单 isolate 阈值；isolate 重建会让令牌失效（表现为 403，前端自动刷新重领）。
-- **为何接受**：跨 isolate 的全局计数需要 Durable Object 或 KV，前者增加复杂度与成本，后者会把限流本身变成计费与配额风险。
-- **缓解**：Cloudflare 层面的 WAF/速率限制规则（部署者可自行添加）。
-
-### 9.2 会话令牌不是身份认证
-
-- **限制**：任何访问过主页面的客户端都会获得令牌，1 小时内有效，且**不绑定 IP**。
-- **影响**：它挡得住盲目的爬虫/扫描器，但挡不住"先取令牌再调用"的脚本。
-- **为何接受**：本项目是公开诊断工具，没有用户体系；真正的成本护栏是**限流 + KV 写入闸门**。
-- **如果你需要**：可在前面加 Cloudflare Access（Zero Trust）把整站放到认证之后。
-
-### 9.3 DNS 校验存在 TOCTOU 窗口
-
-- **限制**：`resolvesToPublicOnly` 用 DoH 校验公网性，随后 Worker 再自行解析并连接；两次解析之间理论上存在 **DNS rebinding** 窗口（缓存 60 秒进一步收窄但不能消除）。
-- **为何接受**：Workers 平台不暴露"实际连接的 IP"，无法做到连接后校验。
-- **缓解**：端口白名单（仅 80/443）+ 重定向逐跳校验已显著降低可利用性。
-
-### 9.4 URL 允许使用明文 HTTP
-
-- **限制**：站点体检与监控目标允许 `http://`（仅限制端口 80/443）。
-- **影响**：出站流量明文，且可能与"仅 HTTPS"预期不符。
-- **为何接受**：诊断工具需要能审计仍在使用 HTTP 的站点。
-- **如果你需要**：在 `ALLOWED` 逻辑上自行收紧为仅 `https:`。
-
-### 9.5 管理密钥可保存在浏览器 localStorage
-
-- **限制**：为免去每次输入，前端允许把 `MONITOR_ADMIN_KEY` 存在 `localStorage`。
-- **影响**：共用设备或 XSS 场景下密钥可能被读取。
-- **缓解**：不勾选保存、用后清空站点数据；重要环境请用一次性会话而非长期保存。**不要**把管理密钥给不信任的人。
-
-### 9.6 管理密钥比较是普通字符串比较
-
-- **限制**：`reqKey !== adminKey` 未做常量时间比较。
-- **影响**：理论上存在计时侧信道，但在 HTTPS + 边缘网络下不具备实际可行性。
-- **状态**：已知并接受；如你在此处有更强需求，欢迎提 PR（需说明收益）。
-
-### 9.7 限流与配额可被"慢速耗尽"
-
-- **限制**：攻击者用多个 IP 合法地打满配额，会让正常用户收到 429 或使 KV 写入被闸门拦截。
-- **影响**：可用性下降（**不是**数据泄露）。
-- **为何接受**：这是所有公开服务的共性；本项目把"费用爆炸"这类**不可逆**风险用闸门挡掉了，可用性风险留给了平台层。
-
-### 9.8 `站点体检` 是一台"受限代理"
-
-- **限制**：它能代表部署者向任意**公网、80/443**站点发起请求（返回的是安全头与评分，不返回正文）。
-- **影响**：可被用于探测第三方站点是否存活。
-- **缓解**：令牌校验 + 默认限流 60/分 + SSRF 全链路校验；界面与文档明确"仅用于你自己的站点"；部署者可随时停用该端点。
-
-### 9.9 第三方依赖的可用性风险
-
-- **限制**：DoH 解析器（Cloudflare/Google/Quad9/AliDNS）、crt.sh 由第三方提供。
-- **影响**：对方故障或限流时相关工具会失败（返回明确错误，不会静默给出错误结论）。
-- **缓解**：内存缓存 + 超时 + 失败即显式报错。
-
-### 9.10 无第三方安全审计
-
-- **限制**：本项目由个人维护，**未经过专业安全审计**，也没有自动化安全测试。
-- **建议**：高风险场景请自行审计源码（单文件，可通读）或部署后加 WAF/Access 层。
-
----
-
-## 10. 依赖与供应链
-
-| 项 | 状态 |
-|---|---|
-| npm / 运行时依赖 | **无**。没有 `package.json` 运行时依赖，没有构建步骤，代码即产物 |
-| 前端框架 | **无**（原生 DOM） |
-| 外部 CDN 资源 | Font Awesome 6（**带 SRI `integrity` + `crossorigin` + `referrerpolicy`**）、Google Fonts（Inter，运行时动态注入，失败自动回退系统字体） |
-| Worker 运行时 | Cloudflare Workers 平台（含 `caches.default`、`WebSocketPair`、`request.cf`） |
-| 出站第三方 | DoH 解析器（固定域名）、crt.sh（**仅在用户勾选证书检查时**）、用户指定的监控目标/Webhook（经 SSRF 全链路校验） |
-| 供应链建议 | 不要在不理解的情况下升级 CDN 资源版本；引入任何新依赖前先读 [CONTRIBUTING.md §6.5](CONTRIBUTING.md#65-变更范围依赖与回归) |
-
----
-
-## 11. 关于仿冒实例与分支
-
-本项目是 AGPL-3.0，**任何人都可以部署与修改**。这带来一个现实问题：仿冒实例可能伪装成官方站点。
-
-**官方实例的特征**
-
-- 页脚源码链接指向上游仓库（`github.com/BlueDriftHK/CF-workers-netdiag`），改动版应指向其自有仓库
-- `/health` 返回 `{ status, timestamp, version, storage, kvWrite }` 结构
-- 不要求你注册账号、不索要密码、不弹出第三方登录
-- 不注入任何第三方统计/广告脚本
-
-**请注意**
-
-- 不要在任何实例上输入**敏感凭据**（本工具任何地方都不需要你的密码或令牌）
-- 若发现仿冒站点，请通过第 2 节渠道告知我们
-- 分支/分叉若**削弱了安全默认值**（例如移除令牌校验、放开端口白名单、去掉 SSRF 校验），请不要将其宣传为"官方版本"；这也是 [CODE_OF_CONDUCT.md 第 5 节](CODE_OF_CONDUCT.md#5-不可接受的行为) 关注的行为
-
----
-
-## 12. 安全相关 FAQ
-
-<details>
-<summary><b><code>/health</code> 需要令牌，导致我的探活脚本 403——算漏洞吗？</b></summary>
-
-不算，这是设计（挡盲目的爬虫与扫描器）。脚本化探活请用 **`/node-ping`**：无令牌、响应极小、带 CORS 头。
-</details>
-
-<details>
-<summary><b>某端点返回 410，是不是服务坏了？</b></summary>
-
-是**主动停用**（`/dns-proxy`、`/api/ip-fraud`、`/api/reach-check`、`/static/*`）。恢复请在 Issues 说明用途。
-</details>
-
-<details>
-<summary><b>能不能把令牌校验关掉，方便我做自动化？</b></summary>
-
-不推荐也不接受上游改动（见 [CoC 6.3](CODE_OF_CONDUCT.md#63-安全默认值不可放宽清单)）。请自建实例并在**你自己的**实例上按需调整——但请注意 AGPL §13 的源码提供义务。
-</details>
-
-<details>
-<summary><b>我发现限流在跨 isolate 时不准，这算漏洞吗？</b></summary>
-
-属于**已接受的限制**（见 [9.1](#91-令牌与限流的状态是-per-isolate)），不是漏洞。若你能证明它导致了**费用或数据**层面的实际影响，欢迎报告，我们会重新评估。
-</details>
-
-<details>
-<summary><b>页面能读到我的真实 IP，是不是泄露？</b></summary>
-
-页面展示的出口 IP 来自**你自己的浏览器**直连第三方（ipify 等），Worker 侧只使用 Cloudflare 提供的 `request.cf` 与你请求头中的 `CF-Connecting-IP`，二者都不外发。详见 README 的「数据去向」。
-</details>
-
-<details>
-<summary><b>为什么停用了 IP 风险评分？</b></summary>
-
-它需要 Worker 出站到第三方风控接口，与"零出站"取舍冲突（也意味着把用户 IP 交给第三方）。见 README「未实现 / 不打算做」。
-</details>
-
-<details>
-<summary><b>我可以在自己的实例上加认证吗？</b></summary>
-
-可以，而且推荐用于内部场景（Cloudflare Access 或前置网关）。这不影响上游代码。
-</details>
-
-<details>
-<summary><b>报告漏洞有奖励吗？</b></summary>
-
-没有赏金。会在发布说明中致谢（经你同意），并在本文档的修订记录里标注。
-</details>
-
----
-
-## 13. 修订记录
-
-| 版本 | 日期 | 说明 |
+| 配置 | 建议 | 说明 |
 |---|---|---|
-| v1.0| 首版：支持范围、私密报告流程与 3 工作日响应承诺、威胁模型、已实现控制清单（令牌/SSRF/端口白名单/CSP/体积限制/KV 闸门）、部署者清单、**已知限制与已接受风险 10 条**、供应链、仿冒实例识别、FAQ、报告模板与应急速查 |
+| `PAGE_TOKEN_SECRET` | **必须设置**（高熵随机，≥32 字节） | 无状态 HMAC 令牌，跨 isolate 生效 |
+| `MONITOR_ADMIN_KEY` | **必须设置**（高熵随机） | 管理端点与 `/metrics` 鉴权 |
+| `SITE_CONFIG.metricsKey` | 可选，独立随机 | `/metrics` 专用密钥 |
+| `ALLOWED_ORIGINS` | 尽量不配置；如需要，使用精确 Origin | 不支持 `*`，通配符会被忽略 |
+| `SPEED_HISTORY` KV | 仅在需要监控/历史时绑定 | 注意 KV 写预算与成本 |
+| `SITE_CONFIG.disabledTools` | 公开部署建议禁用不需要的工具 | 降低攻击面与成本 |
+| `SITE_CONFIG.disabledEndpoints` | 公开部署建议禁用不需要的端点 | 命中返回 403 |
+| `SITE_CONFIG.offline` | 按需 | PWA 离线壳；不影响 API 安全 |
+| `SITE_CONFIG.certCheck` | 按需 | crt.sh 外部依赖 |
 
----
+**永远不要把密钥写进 `wrangler.toml` 的 `vars`、源码、Issue、PR 或截图。** 使用：
 
-## 附录 A：漏洞报告模板
-
-```markdown
-## 概要
-（一句话：在哪、能做什么）
-
-## 受影响版本
-- `/health` 的 version：4.7.1
-- 环境：官方实例 / 自托管（wrangler dev / 已部署）
-
-## 复现步骤
-1.
-2.
-3.
-
-## 请求与响应
-（脱敏后的原始片段；注明是否需要令牌 / 管理员密钥）
-
-## 影响面
-- 能读取：
-- 能修改：
-- 是否影响他人数据/配额：
-- 前置条件：
-
-## 建议缓解（可选）
-
-## 证据
-（截图/日志，已脱敏）
-
-## 你是否已在自建实例验证
-是 / 否
+```bash
+npx wrangler secret put PAGE_TOKEN_SECRET
+npx wrangler secret put MONITOR_ADMIN_KEY
 ```
 
-## 附录 B：部署上线前检查清单
+---
 
-**配置**
+## 自托管加固清单
 
-- [ ] `MONITOR_ADMIN_KEY` 用强随机值，且通过 `wrangler secret` 注入
-- [ ] `ALLOWED_ORIGINS` 留空（仅同源）
-- [ ] 站点走 HTTPS；自定义域证书有效
-- [ ] Cron Triggers 按需配置（监控巡检）
-- [ ] KV 绑定按需；命名空间不与其他用途共用
+公开部署前请逐项确认：
 
-**验证**
+### 密钥与身份
 
-- [ ] 无令牌访问受保护端点 → 403
-- [ ] `/dns-proxy` → 410
-- [ ] 超过限流 → 429
-- [ ] `fetch('/health')` 返回 `version` 与 `kvWrite`
-- [ ] 抽查一个出站功能（站点体检）对内网地址返回 403
+- [ ] 已设置 `PAGE_TOKEN_SECRET`（高熵、≥32 字节、非默认值）；
+- [ ] 已设置 `MONITOR_ADMIN_KEY`（高熵、与其它密码不同）；
+- [ ] `SITE_CONFIG.metricsKey` 独立且随机（如启用）；
+- [ ] 密钥只通过 `wrangler secret` 配置，未写入仓库/截图/聊天记录；
+- [ ] 定期轮换密钥（尤其怀疑泄露后），并同步更新已部署实例；
+- [ ] 管理员密钥未在浏览器 localStorage 中持久化（项目默认使用 sessionStorage）。
 
-**收尾**
+### 访问控制与滥用
 
-- [ ] Cloudflare 预算/用量告警已开
-- [ ] 页脚源码链接指向你自己的修改版仓库（AGPL §13）
-- [ ] `.dev.vars` / 密钥 / KV id 未进仓库
-- [ ] 对外提供时已说明数据保留策略
+- [ ] 公开部署时启用 Cloudflare WAF / Rate Limiting / Managed Challenge / Turnstile；
+- [ ] 通过 `SITE_CONFIG.disabledTools` / `disabledEndpoints` 关闭不需要的工具与端点；
+- [ ] 未把 `/metrics`、`/admin` 直接暴露给公网（或在边缘层限制来源 IP）；
+- [ ] 已评估 `/speedtest`、`/upload-test`、`/stream-test` 的流量成本；
+- [ ] 已配置账单告警与 Workers/KV 用量监控；
+- [ ] 不把测试/演示实例用于生产数据。
 
-## 附录 C：应急响应速查
+### 部署与网络
 
-| 症状 | 处置 |
-|---|---|
-| 请求量/费用异常增长 | 看 `/health` 的 `kvWrite.blocked`；把可疑端点加入 `DISABLED_ENDPOINTS`；在 Cloudflare 加 WAF 规则 |
-| 管理密钥泄露 | 立即 `wrangler secret put MONITOR_ADMIN_KEY` 覆盖；检查 KV 中 `monitor:config` 是否被改动（尤其 Webhook 地址） |
-| 被投诉扫描他人站点 | 停用 `/api/site-audit` 与 `/api/monitor*`；向投诉方说明并保留记录 |
-| KV 写入量被打满 | 写入闸门已自动兜底（丢弃非关键写入）；排查来源（`usage:stats`、`speed:history`、`monitor:*`）后再决定是否放宽 |
-| 发现上游漏洞 | 按第 2 节私密报告；在修复发布前不要把实例细节公开（避免被利用） |
+- [ ] 使用自定义域 + 强制 HTTPS，确认证书有效；
+- [ ] 启用 HSTS（项目默认返回，但需确认域名策略）；
+- [ ] 如启用 `ALLOWED_ORIGINS`，只写精确 Origin，不要使用 `*`；
+- [ ] KV 绑定最小权限命名空间，避免与其它项目共享；
+- [ ] 如使用 Cron，确认真实频率与监控目标符合预期；
+- [ ] 定期检查 `/health`、`/metrics` 的 403/429/500、KV 失败与监控状态；
+- [ ] 定期 `npm run verify` 并跟随安全更新。
+
+### 构建与发布
+
+- [ ] 只从可信来源获取代码，审查变更；
+- [ ] 使用 `project/` 构建，不直接改 `dist/_workers.js`；
+- [ ] 不引入未审计的第三方运行时依赖；
+- [ ] CI 不存储生产密钥；部署使用独立凭证；
+- [ ] 发布前跑完整回归与手工冒烟（见 CONTRIBUTING 发布流程）。
+
+### 隐私与合规
+
+- [ ] 明确告知用户诊断数据的处理方式（默认本地 / 可选 KV）；
+- [ ] 不要求用户提交不必要的个人数据；
+- [ ] 如你的服务面向他人，确认符合当地隐私与网络法规；
+- [ ] 不要使用本工具对未授权目标进行探测。
+
+---
+
+## 已知限制与接受的风险
+
+这些是**已知的、经评估可接受**的限制，不属于漏洞（除非你能证明可被低成本利用并造成实质影响）：
+
+1. **per-isolate 限制**：限流、KV 预算、用量统计都是 per-isolate 的；多 isolate 会放大有效额度。公开高流量部署应叠加 WAF / 平台限流。
+2. **未配置 `PAGE_TOKEN_SECRET` 时**：令牌回退为 per-isolate Map，跨 isolate 可能出现 403；前端会静默续期，但高频场景建议配置 secret。
+3. **crt.sh / DoH / 告警平台信任**：证书与 DNS 信息来自第三方，存在延迟、缺失或被污染的可能；失败时降级处理，不阻塞主流程。
+4. **IP 地理信息来自 `request.cf`**：Cloudflare 平台数据，精度有限；前端可回退第三方 ipapi（仅浏览器侧）。
+5. **管理员密钥是共享密钥**：没有账号体系、MFA 与细粒度权限；安全依赖密钥强度、传输安全与保管。
+6. **`/metrics` 与 `/health` 的 per-isolate 计数**：重启/换 isolate 归零，不适合作为长期计费依据。
+7. **PWA 离线壳**：只缓存静态资产与离线页；离线期间无法提供诊断数据。
+8. **静态展示页**：`index.html` / `index-apple.html` 为静态演示，数据为模拟，不连接 Worker API。
+9. **免费套餐**：10 万请求/天、10 ms CPU、KV 1000 写/天等；项目做了预算与限流，但公开部署仍需平台侧防护。
+10. **AGPL-3.0**：修改后作为网络服务提供时，需按许可证向使用者提供对应源代码。
+
+> 如果你认为上述某项限制可被利用造成安全影响，欢迎按漏洞流程报告，我们会重新评估。
+
+---
+
+## 隐私与数据流
+
+| 数据 | 去向 | 是否持久化 |
+|---|---|---|
+| RTT / 抖动 / 丢包 / 吞吐结果 | 浏览器内存 / localStorage（可选） | 本地 |
+| 诊断历史 | 浏览器 localStorage | 本地 |
+| 页面令牌 | HttpOnly Cookie + 页面内变量 | 会话级 |
+| 监控配置 / 状态 / 事件 | 可选 KV（`SPEED_HISTORY`） | 部署者账号内 |
+| 测速历史（可选） | KV（默认关闭） | 部署者账号内 |
+| 目标站点响应头 | 浏览器展示，不写入 KV | 不持久化 |
+| DoH 查询内容 | 发送给 DoH 解析器 | 由第三方策略决定 |
+| 证书查询 | 发送给 crt.sh（域名） | 由第三方策略决定 |
+| 告警内容 | 发送给配置的 webhook | 由告警平台策略决定 |
+| 页面访问日志 | Cloudflare 平台（按账户配置） | 由部署者策略决定 |
+
+我们没有自建的分析/日志服务，也不向维护者回传数据。你的部署数据只属于你自己的 Cloudflare 账号。
+
+---
+
+## 供应链与依赖安全
+
+- **运行时零第三方依赖**：Worker 由平台原生 API 构成；构建与测试只使用 Node 内置模块；
+- **前端依赖**：应用页面使用 Font Awesome（cdnjs）与 Google Fonts；静态展示页零外部请求；
+- **新增依赖要求**：必须讨论、审查许可证兼容性（AGPL-3.0）、维护状态与体积；
+- **构建可复现**：`project/scripts/build.mjs` 会做语法检查与运行时资产逐字节校验；
+- **CI**：`.github/workflows/verify.yml` 在 Node 20 上执行 build → check → 164 项测试，不包含生产密钥；
+- **发布**：通过 `wrangler deploy` 或可信 CI 发布；建议开启 GitHub 的 branch protection 与 2FA；
+- **漏洞响应**：如依赖出现安全公告，维护者会评估影响并在 patch 版本中更新或说明。
+
+---
+
+## 事件响应流程
+
+当收到安全报告或发现正在被利用的问题时，维护者会：
+
+1. **确认与分级**：复现、评估影响面（数据/密钥/成本/可用性）；
+2. **止损**：必要时通过 `SITE_CONFIG.disabledEndpoints` / `disabledTools` 临时关闭能力；轮换 `PAGE_TOKEN_SECRET`、`MONITOR_ADMIN_KEY`、`metricsKey`；清理/回滚 KV 配置；
+3. **修复**：在私有分支开发补丁，补充回归测试；
+4. **验证**：在预发环境复测，确认无回归；
+5. **发布**：发布 patch 版本与 GitHub Security Advisory；
+6. **通知**：告知报告者与受影响用户（仓库公告/Release Notes）；
+7. **复盘**：分析根因，更新代码、文档与本策略，必要时补充测试；
+8. **致谢**：在 Advisory 与 Release Notes 中致谢报告者（征得同意）。
+
+如你正在被积极利用，请在报告中明确说明，并尽量提供时间线、日志与影响范围。
+
+---
+
+## 安全更新与版本支持
+
+- 安全修复以 **patch 版本** 发布（例如 `5.1.1`）；
+- 严重问题可能提前发布安全公告（GitHub Security Advisories）；
+- 只有最新 minor 版本接收安全修复；旧版本建议尽快升级；
+- 升级建议：
+  1. 阅读 Release Notes 与 Advisory；
+  2. 备份 KV 配置（如使用监控）；
+  3. 更新代码并 `npm run verify`；
+  4. 重新构建、同步、部署；
+  5. 轮换可能受影响的密钥；
+  6. 观察 `/health`、`/metrics` 与告警。
+
+---
+
+## 不在范围内的问题
+
+以下通常**不被视为本项目漏洞**（除非能与其他问题组合造成实际影响）：
+
+- Cloudflare Workers / KV / Cron / WAF 平台本身的漏洞；
+- 第三方服务（crt.sh、DoH 解析器、Slack/Telegram/ntfy/飞书/钉钉、ipapi、Google Fonts、Font Awesome CDN）的漏洞或可用性问题；
+- 依赖库已知但未被项目利用的问题（请提供利用路径）；
+- 缺少安全头但没有实际影响（项目默认已带全套基础安全头）；
+- 仅扫描器输出、没有可复现步骤或影响说明的报告；
+- Self-XSS、需要用户安装恶意扩展/修改自己浏览器才能触发的场景；
+- 社会工程、物理访问、钓鱼、凭证泄露；
+- 暴力破解管理员密钥但没有速率限制影响的报告（已有恒定时间比较与限流；如能低成本绕过请报告）；
+- 对公开演示页/静态展示页的纯视觉或内容问题；
+- 已在本文件「已知限制」中列出且无可利用路径的问题；
+- 对第三方系统进行的测试（无论是否使用本项目）。
+
+> 如果你不确定，请先私下询问。我们更愿意处理一个「可能是误报」的问题，也不愿错过真实风险。
+
+---
+
+## 致谢与披露政策
+
+- 我们采用**协调披露**：默认在修复发布后公开细节，时间由双方协商；
+- 如报告者希望匿名，我们尊重其选择；
+- 修复发布后，会在 GitHub Security Advisory 与 Release Notes 中致谢（默认使用你提供的署名）；
+- 本项目**没有赏金计划**（无货币奖励），但会提供公开致谢、Advisory 记录与（如适用）CVE/GHSA 申请支持；
+- 对善意报告，我们承诺不采取法律行动，也不报复；
+- 对恶意报告、勒索、公开 0-day 或攻击行为，保留追究权利。
+
+**联系方式**：<asiacomk@gmail.com>（标题 `[SECURITY]`）
+**GitHub Security Advisories**：<https://github.com/BlueDriftHK/CF-workers-netdiag/security/advisories/new>
+
+---
+
+## English Version
+
+**Security Policy — NetSight Pro v1.0 (effective 2026-11-08, current release 5.1.0)**
+
+**Supported versions.** 5.1.x is actively supported; 5.0.x receives critical fixes only; 4.x is unsupported. `main` may contain unreleased fixes and is not recommended for production.
+
+**Reporting a vulnerability.** Do **not** open a public issue, PR or discussion. Use GitHub Private Security Advisories (preferred) or email <asiacomk@gmail.com> with `[SECURITY]` in the subject. Include affected version, deployment mode, vulnerability type, minimal reproduction, impact assessment, and redacted PoC. Never send real tokens, keys, cookies, user data or third-party credentials.
+
+**What happens next.** Acknowledgement within 7 days (best effort), initial triage within 14 days, fix typically within 30–90 days depending on severity, coordinated disclosure after the fix. This is a personal open-source project, not a commercial SLA. If the issue is actively exploited, say so and it will be prioritized.
+
+**Safe harbor.** Good-faith research is welcome when you test only your own deployment or systems you are authorized to test, do not access or modify third-party data, do not perform DoS/stress tests, do not publicly disclose unfixed details, and allow reasonable time for a fix. Out-of-scope behavior includes scanning third parties, exploiting for data, backdoors, using the tool to attack, public 0-days, or extortion.
+
+**Severity.** We use CVSS v3.1 plus project impact: Critical (full auth bypass, SSRF to cloud metadata, RCE), High (privilege escalation, key/data exposure, stable DoS), Medium (limited bypass or cost/DoS impact), Low (defense-in-depth), Informational (best practices).
+
+**Threat model & controls.** Assets include user diagnostic data, page tokens, admin key, optional KV monitoring state, availability/cost and the build chain. Controls include stateless HMAC page tokens (with per-isolate fallback), HttpOnly SameSite=Strict cookies, silent 403 token refresh, SSRF protection (scheme/port allowlists, private IP/IPv6 filtering, DoH public resolution, per-hop redirect validation, webhook re-validation), CSP with per-response nonce and no `unsafe-inline`, HTML/JS context-specific escaping, rate limits, large-response quotas, KV write budgets, constant-time admin key comparison, disabled endpoints (410), and PWA that never caches API responses or token-bearing pages.
+
+**Security configuration.** Set `PAGE_TOKEN_SECRET` and `MONITOR_ADMIN_KEY` via `wrangler secret` (never in `vars`, source or screenshots). Optionally set `SITE_CONFIG.metricsKey`, exact `ALLOWED_ORIGINS`, bind `SPEED_HISTORY` only if needed, and disable unused tools/endpoints for public deployments.
+
+**Hardening checklist.** Rotate secrets; keep them out of localStorage/source; enable Cloudflare WAF/Rate Limiting/Turnstile for public deployments; restrict `/admin` and `/metrics`; evaluate bandwidth costs; configure billing alerts; use HTTPS/HSTS; monitor 403/429/500 and KV failures; run `npm run verify` and follow security releases.
+
+**Known limitations (accepted risks).** Per-isolate rate limits/counters and KV budgets can be amplified across isolates; without `PAGE_TOKEN_SECRET` tokens are per-isolate; certificate/DNS data depends on third parties; IP geolocation comes from `request.cf`; admin key is a shared secret without MFA; `/health` counters reset on isolate restart; PWA offline shell cannot provide diagnostics offline; static showcase pages use simulated data; free-tier limits still need platform-side protection; AGPL-3.0 applies to hosted modifications.
+
+**Out of scope.** Platform/third-party vulnerabilities, scanner-only reports, self-XSS, social engineering, missing headers without impact, already-documented accepted risks, and testing third parties.
+
+**Disclosure & credit.** Coordinated disclosure by default; reporters may remain anonymous; we credit reporters in advisories and release notes (no monetary bug bounty); good-faith research will not lead to legal action; malicious reports, extortion or public 0-days are not tolerated.
+
+**Contact.** <asiacomk@gmail.com> · GitHub Security Advisories: <https://github.com/BlueDriftHK/CF-workers-netdiag/security/advisories/new>
+
+---
+
+<p align="center">
+  <sub>Security is a process, not a badge. Thank you for reporting responsibly.</sub>
+</p>
