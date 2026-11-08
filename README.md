@@ -157,31 +157,7 @@
 
 当前应用界面为原生 HTML/CSS/JS（无框架），支持深/浅主题、6 种语言和移动端。
 
-### 静态展示页（Apple 风格）
-
-新制作的静态展示页：`index-apple.html` —— 单文件、无外部依赖、Canvas 动效、交互演示。
-
-<p align="center">
-  <img src="docs/hero-dark.png" alt="Apple 风格静态展示页 · 深色" width="48%" />
-  <img src="docs/hero-light.png" alt="Apple 风格静态展示页 · 浅色" width="48%" />
-</p>
-
-<p align="center">
-  <img src="docs/demo-speed.png" alt="带宽测速演示" width="48%" />
-  <img src="docs/demo-dns.png" alt="DNS 对比演示" width="48%" />
-</p>
-
-<p align="center">
-  <img src="docs/hero-mobile.png" alt="移动端展示" width="240" />
-  &nbsp;&nbsp;
-  <img src="docs/demo-monitor.png" alt="站点监控演示" width="48%" />
-</p>
-
-### 经典着陆页
-
 `index.html` 是早一版的静态介绍页：三语切换（简体 / 繁體 / English）、纯 CSS/SVG 复刻界面、无 CDN 请求，可直接部署到 Cloudflare Pages / GitHub Pages。
-
-<p align="center"><img src="docs/classic.png" alt="经典着陆页" width="920" /></p>
 
 ---
 
