@@ -3,10 +3,6 @@
 > 把网络，看透。一个文件、一个 Worker，装下整条网络链路。
 
 <p align="center">
-  <img src="docs/hero-dark.png" alt="NetSight Pro 深色主题" width="920" />
-</p>
-
-<p align="center">
   <a href="#快速开始"><img alt="version" src="https://img.shields.io/badge/version-5.1.0-0a84ff?style=flat-square" /></a>
   <a href="#部署"><img alt="Cloudflare Workers" src="https://img.shields.io/badge/Cloudflare-Workers-F38020?style=flat-square" /></a>
   <a href="#测试与-ci"><img alt="tests" src="https://img.shields.io/badge/tests-164%20passed-30d158?style=flat-square" /></a>
