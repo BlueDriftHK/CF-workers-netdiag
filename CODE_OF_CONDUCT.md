@@ -1,7 +1,7 @@
 # 贡献者公约（Code of Conduct）
 
 **项目：NetSight Pro** · 版本 **1.0** · 生效日期：2026-11-08
-**维护者：NetSight Pro maintainers** · 联系：<admin@bjhr.space>
+**维护者：NetSight Pro maintainers** · 联系：<asiacomk@gmail.com>
 
 > 本文改编自 [Contributor Covenant v2.1](https://www.contributor-covenant.org/version/2/1/code_of_conduct/)，并针对 NetSight Pro 的技术场景（网络诊断、边缘计算、安全研究、多语言界面）做了补充。
 > 本文以 **CC BY 4.0** 许可发布，可自由引用与改编，但请保留出处与致谢。
