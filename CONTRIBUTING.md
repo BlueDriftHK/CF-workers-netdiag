@@ -478,7 +478,7 @@ eq('dns-lookup 200', res.status, 200);
 ### 不要公开提交漏洞细节
 
 - 不要用公开 Issue/PR 披露可利用细节、PoC、用户数据或密钥；
-- 通过 GitHub **Private Security Advisory** 或邮件 <admin@bjhr.space>（标题 `[SECURITY]`）反馈；
+- 通过 GitHub **Private Security Advisory** 或邮件 <asiacomk@gmail.com>（标题 `[SECURITY]`）反馈；
 - 给维护者合理修复时间（通常 7–30 天）；
 - 我们会在修复后征得同意给予公开致谢。
 
@@ -613,13 +613,13 @@ node scripts/sync.mjs ../_workers.js   # when syncing the single-file release
 
 **Translations.** Six languages are required for every new string, with identical keys. Use natural, concise UI language; keep technical terms, numbers and symbols; avoid machine-only bulk PRs; native review is welcome.
 
-**Security.** Do not disclose vulnerabilities publicly. Use GitHub Private Security Advisories or email <admin@bjhr.space> with `[SECURITY]`. Safe harbor: test only your own deployments or systems you are authorized to test, do not disrupt services, do not access third-party data, and allow 7–30 days for fixes.
+**Security.** Do not disclose vulnerabilities publicly. Use GitHub Private Security Advisories or email <asiacomk@gmail.com> with `[SECURITY]`. Safe harbor: test only your own deployments or systems you are authorized to test, do not disrupt services, do not access third-party data, and allow 7–30 days for fixes.
 
 **Release process (maintainers).** Bump the version in `project/package.json`, `src/server-core.js`, `src/server-handler.js` (`/health`, `/node-ping`, `ASSET_VER`), update docs/README, run `npm run verify`, build and sync, deploy to staging and smoke test, deploy with `wrangler`, tag the release and publish notes.
 
 **Governance & recognition.** Maintainers guide direction, review, releases and security response. Review SLA is best effort (first response within 7 days). Decisions should be consistent, transparent and conflict-free. All contributors are credited in release notes.
 
-**Questions?** Open a Discussion/Issue or email <admin@bjhr.space>. Please also read `CODE_OF_CONDUCT.md`. Thank you for helping make NetSight Pro better!
+**Questions?** Open a Discussion/Issue or email <asiacomk@gmail.com>. Please also read `CODE_OF_CONDUCT.md`. Thank you for helping make NetSight Pro better!
 
 ---
 
