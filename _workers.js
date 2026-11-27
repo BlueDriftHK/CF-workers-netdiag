@@ -1,13 +1,13 @@
 // ============================================================
 // NetSight Pro - Apple 极简网络诊断工具
 // Cloudflare Worker 完整优化版 | 全界面国际化 + 深色/浅色切换
-// 版本: 5.1.0 | 新增：诊断向导 / 管理面板 / DoH wireformat 多解析器 / 监控目标标签 / 工程化（模块化源码 + 构建 + CI） | v5.0：SITE_CONFIG/指标/PWA/成本护栏 | v4.9：域名体检/证书告警/告警降噪/多渠道/ja·ko·es：令牌无状态化/限流封顶/测速与监控可靠性/DNS 与体检加固 | UI 重构：工具按 6 类分组 + 紧凑卡片(tooltip 展示说明) · 结果弹层改宽屏两栏(左说明/参数/操作，右结果) · 按钮统一三级(主/次/幽灵) · 安全卡分「传输与协议」「来源与指纹」
+// 版本: 5.1.1（安全与正确性修复版：鉴权 Cookie-only / 监控告警状态机 / 工具崩溃兜底 / WebRTC·CPU·TTFB 真实性修复）
 // ============================================================
 
 // ==================== 常量定义 ====================
 const CORS_HEADERS = {
   'access-control-allow-methods': 'GET, HEAD, OPTIONS',
-  'access-control-allow-headers': 'Content-Type',
+  'access-control-allow-headers': 'Content-Type, x-ns-token, x-admin-key, x-metrics-key',
   'cache-control': 'no-store',
   'vary': 'Origin'
 };
@@ -28,11 +28,102 @@ function getConfiguredOrigins() {
     .filter(origin => origin && origin !== '*'); // 禁止 '*'：通配符会让任意 Origin 绕过令牌校验
 }
 
+// ==================== 反脚本滥用：浏览器 Fetch Metadata / 令牌签发配额 / 管理密钥退避 ====================
+// Sec-Fetch-* 由浏览器自动附加，页面脚本无法伪造；跨站请求得到 cross-site。
+// Origin/Referer 可被 curl 任意伪造，这两个头同样可以，但普通爬虫不会带，
+// 配合令牌 + 独立配额足以把自动化滥用成本抬升一个数量级。
+const BROWSER_FETCH_SITES = new Set(['same-origin', 'same-site']);
+const BROWSER_FETCH_MODES = new Set(['cors', 'navigate', 'no-cors', 'same-origin', '']);
+function hasBrowserFetchSignal(request) {
+  try {
+    const site = String(request.headers.get('sec-fetch-site') || '').toLowerCase();
+    if (!BROWSER_FETCH_SITES.has(site)) return false;
+    return BROWSER_FETCH_MODES.has(String(request.headers.get('sec-fetch-mode') || '').toLowerCase());
+  } catch (e) {
+    return false;
+  }
+}
+
+// 同源浏览器上下文判定：优先 Fetch Metadata；老浏览器（无 Sec-Fetch-*）退回 Origin/Referer 同源判定。
+// 扫描器/脚本通常三者都不带，因此仍会被挡在令牌签发与昂贵出站点之外。
+function isSameOriginRequestContext(request, url) {
+  if (hasBrowserFetchSignal(request)) return true;
+  try {
+    const origin = request.headers.get('Origin');
+    if (origin) return new URL(origin).origin === url.origin;
+    const referer = request.headers.get('Referer');
+    if (referer) return new URL(referer).origin === url.origin;
+  } catch (e) {
+    return false;
+  }
+  return false;
+}
+
+// 令牌签发独立配额：/api/page-token 曾可被匿名无限调用，直接换到有效令牌
+const tokenRateLimit = new Map();
+const TOKEN_RATE_MAX = 10; // 每 IP 每分钟签发上限
+// 静态资源独立配额：/app.js 等原本完全免限流，等于给攻击者留了一个不计数的入口
+const staticRateLimit = new Map();
+const STATIC_RATE_MAX = 600; // 每 IP 每分钟静态资源请求上限
+// 昂贵出站端点独立配额：site-audit（最多 6 跳 GET）、dns-compare / domain-check（6 / 12 次 DoH）
+const auditRateLimit = new Map();
+const AUDIT_RATE_MAX = 5;
+const dnsToolRateLimit = new Map();
+const DNS_TOOL_RATE_MAX = 15;
+
+// 管理密钥失败退避：避免 60 次/分/IP 的在线爆破
+const adminAuthFailures = new Map();
+const ADMIN_AUTH_MAX_FAILS = 10;
+const ADMIN_AUTH_WINDOW_MS = 600000;
+function adminAuthBlocked(ip) {
+  const rec = adminAuthFailures.get(ip);
+  if (!rec) return false;
+  if (Date.now() - rec.firstAt > ADMIN_AUTH_WINDOW_MS) { adminAuthFailures.delete(ip); return false; }
+  return rec.count >= ADMIN_AUTH_MAX_FAILS;
+}
+function noteAdminAuthFailure(ip) {
+  const now = Date.now();
+  const rec = adminAuthFailures.get(ip);
+  if (!rec || now - rec.firstAt > ADMIN_AUTH_WINDOW_MS) adminAuthFailures.set(ip, { count: 1, firstAt: now });
+  else rec.count += 1;
+  if (adminAuthFailures.size > RATE_LIMIT_MAX_KEYS) {
+    const oldest = adminAuthFailures.keys().next().value;
+    if (oldest !== undefined) adminAuthFailures.delete(oldest);
+  }
+}
+function clearAdminAuthFailures(ip) { adminAuthFailures.delete(ip); }
+
+// 页面令牌 Cookie：https 下使用 __Host- 前缀（禁止同父域子域覆盖/投毒），http 本地调试退回旧名
+function pageTokenCookie(token, isHttps) {
+  const name = isHttps ? '__Host-ns_t' : '__ns_t';
+  return name + '=' + token + '; HttpOnly; SameSite=Strict; Path=/' + (isHttps ? '; Secure' : '') + '; Max-Age=3600';
+}
+
+// 统一的 429 响应（原先 4 处重复实现，retry-after 语义不一致）
+function tooManyRequests(request, retryAfterSeconds) {
+  obs.status429 += 1;
+  const secs = String(Math.max(1, Math.ceil(retryAfterSeconds || 60)));
+  return new Response(JSON.stringify({
+    error: 'Too Many Requests',
+    message: '请稍后再试 / Please try again later'
+  }), {
+    status: 429,
+    headers: {
+      'content-type': 'application/json',
+      'retry-after': secs,
+      ...corsHeaders(request),
+      ...SECURITY_HEADERS
+    }
+  });
+}
+
 // ==================== 站点配置外置（可选 SITE_CONFIG JSON var，便于多部署/白标） ====================
 // 支持字段：siteName、defaultLang、disabledTools[]、disabledEndpoints[]、metricsKey、offline(bool)、certCheck(bool)
 let _siteConfigCache = null;
+let _siteConfigCacheAt = 0;
+const SITE_CONFIG_TTL_MS = 300000; // 5 分钟：SITE_CONFIG 变更后不必等 isolate 重启（原实现永久缓存）
 function getSiteConfig() {
-  if (_siteConfigCache) return _siteConfigCache;
+  if (_siteConfigCache && Date.now() - _siteConfigCacheAt < SITE_CONFIG_TTL_MS) return _siteConfigCache;
   const fallback = {
     siteName: 'NetSight Pro', defaultLang: '', disabledTools: [], disabledEndpoints: [],
     metricsKey: '', offline: true, certCheck: true
@@ -40,11 +131,13 @@ function getSiteConfig() {
   try {
     if (typeof SITE_CONFIG === 'undefined' || !SITE_CONFIG) {
       _siteConfigCache = fallback;
+      _siteConfigCacheAt = Date.now();
       return _siteConfigCache;
     }
     const raw = (typeof SITE_CONFIG === 'string') ? JSON.parse(SITE_CONFIG) : SITE_CONFIG;
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
       _siteConfigCache = fallback;
+      _siteConfigCacheAt = Date.now();
       return _siteConfigCache;
     }
     const cfg = Object.assign({}, fallback, raw);
@@ -59,6 +152,7 @@ function getSiteConfig() {
   } catch (e) {
     _siteConfigCache = fallback;
   }
+  _siteConfigCacheAt = Date.now();
   return _siteConfigCache;
 }
 
@@ -106,7 +200,7 @@ function corsHeaders(request, methods = 'GET, HEAD, OPTIONS') {
 }
 
 // 同源校验升级：Origin/Referer 均可被 curl 等脚本随意伪造，不再作为放行依据。
-// 现在要求请求携带主页面颁发的会话令牌（HttpOnly Cookie 或 x-ns-token 头），
+// 现在要求请求携带主页面颁发的会话令牌（只通过 HttpOnly Cookie 下发；x-ns-token 头保留为兼容通道），
 // 未访问过页面的爬虫/扫描器一律 403；显式配置的跨域白名单（ALLOWED_ORIGINS）除外。
 async function isSameOriginNavigation(request) {
   const origin = request.headers.get('Origin');
@@ -114,7 +208,15 @@ async function isSameOriginNavigation(request) {
     const allowed = getConfiguredOrigins();
     if (allowed.includes(origin)) return true;
   }
-  return await isValidPageToken(getRequestToken(request));
+  if (await isValidPageToken(getRequestToken(request))) return true;
+  // 未配置 PAGE_TOKEN_SECRET 时，令牌只存在当前 isolate 的内存里：多 isolate 下
+  // 「这个 isolate 发的令牌，下一个请求落到另一个 isolate」必然 403（线上实测会随机失败）。
+  // 这种情况下退化为「浏览器同源上下文」校验：仍然拦得住不带 Fetch Metadata 的脚本/爬虫，
+  // 但不会让正常用户随机撞 403。配置了 secret 时走无状态 HMAC，不会进入这个分支。
+  if (!getPageTokenSecret()) {
+    try { return isSameOriginRequestContext(request, new URL(request.url)); } catch (e) { return false; }
+  }
+  return false;
 }
 
 function forbiddenResponse(request) {
@@ -139,27 +241,9 @@ const cpuRateLimit = new Map();
 const RATE_LIMIT_MAX_KEYS = 5000;
 const RATE_LIMIT_CLEAN_INTERVAL_MS = 30000;
 const rateLimitCleanupState = { at: 0 };
-// 测速历史写入节流：同一客户端最小落盘间隔（限制 KV 写入）
-const SPEED_LOG_MIN_INTERVAL_MS = 15000;
-const speedLogThrottle = new Map();
-// ===== KV 防爆：测速历史改为固定单键环形缓冲（speed:history） =====
-// 旧实现每条记录一个键，且每次写入后 list 全部键并逐个 delete（list/delete 均按量计费），
-// 多用户并发或 isolate 轮换时会放大为 O(键数) 的读写/删除费用，极易打爆 KV 配额。
-// 现改为单键 JSON 数组：每次落盘 = 1 get + 1 put，全程无 list、无 delete；
-// 并发写「后写覆盖先写」对诊断历史可接受。写入受三重限制：按 IP 15s 节流 +
-// 单 isolate 全局 30 次/分上限 + 功能默认关闭（SPEED_HISTORY_KV_ENABLED=false）。
-const SPEED_HISTORY_MAX = 10;               // 单键最多保留条数
-const SPEED_HISTORY_GLOBAL_MAX_PER_MIN = 30; // 单 isolate 每分钟全局写上限（防多 IP 并发写爆）
-const speedHistoryGlobalThrottle = { count: 0, resetAt: 0 };
-function isSpeedLogGloballyAllowed() {
-  const now = Date.now();
-  if (now >= speedHistoryGlobalThrottle.resetAt) {
-    speedHistoryGlobalThrottle.count = 0;
-    speedHistoryGlobalThrottle.resetAt = now + 60000;
-  }
-  speedHistoryGlobalThrottle.count += 1;
-  return speedHistoryGlobalThrottle.count <= SPEED_HISTORY_GLOBAL_MAX_PER_MIN;
-}
+// 测速历史：无 KV 构建下没有服务端历史（历史保存在浏览器 localStorage）。
+// 原先的 KV 单键环形缓冲、IP 分桶键、写入节流等常量与函数已随 KV 一并移除。
+
 // DNS 工具箱内存缓存（per-isolate，不占用 KV）
 const DNS_LOOKUP_CACHE_MS = 60000;
 const dnsLookupCache = new Map();
@@ -187,6 +271,13 @@ function getPageTokenSecret() {
       _pageTokenSecretCache = (typeof PAGE_TOKEN_SECRET === 'undefined' || !PAGE_TOKEN_SECRET) ? '' : String(PAGE_TOKEN_SECRET);
     } catch (e) {
       _pageTokenSecretCache = '';
+    }
+    // 未配置时令牌退化为 per-isolate 内存 Map：多 isolate 下会随机 403，且无法跨实例校验。
+    // 无法在代码层强制，至少让部署者能在日志里看到明确告警（每个 isolate 只打一次）。
+    if (!_pageTokenSecretCache) {
+      try {
+        console.warn('[NetSight] PAGE_TOKEN_SECRET is not configured: page tokens fall back to per-isolate memory and will 403 across isolates. Configure a >=32-byte secret for stateless HMAC tokens.');
+      } catch (e) {}
     }
   }
   return _pageTokenSecretCache;
@@ -259,7 +350,7 @@ function getRequestToken(request) {
   const header = request.headers.get('x-ns-token');
   if (header) return String(header).slice(0, 200);
   const cookie = request.headers.get('cookie') || '';
-  const m = cookie.match(/(?:^|;\s*)__ns_t=([^;]+)/);
+  const m = cookie.match(/(?:^|;\s*)(?:__Host-ns_t|__ns_t)=([^;]+)/);
   return m ? m[1].slice(0, 200) : '';
 }
 
@@ -459,6 +550,10 @@ function isPrivateHost(host) {
   if (!h) return true;
   if (h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.local') || h.endsWith('.internal') || h.endsWith('.home.arpa')) return true;
   if (isIpLiteral(h)) return isPrivateIp(h);
+  // 非规范 IP 字面量（127.1 / 0177.0.0.1 / 0x7f.0.0.1 等 inet_aton 简写）：
+  // isIpLiteral 只认严格四段点分十进制，这里对「纯数字/十六进制段 + 点」的主机名一律 fail-closed。
+  // 普通域名（含字母 TLD，如 123.com）不受影响。
+  if (/^(0x[0-9a-f]+|\d+)(\.(0x[0-9a-f]+|\d+))+$/i.test(h)) return true;
   return !h.includes('.');
 }
 
@@ -519,16 +614,18 @@ async function readTextCapped(source, maxBytes) {
   }
 }
 
-// DNS 解析缓存（per-isolate，仅用于站点体检的 SSRF 校验；带 TTL，防止域名改解析到内网后仍被永久放行）
-const DNS_CHECK_CACHE_MS = 60000;
+// DNS 解析缓存（per-isolate，仅用于站点体检的 SSRF 校验；带短 TTL，避免 DNS 重绑定在缓存窗口内绕过校验）
+const DNS_CHECK_CACHE_MS = 5000;
 const dnsCheckCache = new Map();
 
 // 通过 DoH(cloudflare-dns.com) 解析域名，确认所有解析结果均为公网地址；解析不到结果时按不安全处理
-async function resolvesToPublicOnly(hostname) {
+// force=true 时跳过 5 秒缓存：用于「紧挨着出站请求之前」再确认一次，
+// 把 DNS 重绑定的 TOCTOU 窗口从缓存 TTL 压到毫秒级（Workers 无法把解析结果钉成 IP 直连）。
+async function resolvesToPublicOnly(hostname, force) {
   const h = String(hostname || '').toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
   if (isIpLiteral(h)) return !isPrivateIp(h);
   const cached = dnsCheckCache.get(h);
-  if (cached && Date.now() - cached.at < DNS_CHECK_CACHE_MS) return cached.value;
+  if (!force && cached && Date.now() - cached.at < DNS_CHECK_CACHE_MS) return cached.value;
   const queries = ['A', 'AAAA'].map(async (type) => {
     const ips = [];
     try {
@@ -553,14 +650,27 @@ async function resolvesToPublicOnly(hostname) {
 
 // ==================== 证书到期查询（CT 日志 / crt.sh；可选，仅在 ?cert=1 时产生 1 次出站） ====================
 // Workers fetch 不暴露对端证书、浏览器也无法跨域读取证书链，故用 CT 日志间接获取签发与到期时间。
-const CERT_CACHE_MS = 1800000; // 30 分钟内存缓存，避免重复查询 crt.sh
+const CERT_CACHE_MS = 1800000; // 成功结果缓存 30 分钟，避免重复查询 crt.sh
+const CERT_FAIL_CACHE_MS = 180000; // 失败只负缓存 3 分钟：crt.sh 抖动很常见，长负缓存 + 不重试会持续假告警
 const certCache = new Map();
+
+// 证书名是否覆盖目标主机：精确匹配，或 *.example.com 通配（通配不覆盖 apex 本身）
+function certNameMatchesHost(name, host) {
+  const n = String(name || '').trim().toLowerCase();
+  if (!n || !host) return false;
+  if (n === host) return true;
+  if (n.indexOf('*.') === 0) {
+    const suffix = n.slice(1); // ".example.com"
+    return host.length > suffix.length && host.endsWith(suffix);
+  }
+  return false;
+}
 
 async function fetchCertInfo(domain) {
   const d = String(domain || '').toLowerCase();
   if (!d) return null;
   const hit = certCache.get(d);
-  if (hit && Date.now() - hit.at < CERT_CACHE_MS) return hit.value;
+  if (hit && Date.now() - hit.at < (hit.value ? CERT_CACHE_MS : CERT_FAIL_CACHE_MS)) return hit.value;
   let info = null;
   try {
     const r = await fetch('https://crt.sh/?q=' + encodeURIComponent(d) + '&output=json&exclude=expired&deduplicate=Y', {
@@ -576,11 +686,17 @@ async function fetchCertInfo(domain) {
         let best = null;
         for (const c of arr) {
           if (!c || !c.not_after) continue;
+          // 只考虑真正覆盖被检主机的证书：crt.sh 的 ?q= 会连带返回子域证书，
+          // 直接取「最大 not_after」会让子域的长有效期证书掩盖主域即将到期的证书（漏报）。
+          const namesRaw = String(c.name_value || c.common_name || c.name || '');
+          const covers = namesRaw.split(/[\n,]/).some(function (n) { return certNameMatchesHost(n, d); });
+          if (!covers) continue;
           const s0 = String(c.not_after).trim();
           const iso = /[zZ]$|[+-]\d{2}:?\d{2}$/.test(s0) ? s0 : (s0.replace(' ', 'T') + 'Z');
           const ts = Date.parse(iso);
           if (!Number.isFinite(ts)) continue;
-          if (!best || ts > best.ts) best = { ts: ts, issuer: c.issuer_name || '', name: c.common_name || '' };
+          // 覆盖主机的多张证书里取「最早到期」的一张：这是最直接的风险信号
+          if (!best || ts < best.ts) best = { ts: ts, issuer: c.issuer_name || '', name: c.common_name || '' };
         }
         if (best) {
           info = {
@@ -673,10 +789,7 @@ addEventListener('fetch', event => {
   );
 });
 
-// 定时巡检（部署侧需配置 Cron Triggers，例如每 5 分钟：*/5 * * * *）
-addEventListener('scheduled', event => {
-  event.waitUntil(handleMonitorCheck());
-});
+// 定时巡检：无 KV 构建已移除（没有监控功能，也就不需要 Cron 处理）。
 
 // 处理 OPTIONS 预检请求
 function handleOptions(request) {
@@ -691,22 +804,15 @@ function handleOptions(request) {
   });
 }
 
-// ==================== IP 风险评分函数（已停用外部调用，零出站） ====================
-// 说明: 原先调用 proxycheck.io 判断 proxy/vpn/tor/hosting，每次页面加载都会产生一次 Worker 出站请求。
-//       为「以用户网络为主、尽量不用 Worker 的网络和请求」，改为不再调用任何外部服务（零出站）。
-//       代价: /api/ip-fraud 返回 503，前端据此不显示 proxy/vpn/tor 判定；地理位置信息不受影响，
-//       仍由 request.cf 提供。如需恢复，还原本函数并配置 PROXYCHECK_KEY 即可。
-async function getIpFraudScore(ip) {
-  // 外部风险检测已停用（省 Worker 出站请求）
-  return null;
-}
+// IP 风险评分：外部服务（proxycheck.io）调用已按「零出站」原则下线，实现与 /api/ip-fraud 路由一并移除。
+// DISABLED_ENDPOINTS 仍保留该路径，老客户端会拿到明确的 410 而不是 404。
 
 // 允许计入用量统计的端点白名单（避免任意路径撑爆 KV）
 const COUNTED_ENDPOINTS = new Set([
-  '/health', '/node-ping', '/speedtest', '/upload-test', '/cpu-test', '/dns-proxy',
-  '/api/site-audit', '/ws-test', '/http2-test', '/concurrent-test', '/stream-test',
-  '/api/log-speed', '/api/speed-history', '/api/usage-stats', '/api/ip-fraud',
-  '/api/dns-lookup', '/api/dnsbl', '/api/domain-check', '/api/monitor', '/api/monitor-run'
+  '/health', '/node-ping', '/speedtest', '/upload-test', '/cpu-test',
+  '/api/site-audit', '/ws-test', '/http2-test', '/stream-test',
+  '/api/log-speed', '/api/usage-stats',
+  '/api/dns-lookup', '/api/dnsbl', '/api/domain-check'
 ]);
 
 // ==================== 端点开关（停用无引用/已废弃端点，缩小攻击面） ====================
@@ -728,418 +834,44 @@ function isDisabledEndpoint(pathname) {
   return false;
 }
 
-// ==================== KV 用量策略（防止 KV 额度被写爆/读爆）====================
-// USAGE_BACKEND:
-//   'memory'（默认）：用量统计只保留在 isolate 内存，对 KV 零写入；重启/换 isolate 后归零。
-//   'kv'：聚合后落盘到 SPEED_HISTORY（跨 isolate 持久），会消耗 KV 写额度。
-const USAGE_BACKEND = 'memory';
-const USAGE_FLUSH_MS = 3600000;   // kv 模式下最长 1 小时落盘一次
-const USAGE_MAX_PENDING = 2000;   // kv 模式下待写条数达阈值时提前落盘（受最小间隔约束）
-const USAGE_FLUSH_MIN_MS = 60000; // kv 模式下两次落盘的最小间隔：即使高流量也最多 1 次写/分，防写爆 KV
-const SPEED_HISTORY_KV_ENABLED = false; // 默认关闭：测速历史不写 KV；改回 true 可恢复（仍限 15s/客户端）
-
-// 只读接口内存缓存：降低前端 30s 轮询造成的 KV 读放大
-const STATS_CACHE_MS = 60000;
-const statsCache = new Map();
-function getStatsCache(key) {
-  const entry = statsCache.get(key);
-  if (entry && Date.now() - entry.at < STATS_CACHE_MS) return entry.value;
-  return null;
-}
-function setStatsCache(key, value) {
-  boundedCacheSet(statsCache, key, { at: Date.now(), value }, 100);
-}
-function invalidateStatsCache() {
-  statsCache.clear();
+// 只读端点统一方法校验：原先 POST/DELETE/PUT 也会执行查询逻辑并返回 200，语义混乱且扩大可命中的面
+const READ_ONLY_ENDPOINTS = new Set([
+  '/health', '/metrics', '/speedtest', '/cpu-test', '/http2-test',
+  '/stream-test', '/ws-test', '/node-ping', '/api/dns-lookup', '/api/dnsbl',
+  '/api/dns-compare', '/api/domain-check', '/api/site-audit',
+  '/api/usage-stats', '/api/admin/overview'
+]);
+function requireReadMethod(request) {
+  if (request.method === 'GET' || request.method === 'HEAD') return null;
+  obs.status405 += 1;
+  return new Response(JSON.stringify({ error: 'method_not_allowed' }), {
+    status: 405,
+    headers: { 'content-type': 'application/json', 'allow': 'GET, HEAD', ...corsHeaders(request), ...SECURITY_HEADERS }
+  });
 }
 
-// ==================== KV 写入总闸（防写爆） ====================
-// 所有对 KV 的写入都必须经 kvPut()：超预算或同键抖动时直接跳过写入并计数。
-// 设计取舍：宁可丢少量非关键数据（测速历史、监控心跳），也不让任何异常循环
-// （cron 配得过密 / 目标状态抖动风暴 / isolate 反复重建）打爆 KV 写入额度。
-// 计数为 per-isolate 内存，与限流 Map 同一取舍；跨 isolate 的精确总量需 Durable Object。
-const KV_WRITE_MAX_PER_MIN = 20;            // 单 isolate 每分钟写入上限
-const KV_WRITE_MAX_PER_DAY = 600;           // 单 isolate 每日写入上限（免费额度 1000/天，留 40% 余量）
-const KV_WRITE_MIN_KEY_INTERVAL_MS = 10000; // 同一 key 的最小写入间隔（防热键抖动写）
-const kvWriteStats = { day: '', dayCount: 0, minStart: 0, minCount: 0, blocked: 0, failed: 0 };
-const kvKeyLastWrite = new Map();
-
-function kvWriteGateOk(key, skipDebounce) {
-  const now = Date.now();
-  const day = new Date(now).toISOString().slice(0, 10);
-  if (kvWriteStats.day !== day) {
-    kvWriteStats.day = day;
-    kvWriteStats.dayCount = 0;
-  }
-  if (now - kvWriteStats.minStart >= 60000) {
-    kvWriteStats.minStart = now;
-    kvWriteStats.minCount = 0;
-  }
-  const lastKeyAt = kvKeyLastWrite.get(key) || 0;
-  const blocked = kvWriteStats.dayCount >= KV_WRITE_MAX_PER_DAY
-    || kvWriteStats.minCount >= KV_WRITE_MAX_PER_MIN
-    || (!skipDebounce && (now - lastKeyAt) < KV_WRITE_MIN_KEY_INTERVAL_MS);
-  if (blocked) {
-    kvWriteStats.blocked += 1;
-    return false;
-  }
-  kvWriteStats.dayCount += 1;
-  kvWriteStats.minCount += 1;
-  kvKeyLastWrite.set(key, now);
-  if (kvKeyLastWrite.size > 200) {
-    for (const [k, t] of kvKeyLastWrite) {
-      if (now - t > KV_WRITE_MIN_KEY_INTERVAL_MS) kvKeyLastWrite.delete(k);
-    }
-  }
-  return true;
-}
-
-// 统一写入入口：返回 true=已写入，false=被预算拦截或写入失败（调用方自行决定是否回滚/提示）
-async function kvPut(ns, key, value, options, opts) {
-  if (!ns) return false;
-  const skipDebounce = !!(opts && opts.skipDebounce);
-  obs.kv.attempts += 1;
-  if (!kvWriteGateOk(key, skipDebounce)) { obs.kv.blocked += 1; return false; }
-  try {
-    await ns.put(key, value, options);
-    obs.kv.success += 1;
-    return true;
-  } catch (e) {
-    obs.kv.failed += 1;
-    // KV 写入失败：回滚预算计数并单独记录失败数（避免短暂故障提前耗尽当天预算）
-    kvWriteStats.dayCount = Math.max(0, kvWriteStats.dayCount - 1);
-    kvWriteStats.minCount = Math.max(0, kvWriteStats.minCount - 1);
-    kvWriteStats.failed += 1;
-    return false;
-  }
-}
-
+// ==================== 用量统计（无 KV 构建）====================
+// 本文件不包含任何 KV 读写：用量只在当前 isolate 的内存里累加，重启或换 isolate 后归零。
+// 这样即使账号没有任何 KV 命名空间也能完整运行，且不可能产生 KV 写/读额度消耗。
 let liveUsage = { totalRequests: 0, endpoints: {}, lastReset: Date.now() };
-// 可观测性计数器（per-isolate）：只做轻量内存累加，/health 与 /metrics 读取
+// 可观测性计数器（per-isolate）：只做轻量内存累加，/metrics 读取
 const obs = {
   startedAt: Date.now(),
   status429: 0,
   status403: 0,
+  status405: 0,
   errors500: 0,
-  disabledByConfig: 0,
-  kv: { attempts: 0, success: 0, blocked: 0, failed: 0 },
-  monitor: { lastRunAt: 0, lastDurationMs: 0, lastChanged: false, lastNotified: 0, lastSuppressed: false }
+  disabledByConfig: 0
 };
-let usagePending = { total: 0, endpoints: {} };
-let usageLastFlush = 0;
-let usageFlushInFlight = false;
-
 function recordUsage(pathname) {
-  // 内存统计始终累加，供 /api/usage-stats 在 memory 模式下读取
   liveUsage.totalRequests += 1;
   liveUsage.endpoints[pathname] = (liveUsage.endpoints[pathname] || 0) + 1;
-
-  if (USAGE_BACKEND !== 'kv') return Promise.resolve(); // 默认：不写 KV
-  if (typeof SPEED_HISTORY === 'undefined' || !SPEED_HISTORY) return Promise.resolve();
-
-  usagePending.total += 1;
-  usagePending.endpoints[pathname] = (usagePending.endpoints[pathname] || 0) + 1;
-  const now = Date.now();
-  const due = (now - usageLastFlush >= USAGE_FLUSH_MS)
-    || (usagePending.total >= USAGE_MAX_PENDING && now - usageLastFlush >= USAGE_FLUSH_MIN_MS);
-  if (!due || usageFlushInFlight) return Promise.resolve();
-  usageLastFlush = now;
-  usageFlushInFlight = true;
-  const snapshot = usagePending;
-  usagePending = { total: 0, endpoints: {} };
-  return (async () => {
-    try {
-      const raw = await SPEED_HISTORY.get('usage:stats');
-      let stats = raw ? JSON.parse(raw) : { totalRequests: 0, endpoints: {}, lastReset: 0 };
-      if (!stats.endpoints || typeof stats.endpoints !== 'object') stats.endpoints = {};
-      stats.totalRequests = (stats.totalRequests || 0) + snapshot.total;
-      for (const [ep, count] of Object.entries(snapshot.endpoints)) {
-        const knownKeys = Object.keys(stats.endpoints);
-        if (stats.endpoints[ep] !== undefined || knownKeys.length < 50) {
-          stats.endpoints[ep] = (stats.endpoints[ep] || 0) + count;
-        }
-      }
-      if (!stats.lastReset) stats.lastReset = Date.now();
-      const usageWrote = await kvPut(SPEED_HISTORY, 'usage:stats', JSON.stringify(stats), { expirationTtl: 86400 * 30 });
-      if (!usageWrote) throw new Error('kv write blocked'); // 交给下面的 catch：计数回滚 + 退避重试
-      invalidateStatsCache();
-    } catch (e) {
-      // 落盘失败则把计数还回缓冲避免丢失；把 lastFlush 置为当前时间，
-      // 按 USAGE_FLUSH_MIN_MS 退避重试——KV 故障期间不再每个请求都触发一次写尝试（防写爆）
-      usagePending.total += snapshot.total;
-      for (const [ep, count] of Object.entries(snapshot.endpoints)) {
-        usagePending.endpoints[ep] = (usagePending.endpoints[ep] || 0) + count;
-      }
-      usageLastFlush = now;
-    } finally {
-      usageFlushInFlight = false;
-    }
-  })();
+  return Promise.resolve();
 }
 
-// ==================== 站点监控（Cron 巡检 + Webhook 告警；仅状态变化/心跳到期时写 KV） ====================
-// 无状态变化时的「心跳写」间隔：1 小时 → 6 小时（基线写量 720/月 → 120/月）。
-// 状态变化（up/down 切换、URL 增删）仍会立即写入，因此不影响告警与 since 语义。
-const MONITOR_STATE_REFRESH_MS = 6 * 3600000;
-const MONITOR_LOG_MAX = 20;
-
-function monitorKv() {
-  return (typeof SPEED_HISTORY !== 'undefined' && SPEED_HISTORY) ? SPEED_HISTORY : null;
-}
-
-function buildNotifyPayload(format, text, extra) {
-  const chatId = (extra && extra.chatId) ? String(extra.chatId) : '';
-  if (format === 'dingtalk') return { msgtype: 'text', text: { content: text } };
-  if (format === 'feishu') return { msg_type: 'text', content: { text: text } };
-  if (format === 'wecom') return { msgtype: 'text', text: { content: text } };
-  if (format === 'slack') return { text: text };
-  if (format === 'discord') return { content: text };
-  if (format === 'telegram') return { chat_id: chatId, text: text, disable_web_page_preview: true };
-  return { text: text, source: 'NetSight Pro' };
-}
-
-function isPublicHttpUrlAllowed(p) {
-  return ['http:', 'https:'].includes(p.protocol) && isAllowedTargetPort(p) && !isPrivateHost(p.hostname);
-}
-
-async function postMonitorWebhook(webhook, format, text, extra) {
-  // webhook 只允许公网 http(s) 目标：保存时校验 + 发送前再做一次 DNS 解析校验，且不跟随重定向
-  try {
-    const p = new URL(webhook);
-    if (!isPublicHttpUrlAllowed(p)) return false;
-    if (!(await resolvesToPublicOnly(p.hostname))) return false;
-  } catch (e) {
-    return false;
-  }
-  try {
-    // ntfy 走纯文本 body（POST 到 https://ntfy.sh/<topic>）；其它渠道走 JSON payload
-    const isNtfy = format === 'ntfy';
-    const res = await fetch(webhook, {
-      method: 'POST',
-      redirect: 'manual',
-      headers: { 'content-type': isNtfy ? 'text/plain;charset=UTF-8' : 'application/json' },
-      body: isNtfy ? String(text) : JSON.stringify(buildNotifyPayload(format, text, extra)),
-      signal: AbortSignal.timeout(8000)
-    });
-    try { if (res.body) await res.body.cancel(); } catch (e) {}
-    return res.status >= 200 && res.status < 300;
-  } catch (e) {
-    return false;
-  }
-}
-
-// 巡检目标抓取：手动跟随重定向，每一跳都重新做协议/端口/私网/公网解析校验，避免 302 跳内网
-async function fetchMonitorTarget(target) {
-  let current = target;
-  for (let hop = 0; hop < 4; hop++) {
-    const res = await fetch(current, {
-      method: 'GET',
-      redirect: 'manual',
-      headers: { 'user-agent': 'NetSight-Monitor/1.0' },
-      signal: AbortSignal.timeout(10000)
-    });
-    if (res.status >= 300 && res.status < 400) {
-      const loc = res.headers.get('location');
-      try { if (res.body) await res.body.cancel(); } catch (e) {}
-      if (!loc || hop >= 3) return res;
-      let next;
-      try { next = new URL(loc, current); } catch (e) { return res; }
-      if (!isPublicHttpUrlAllowed(next) || !(await resolvesToPublicOnly(next.hostname))) throw new Error('blocked redirect');
-      current = next.href;
-      continue;
-    }
-    return res;
-  }
-  throw new Error('too many redirects');
-}
-
-async function runMonitorChecks(urls) {
-  // 目标并发上限 3：串行时 10 个目标最坏可达 ~160s，超过多数客户端/网关超时
-  const limit = pLimit(3);
-  return await Promise.all(urls.map(target => limit(async () => {
-    const started = Date.now();
-    let status = 'down', code = null, error = '';
-    try {
-      const targetUrl = new URL(target);
-      if (isPrivateHost(targetUrl.hostname) || !isAllowedTargetPort(targetUrl) || !(await resolvesToPublicOnly(targetUrl.hostname))) throw new Error('blocked target');
-      const res = await fetchMonitorTarget(target);
-      code = res.status;
-      status = code < 400 ? 'up' : 'down';
-      try { if (res.body) { const rd = res.body.getReader(); try { await rd.cancel(); } catch (e2) {} } } catch (e3) {}
-    } catch (e) {
-      error = String((e && e.message) || e).slice(0, 120);
-    }
-    return { url: target, status: status, code: code, error: error, ms: Date.now() - started };
-  })));
-}
-
-// 告警静默时段（按配置的固定偏移，默认 +8 北京时间）；quietHours 格式 "23:00-08:00"
-function isMonitorQuietHours(config, now) {
-  try {
-    const q = String((config && config.quietHours) || '');
-    const m = q.match(/^([01]\d|2[0-3]):([0-5]\d)-([01]\d|2[0-3]):([0-5]\d)$/);
-    if (!m) return false;
-    const tz = Number.isFinite(Number(config.tzOffset)) ? Number(config.tzOffset) : 8;
-    const d = new Date(now + tz * 3600000);
-    const mins = d.getUTCHours() * 60 + d.getUTCMinutes();
-    const start = Number(m[1]) * 60 + Number(m[2]);
-    const end = Number(m[3]) * 60 + Number(m[4]);
-    if (start === end) return false;
-    return start < end ? (mins >= start && mins < end) : (mins >= start || mins < end);
-  } catch (e) { return false; }
-}
-function certWarnLevel(days) {
-  const n = Number(days);
-  if (!Number.isFinite(n)) return '';
-  if (n < 0) return 'expired';
-  if (n <= 7) return '7';
-  if (n <= 14) return '14';
-  return '';
-}
-
-async function handleMonitorCheck() {
-  const _monStart = Date.now();
-  const kv = monitorKv();
-  if (!kv) return { skipped: 'kv_missing' };
-  let cfg = null, prevState = {}, log = [];
-  try { const raw = await kv.get('monitor:config'); if (raw) cfg = JSON.parse(raw); } catch (e) {}
-  if (!cfg || typeof cfg !== 'object' || Array.isArray(cfg) || !Array.isArray(cfg.urls) || cfg.urls.length === 0) return { skipped: 'no_config' };
-  try { const raw = await kv.get('monitor:state'); if (raw) prevState = JSON.parse(raw); } catch (e) {}
-  if (!prevState || typeof prevState !== 'object' || Array.isArray(prevState)) prevState = {};
-  try { const raw = await kv.get('monitor:log'); if (raw) log = JSON.parse(raw); } catch (e) {}
-  if (!Array.isArray(log)) log = [];
-
-  const now = Date.now();
-  // 兼容两种配置格式：字符串 URL 或 { url, label } 对象（D6 监控分组/标签）
-  const monitorTargets = cfg.urls.slice(0, 10).map(function (x) {
-    if (typeof x === 'string') return { url: x, label: '' };
-    if (x && typeof x === 'object') return { url: String(x.url || '').trim(), label: String(x.label || '').trim().slice(0, 60) };
-    return null;
-  }).filter(function (t) { return t && t.url; });
-  if (!monitorTargets.length) return { skipped: 'no_config' };
-  const targetLabelMap = {};
-  monitorTargets.forEach(function (t) { if (t.label) targetLabelMap[t.url] = t.label; });
-  const results = await runMonitorChecks(monitorTargets.map(function (t) { return t.url; }));
-  const failureThreshold = Math.min(5, Math.max(1, Number(cfg.failureThreshold) || 1));
-  const quiet = isMonitorQuietHours(cfg, now);
-  const maintenance = Number(cfg.maintenanceUntil) > now;
-  const suppressed = quiet || maintenance;
-
-  // 证书到期检查：每个 https 主机最多 6 小时检查一次，最多并行 5 个，失败静默降级
-  const certMap = {};
-  if (cfg.certCheck !== false) {
-    const certTargets = [];
-    const seenHost = {};
-    for (const r of results) {
-      try {
-        const u = new URL(r.url);
-        if (u.protocol !== 'https:' || seenHost[u.hostname]) continue;
-        seenHost[u.hostname] = true;
-        const prev = prevState[r.url] || {};
-        if (now - (Number(prev.certCheckedAt) || 0) >= 6 * 3600000) certTargets.push({ url: r.url, host: u.hostname });
-      } catch (e) {}
-    }
-    if (certTargets.length) {
-      await Promise.all(certTargets.slice(0, 5).map(async function (t) {
-        try {
-          const cert = await fetchCertInfo(t.host);
-          certMap[t.url] = { checkedAt: now, daysLeft: cert ? cert.daysLeft : null };
-        } catch (e) {}
-      }));
-    }
-  }
-
-  let changed = false;
-  const nextState = {};
-  const events = [];
-  for (const r of results) {
-    const prev = prevState[r.url] || null;
-    const failures = r.status === 'down' ? (((prev && Number(prev.failures)) || 0) + 1) : 0;
-    const since = (prev && prev.status === r.status) ? prev.since : now;
-    const entry = { status: r.status, code: r.code, since: since, lastCheck: now, error: r.error || '', failures: failures };
-    if (targetLabelMap[r.url]) entry.label = targetLabelMap[r.url];
-    if (certMap[r.url]) {
-      entry.certCheckedAt = certMap[r.url].checkedAt;
-      entry.certDays = certMap[r.url].daysLeft;
-    } else if (prev && prev.certCheckedAt) {
-      entry.certCheckedAt = prev.certCheckedAt;
-      if (prev.certDays !== undefined && prev.certDays !== null) entry.certDays = prev.certDays;
-    }
-    const isRecovery = prev && prev.status === 'down' && r.status === 'up';
-    const wasDownNotified = prev && prev.notifiedDown === true;
-    if (!prev || prev.status !== r.status) {
-      changed = true;
-      if (isRecovery && wasDownNotified) {
-        const downFor = prev.since ? Math.max(1, Math.round((now - prev.since) / 1000)) : 0;
-        events.push({ t: now, url: r.url, status: 'up', text: '[NetSight] 恢复: ' + r.url + ' 已恢复正常 (' + r.ms + 'ms)' + (downFor ? '，故障持续 ' + downFor + 's' : '') });
-        entry.notifiedDown = false;
-      } else if (r.status === 'down' && failures >= failureThreshold && !wasDownNotified) {
-        const text = '[NetSight] 异常: ' + r.url + ' ' + (r.code ? ('HTTP ' + r.code) : (r.error || '连接失败')) + ' · ' + r.ms + 'ms' + (failures > 1 ? ' · 连续失败 ' + failures + ' 次' : '');
-        events.push({ t: now, url: r.url, status: 'down', text: text });
-        entry.notifiedDown = true;
-      } else if (r.status === 'down') {
-        entry.notifiedDown = false;
-      }
-    } else if (r.status === 'down' && !wasDownNotified && failures >= failureThreshold) {
-      // 状态未变，但此前因未达阈值未通知：达到阈值时补发一次
-      changed = true;
-      const text = '[NetSight] 异常: ' + r.url + ' ' + (r.code ? ('HTTP ' + r.code) : (r.error || '连接失败')) + ' · 连续失败 ' + failures + ' 次';
-      events.push({ t: now, url: r.url, status: 'down', text: text });
-      entry.notifiedDown = true;
-    } else if (r.status === 'up') {
-      entry.notifiedDown = false;
-    }
-    // 证书到期事件：仅在等级变化时告警一次（14 天 / 7 天 / 已过期）
-    if (entry.certDays !== undefined && Number.isFinite(Number(entry.certDays))) {
-      const level = certWarnLevel(Number(entry.certDays));
-      const prevLevel = (prev && prev.certWarn) ? prev.certWarn : '';
-      if (level && level !== prevLevel) {
-        changed = true;
-        events.push({
-          t: now,
-          url: r.url,
-          status: r.status,
-          text: (level === 'expired' ? '[NetSight] 证书已过期: ' : '[NetSight] 证书即将到期: ') + r.url + ' · 剩余 ' + entry.certDays + ' 天'
-        });
-        entry.certWarn = level;
-      } else {
-        entry.certWarn = prevLevel;
-      }
-    } else if (prev && prev.certWarn) {
-      entry.certWarn = prev.certWarn;
-    }
-    nextState[r.url] = entry;
-  }
-  const currentMonSet = new Set(results.map(x => x.url));
-  for (const k of Object.keys(prevState)) {
-    if (k !== '__meta' && !currentMonSet.has(k)) changed = true;
-  }
-  const lastWrite = (prevState.__meta && prevState.__meta.writtenAt) ? prevState.__meta.writtenAt : 0;
-  let stateWritten = true;
-  if (changed || (now - lastWrite) > MONITOR_STATE_REFRESH_MS) {
-    nextState.__meta = { writtenAt: now };
-    // 先把状态落盘：写失败时本轮不发告警，避免下一轮因旧状态再次判定「变化」而重复告警
-    stateWritten = await kvPut(kv, 'monitor:state', JSON.stringify(nextState), undefined, { skipDebounce: true });
-  }
-  let notified = 0;
-  if (events.length) {
-    if (stateWritten && !suppressed) {
-      for (const ev of events) {
-        if (cfg.webhook && await postMonitorWebhook(cfg.webhook, cfg.format || 'generic', ev.text, { chatId: cfg.chatId })) notified++;
-      }
-    }
-    const logEvents = suppressed ? events.map(function (ev) { return Object.assign({}, ev, { suppressed: true }); }) : events;
-    await kvPut(kv, 'monitor:log', JSON.stringify(logEvents.concat(log).slice(0, MONITOR_LOG_MAX)), undefined, { skipDebounce: true });
-  }
-  obs.monitor = {
-    lastRunAt: now,
-    lastDurationMs: Date.now() - _monStart,
-    lastChanged: changed,
-    lastNotified: notified,
-    lastSuppressed: suppressed
-  };
-  return { results: results, changed: changed, notified: notified, stateWritten: stateWritten, suppressed: suppressed, quiet: quiet, maintenance: maintenance };
-}
+// ==================== 站点监控（无 KV 构建已移除）====================
+// 监控必须跨请求持久化「配置 / 状态 / 告警日志」，因此依赖 KV（或 DO/D1）。
+// 本构建把该功能整体删除：没有 Cron 监听、没有监控端点、没有任何存储写入。
 
 // ==================== 前端静态资源（外置 /app.css 与 /app.js，可长缓存） ====================
 // 资源版本由内嵌 CSS/JS 内容哈希自动生成：改前端即自动换 URL，避免忘记 bump 版本导致长期返回旧缓存
@@ -1162,6 +894,8 @@ const DNS_WIRE_TYPES = {
   A: 1, NS: 2, CNAME: 5, SOA: 6, MX: 15, TXT: 16, AAAA: 28, DS: 43, DNSKEY: 48, CAA: 257
 };
 
+const DNS_TEXT_DECODER = new TextDecoder();
+
 function dnsEncodeName(name) {
   const labels = String(name || '').replace(/\.$/, '').split('.').filter(Boolean);
   const out = [];
@@ -1177,10 +911,13 @@ function dnsEncodeName(name) {
 
 function dnsBuildQuery(name, type) {
   const qtype = typeof type === 'number' ? type : (DNS_WIRE_TYPES[String(type || 'A').toUpperCase()] || 1);
-  const header = [0, 0, 0x01, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0]; // ID=0, RD=1, QDCOUNT=1
+  // ARCOUNT=1：附加一条 EDNS0 OPT（UDPSIZE=1232, DO=1）。否则大答案集会被 UDP 截断（TC=1），
+  // 且未请求 DNSSEC 记录时 AD 位恒为 false，前端展示的 AD 徽标没有意义。
+  const header = [0, 0, 0x01, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 1]; // ID=0, RD=1, QDCOUNT=1, ARCOUNT=1
   const qname = dnsEncodeName(name);
   const tail = [(qtype >> 8) & 0xff, qtype & 0xff, 0, 1]; // QTYPE + QCLASS IN
-  return Uint8Array.from([...header, ...qname, ...tail]);
+  const opt = [0x00, 0x00, 0x29, 0x04, 0xd0, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00]; // root / TYPE=41 / CLASS=1232 / TTL(DO) / RDLEN=0
+  return Uint8Array.from([...header, ...qname, ...tail, ...opt]);
 }
 
 function dnsBytesToBase64Url(bytes) {
@@ -1212,7 +949,7 @@ function dnsReadName(buf, offset) {
       continue;
     }
     if (off + 1 + len > buf.length) throw new Error('dns label out of range');
-    labels.push(new TextDecoder().decode(buf.subarray(off + 1, off + 1 + len)));
+    labels.push(DNS_TEXT_DECODER.decode(buf.subarray(off + 1, off + 1 + len)));
     off += 1 + len;
     if (!jumped) after = off;
   }
@@ -1244,7 +981,7 @@ function dnsFormatRdata(buf, type, start, length) {
         const len = buf[off];
         off += 1;
         if (len === 0 || off + len > end) break;
-        parts.push(new TextDecoder().decode(buf.subarray(off, off + len)));
+        parts.push(DNS_TEXT_DECODER.decode(buf.subarray(off, off + len)));
         off += len;
       }
       return parts.join('');
@@ -1274,8 +1011,8 @@ function dnsFormatRdata(buf, type, start, length) {
       const flags = buf[start];
       const tagLen = buf[start + 1];
       if (start + 2 + tagLen > start + length) return '';
-      const tag = new TextDecoder().decode(buf.subarray(start + 2, start + 2 + tagLen));
-      const value = new TextDecoder().decode(buf.subarray(start + 2 + tagLen, start + length));
+      const tag = DNS_TEXT_DECODER.decode(buf.subarray(start + 2, start + 2 + tagLen));
+      const value = DNS_TEXT_DECODER.decode(buf.subarray(start + 2 + tagLen, start + length));
       return flags + ' ' + tag + ' "' + value + '"';
     }
     const hex = [];
@@ -1291,15 +1028,21 @@ function dnsParseResponse(buf) {
   const flags = (buf[2] << 8) | buf[3];
   const qdcount = (buf[4] << 8) | buf[5];
   const ancount = (buf[6] << 8) | buf[7];
+  const truncated = (flags & 0x0200) !== 0;
   let off = 12;
   for (let i = 0; i < qdcount; i++) {
+    if (off >= buf.length) throw new Error('dns question out of range');
     const q = dnsReadName(buf, off);
     off = q.after + 4;
   }
   const answers = [];
-  for (let i = 0; i < ancount && off + 10 <= buf.length; i++) {
+  // TC=1 表示报文被截断、answer 段不完整：直接返回空答案，
+  // 避免拿半截结果去做「解析器不一致」的比对（原实现忽略 TC 位）。
+  const maxAnswers = truncated ? 0 : Math.min(ancount, 50);
+  for (let i = 0; i < maxAnswers && off + 10 <= buf.length; i++) {
     const n = dnsReadName(buf, off);
     off = n.after;
+    if (off + 10 > buf.length) break;
     const type = (buf[off] << 8) | buf[off + 1];
     const ttl = ((buf[off + 4] << 24) | (buf[off + 5] << 16) | (buf[off + 6] << 8) | buf[off + 7]) >>> 0;
     const rdlen = (buf[off + 8] << 8) | buf[off + 9];
@@ -1313,7 +1056,7 @@ function dnsParseResponse(buf) {
     });
     off = rdataStart + rdlen;
   }
-  return { status: flags & 0x0f, ad: !!(flags & 0x0020), answers: answers };
+  return { status: flags & 0x0f, ad: !!(flags & 0x0020), truncated: truncated, answers: answers };
 }
 
 // RFC 8484 GET 查询：?dns=<base64url(query)>
@@ -1326,9 +1069,19 @@ async function dohWireQuery(resolverUrl, name, type, timeoutMs) {
       signal: AbortSignal.timeout(timeoutMs || 5000)
     });
     if (!res.ok) return { error: 'http_' + res.status, status: -1, ad: false, answers: [] };
-    const buf = new Uint8Array(await res.arrayBuffer());
-    const parsed = dnsParseResponse(buf);
-    return { status: parsed.status, ad: parsed.ad, answers: parsed.answers };
+    // DNS 报文合法上限 65535 字节：先看 content-length，避免异常端点把整段 body 读进 isolate
+    const cl = Number(res.headers.get('content-length') || 0);
+    if (Number.isFinite(cl) && cl > 65535) return { error: 'response_too_large', status: -1, ad: false, answers: [] };
+    const raw = await res.arrayBuffer();
+    if (!raw || raw.byteLength > 65535) return { error: 'response_too_large', status: -1, ad: false, answers: [] };
+    let parsed;
+    try {
+      parsed = dnsParseResponse(new Uint8Array(raw));
+    } catch (parseErr) {
+      // 与「网络不可达」区分开：解析器返回了坏包 ≠ 连不上，排障方向完全不同
+      return { error: 'parse_error', status: -1, ad: false, answers: [] };
+    }
+    return { status: parsed.status, ad: parsed.ad, truncated: parsed.truncated, answers: parsed.answers };
   } catch (e) {
     return { error: 'unreachable', status: -1, ad: false, answers: [] };
   }
@@ -2171,6 +1924,98 @@ const APP_CSS = `
                 scroll-behavior: auto !important;
             }
         }
+
+        /* ==================== 历史统计仪表盘 ==================== */
+        .stats-grid { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(320px, 1fr); gap: 16px; align-items: start; }
+        @media (max-width: 1080px) { .stats-grid { grid-template-columns: 1fr; } }
+
+        .hist-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+        @media (max-width: 760px) { .hist-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+        .hist-kpi { border: 1px solid var(--divider); border-radius: 10px; padding: 9px 11px; background: rgba(255,255,255,0.015); min-width: 0; }
+        .hist-kpi .k { font-size: 10px; letter-spacing: .5px; text-transform: uppercase; color: var(--text-quaternary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .hist-kpi .v { font-size: 17px; font-weight: 600; font-family: var(--font-mono, ui-monospace, monospace); margin-top: 3px; line-height: 1.25; word-break: break-all; }
+        .hist-kpi .s { font-size: 11px; color: var(--text-tertiary); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+        .hist-block { border: 1px solid var(--divider); border-radius: 10px; padding: 12px; margin-top: 12px; min-width: 0; }
+        .hist-block-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+        .hist-block-title { font-size: 12px; font-weight: 600; color: var(--text-secondary); letter-spacing: .2px; }
+        .hist-block-meta { font-size: 11px; color: var(--text-tertiary); white-space: nowrap; }
+
+        .hist-toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+        .hist-toolbar select { min-width: 118px; max-width: 180px; }
+
+        .trend-wrap { position: relative; width: 100%; height: 150px; }
+        .trend-canvas { display: block; width: 100%; height: 150px; }
+
+        .hist-cmp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        @media (max-width: 760px) { .hist-cmp-grid { grid-template-columns: 1fr; } }
+        .hist-cmp-grid select { width: 100%; min-width: 0; }
+        .hist-cmp-result { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr) auto; gap: 10px; margin-top: 10px; align-items: start; }
+        .hist-cmp-col { min-width: 0; }
+        .hist-cmp-col .k { display: block; font-size: 10px; letter-spacing: .5px; color: var(--text-quaternary); text-transform: uppercase; }
+        .hist-cmp-col .v { display: block; font-size: 12px; color: var(--text-secondary); margin-top: 3px; word-break: break-all; }
+        .hist-cmp-col .v.mono { font-family: var(--font-mono, ui-monospace, monospace); font-weight: 600; }
+
+        .hist-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        .hist-table th { text-align: left; font-weight: 500; font-size: 10px; letter-spacing: .5px; text-transform: uppercase; color: var(--text-quaternary); padding: 6px 8px; border-bottom: 1px solid var(--divider); white-space: nowrap; }
+        .hist-table td { padding: 7px 8px; border-bottom: 1px solid var(--divider); vertical-align: middle; }
+        .hist-table tr:last-child td { border-bottom: 0; }
+        .hist-table tbody tr:hover td { background: rgba(255,255,255,0.03); }
+        .hist-table .c-time { color: var(--text-tertiary); white-space: nowrap; font-variant-numeric: tabular-nums; }
+        .hist-table .c-tool { color: var(--text-secondary); }
+        .hist-table .c-val { font-family: var(--font-mono, ui-monospace, monospace); font-weight: 600; white-space: nowrap; }
+        .hist-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--text-quaternary); }
+        .hist-dot.ok { background: var(--chart-green, #a7b6a9); }
+        .hist-dot.warn { background: var(--chart-amber, #c8b07a); }
+        .hist-dot.bad { background: var(--chart-red, #c98a8a); }
+
+        .usage-big { display: flex; align-items: baseline; gap: 8px; margin: 0 0 14px; }
+        .usage-big .n { font-size: 34px; font-weight: 600; line-height: 1; font-family: var(--font-mono, ui-monospace, monospace); }
+        .usage-big .l { font-size: 11px; color: var(--text-tertiary); }
+        .usage-list { display: flex; flex-direction: column; gap: 9px; }
+        .usage-item { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 3px 8px; }
+        .usage-item .ep { font-size: 11.5px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .usage-item .n { font-size: 11.5px; color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
+        .usage-item .bar { grid-column: 1 / -1; height: 4px; border-radius: 999px; background: var(--divider); overflow: hidden; }
+        .usage-item .bar i { display: block; height: 100%; border-radius: 999px; background: var(--text-secondary); }
+
+        /* ===== 历史统计：上下分段（KPI 通栏 → 全宽趋势 → 明细/对比/用量三列） ===== */
+        .stats-grid { grid-template-columns: 1fr; }
+        .hist-card .card-body { padding-top: 2px; }
+        .hist-kpis { gap: 8px; margin-bottom: 10px; }
+        .hist-kpi { padding: 8px 10px; border-left-width: 2px; border-left-style: solid; }
+        .hist-kpi.c-cyan { border-left-color: var(--chart-cyan, #7fb3c8); }
+        .hist-kpi.c-cyan .v { color: var(--chart-cyan, #7fb3c8); }
+        .hist-kpi.c-green { border-left-color: var(--chart-green, #a7b6a9); }
+        .hist-kpi.c-green .v { color: var(--chart-green, #a7b6a9); }
+        .hist-kpi.c-amber { border-left-color: var(--chart-amber, #c8b07a); }
+        .hist-kpi.c-amber .v { color: var(--chart-amber, #c8b07a); }
+        .hist-kpi.c-violet { border-left-color: var(--chart-violet, #a9a2c8); }
+        .hist-kpi.c-violet .v { color: var(--chart-violet, #a9a2c8); }
+        .hist-kpi .v { font-size: 16px; }
+        .hist-trend { margin-top: 0; }
+        .hist-grid-3 { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr) minmax(0, .85fr); gap: 10px; margin-top: 10px; align-items: start; }
+        .hist-grid-3 > .hist-block { margin-top: 0; }
+        .hist-table-block { order: 1; }
+        .hist-cmp-block { order: 2; }
+        .hist-usage-block { order: 3; }
+        @media (max-width: 1380px) {
+            .hist-grid-3 { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); }
+            .hist-usage-block { grid-column: 1 / -1; }
+        }
+        @media (max-width: 980px) {
+            .hist-grid-3 { grid-template-columns: 1fr; }
+            .hist-usage-block { grid-column: auto; }
+        }
+        .hist-toolbar { justify-content: space-between; }
+        .hist-toolbar .grow { flex: 1 1 auto; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+        .hist-sep { width: 1px; height: 16px; background: var(--divider); margin: 0 4px; }
+        .hist-chip { background: transparent; border: 1px solid var(--divider); color: var(--text-tertiary); border-radius: 999px; padding: 3px 10px; font-size: 11px; line-height: 1.5; cursor: pointer; font-family: inherit; white-space: nowrap; }
+        .hist-chip:hover { color: var(--text-primary); border-color: var(--text-quaternary); }
+        .hist-chip.active { color: var(--text-primary); border-color: var(--text-secondary); background: rgba(255,255,255,.06); }
+        .hist-table tr.hist-group td { padding: 9px 6px 3px; color: var(--text-quaternary); font-size: 10.5px; letter-spacing: .4px; border-bottom: 1px solid var(--divider); }
+        .hist-table td, .hist-table th { padding-left: 6px; padding-right: 6px; }
+        .hist-table td.c-time { font-size: 11px; }
 `;
 
 const APP_JS = `
@@ -2300,7 +2145,7 @@ const APP_JS = `
                     webrtcLeak: 'Leak detected',
                     webrtcLocal: 'Local IP',
                     webrtcPublic: 'Public IP',
-                    webrtcNone: 'No WebRTC candidates found (safe)',
+                    webrtcNone: 'No WebRTC candidates obtained - verdict: undetermined (not a pass)',
                     ttfbTesting: 'Analyzing TTFB...',
                     ttfbDns: 'DNS Lookup',
                     ttfbTcp: 'TCP Connect',
@@ -2337,6 +2182,14 @@ const APP_JS = `
                     km: 'km',
                     ttfbFailed: 'TTFB analysis failed',
                     historyAvgSpeed: 'Avg Speed',
+                    histRecords: 'Records',
+                    histLatest: 'Latest',
+                    histBest: 'Best',
+                    histTime: 'Time',
+                    histTool: 'Tool',
+                    histValue: 'Result',
+                    histToday: 'Today',
+                    histWeek: '7 days',
                     historyNode: 'Node',
                     loadFailed: 'Load failed',
                     totalRequests: 'Total Requests',
@@ -2513,7 +2366,7 @@ const APP_JS = `
                     adviceCause: 'Likely cause',
                     adviceAction: 'Suggested action',
                     historyLocalTitle: 'Test History (local)',
-                    historyLocalSub: 'Last 20 results - stored in this browser only',
+                    historyLocalSub: 'Saved only in this browser',
                     historyEmpty: 'No local records yet - run a test to start collecting',
                     historyClear: 'Clear local history',
                     historyCleared: 'Cleared',
@@ -2695,7 +2548,7 @@ const APP_JS = `
                     webrtcLeak: '检测到泄漏',
                     webrtcLocal: '内网 IP',
                     webrtcPublic: '公网 IP',
-                    webrtcNone: '未发现 WebRTC 候选地址（安全）',
+                    webrtcNone: '未获得 WebRTC 候选地址 · 无法判定（不代表安全）',
                     ttfbTesting: '正在分析 TTFB...',
                     ttfbDns: 'DNS 解析',
                     ttfbTcp: 'TCP 连接',
@@ -2731,6 +2584,14 @@ const APP_JS = `
                     km: '公里',
                     ttfbFailed: 'TTFB 分析失败',
                     historyAvgSpeed: '平均速度',
+                    histRecords: '记录数',
+                    histLatest: '最近一次',
+                    histBest: '最佳',
+                    histTime: '时间',
+                    histTool: '工具',
+                    histValue: '结果',
+                    histToday: '今日',
+                    histWeek: '近 7 天',
                     historyNode: '节点',
                     loadFailed: '加载失败',
                     totalRequests: '总请求数',
@@ -2906,7 +2767,7 @@ const APP_JS = `
                     adviceCause: '可能原因',
                     adviceAction: '建议动作',
                     historyLocalTitle: '测试历史（本地）',
-                    historyLocalSub: '最近 20 条记录 · 仅保存在本机浏览器',
+                    historyLocalSub: '仅保存在本机浏览器',
                     historyEmpty: '暂无本地记录，运行一次测试即可开始收集',
                     historyClear: '清空本地记录',
                     historyCleared: '已清空',
@@ -3088,7 +2949,7 @@ const APP_JS = `
                     webrtcLeak: '檢測到洩漏',
                     webrtcLocal: '內網 IP',
                     webrtcPublic: '公網 IP',
-                    webrtcNone: '未發現 WebRTC 候選位址（安全）',
+                    webrtcNone: '未取得 WebRTC 候選位址 · 無法判定（不代表安全）',
                     ttfbTesting: '正在分析 TTFB...',
                     ttfbDns: 'DNS 解析',
                     ttfbTcp: 'TCP 連線',
@@ -3124,6 +2985,14 @@ const APP_JS = `
                     km: '公里',
                     ttfbFailed: 'TTFB 分析失敗',
                     historyAvgSpeed: '平均速度',
+                    histRecords: '記錄數',
+                    histLatest: '最近一次',
+                    histBest: '最佳',
+                    histTime: '時間',
+                    histTool: '工具',
+                    histValue: '結果',
+                    histToday: '今日',
+                    histWeek: '近 7 天',
                     historyNode: '節點',
                     loadFailed: '載入失敗',
                     totalRequests: '總請求數',
@@ -3299,7 +3168,7 @@ const APP_JS = `
                     adviceCause: '可能原因',
                     adviceAction: '建議動作',
                     historyLocalTitle: '測試歷史（本機）',
-                    historyLocalSub: '最近 20 筆記錄 · 僅儲存在本機瀏覽器',
+                    historyLocalSub: '僅儲存在本機瀏覽器',
                     historyEmpty: '尚無本機記錄，執行一次測試即可開始收集',
                     historyClear: '清除本機記錄',
                     historyCleared: '已清除',
@@ -3784,7 +3653,7 @@ const APP_JS = `
   "webrtcLeak": "リークを検出",
   "webrtcLocal": "ローカル IP",
   "webrtcPublic": "パブリック IP",
-  "webrtcNone": "WebRTC 候補が見つかりません（安全）",
+  "webrtcNone": "WebRTC 候補を取得できません · 判定不能（安全とは限りません）",
   "ttfbTesting": "TTFB を分析中...",
   "ttfbDns": "DNS ルックアップ",
   "ttfbTcp": "TCP 接続",
@@ -3820,6 +3689,14 @@ const APP_JS = `
   "km": "km",
   "ttfbFailed": "TTFB 分析に失敗しました",
   "historyAvgSpeed": "平均速度",
+  "histRecords": "記録数",
+  "histLatest": "最新",
+  "histBest": "最高",
+  "histTime": "時刻",
+  "histTool": "ツール",
+  "histValue": "結果",
+  "histToday": "今日",
+  "histWeek": "7日間",
   "historyNode": "ノード",
   "loadFailed": "読み込みに失敗しました",
   "totalRequests": "総リクエスト数",
@@ -3995,7 +3872,7 @@ const APP_JS = `
   "adviceCause": "考えられる原因",
   "adviceAction": "推奨される対処",
   "historyLocalTitle": "テスト履歴（ローカル）",
-  "historyLocalSub": "直近 20 件の結果 - このブラウザにのみ保存されます",
+  "historyLocalSub": "このブラウザにのみ保存されます",
   "historyEmpty": "ローカル記録はまだありません - テストを実行して収集を開始できます",
   "historyClear": "ローカル履歴を消去",
   "historyCleared": "消去しました",
@@ -4309,7 +4186,7 @@ const APP_JS = `
   "webrtcLeak": "누출 감지됨",
   "webrtcLocal": "로컬 IP",
   "webrtcPublic": "공인 IP",
-  "webrtcNone": "WebRTC 후보를 찾을 수 없음 (안전)",
+  "webrtcNone": "WebRTC 후보를 얻지 못함 · 판정 불가(안전 아님)",
   "ttfbTesting": "TTFB 분석 중...",
   "ttfbDns": "DNS 조회",
   "ttfbTcp": "TCP 연결",
@@ -4345,6 +4222,14 @@ const APP_JS = `
   "km": "km",
   "ttfbFailed": "TTFB 분석 실패",
   "historyAvgSpeed": "평균 속도",
+  "histRecords": "기록 수",
+  "histLatest": "최근",
+  "histBest": "최고",
+  "histTime": "시간",
+  "histTool": "도구",
+  "histValue": "결과",
+  "histToday": "오늘",
+  "histWeek": "7일",
   "historyNode": "노드",
   "loadFailed": "불러오기 실패",
   "totalRequests": "총 요청 수",
@@ -4520,7 +4405,7 @@ const APP_JS = `
   "adviceCause": "추정 원인",
   "adviceAction": "권장 조치",
   "historyLocalTitle": "테스트 기록 (로컬)",
-  "historyLocalSub": "최근 결과 20건 - 이 브라우저에만 저장됩니다",
+  "historyLocalSub": "이 브라우저에만 저장됩니다",
   "historyEmpty": "로컬 기록이 없습니다 - 테스트를 실행해 수집을 시작하세요",
   "historyClear": "로컬 기록 지우기",
   "historyCleared": "지워짐",
@@ -4834,7 +4719,7 @@ const APP_JS = `
   "webrtcLeak": "Fuga detectada",
   "webrtcLocal": "IP local",
   "webrtcPublic": "IP pública",
-  "webrtcNone": "No se encontraron candidatos WebRTC (seguro)",
+  "webrtcNone": "No se obtuvieron candidatos WebRTC · sin determinar (no implica seguridad)",
   "ttfbTesting": "Analizando TTFB...",
   "ttfbDns": "Consulta DNS",
   "ttfbTcp": "Conexión TCP",
@@ -4870,6 +4755,14 @@ const APP_JS = `
   "km": "km",
   "ttfbFailed": "Falló el análisis de TTFB",
   "historyAvgSpeed": "Velocidad prom.",
+  "histRecords": "Registros",
+  "histLatest": "Reciente",
+  "histBest": "Mejor",
+  "histTime": "Hora",
+  "histTool": "Herramienta",
+  "histValue": "Resultado",
+  "histToday": "Hoy",
+  "histWeek": "7 días",
   "historyNode": "Nodo",
   "loadFailed": "Falló la carga",
   "totalRequests": "Solicitudes totales",
@@ -5045,7 +4938,7 @@ const APP_JS = `
   "adviceCause": "Causa probable",
   "adviceAction": "Acción sugerida",
   "historyLocalTitle": "Historial de pruebas (local)",
-  "historyLocalSub": "Últimos 20 resultados; se guardan solo en este navegador",
+  "historyLocalSub": "Se guardan solo en este navegador",
   "historyEmpty": "Aún no hay registros locales; ejecuta una prueba para comenzar a recopilar",
   "historyClear": "Borrar historial local",
   "historyCleared": "Borrado",
@@ -5298,26 +5191,34 @@ const APP_JS = `
                 });
             })();
 
+            // 缺 key 回退：任何语言缺失的键统一回落到 en。
+            // 原实现里同一个缺失 key 在不同位置会分别渲染成空串或字面量 "undefined"，
+            // 这里在所有语言包合并完成后一次性补齐，新增文案漏翻也不会破相。
+            (function fillMissingI18nFromEnglish() {
+                const base = i18n.en;
+                if (!base) return;
+                Object.keys(i18n).forEach(function (lang) {
+                    const target = i18n[lang];
+                    if (!target || lang === 'en') return;
+                    Object.keys(base).forEach(function (key) {
+                        if (target[key] === undefined) target[key] = base[key];
+                    });
+                });
+            })();
+
             // ==================== 后端数据 ====================
             const BACKEND_DATA = window.__BACKEND__ || {};
 
-            // ==================== 会话令牌注入 ====================
-            // 对同源请求统一附加 x-ns-token（相对路径 / 绝对 URL / Request 对象均支持），跨域请求不携带令牌；
-            // 403 时先通过 /api/page-token 静默续期并重试一次，避免整页 reload 造成的刷新风暴。
-            let __PAGE_KEY__ = window.__PAGE_KEY__ || '';
+            // ==================== 会话续期（Cookie 化） ====================
+            // 页面令牌只通过 HttpOnly Cookie 下发，页面脚本既读不到也不需要读：
+            // 同源请求会自动携带 Cookie；403 时先调 /api/page-token 续期 Cookie，再重试一次。
+            // 好处：即使发生 XSS，也无法把令牌带走复用（HttpOnly 阻断 document.cookie 读取）。
             let __pageTokenRefreshPromise = null;
             function __sameOriginInput(input) {
                 try {
                     const raw = (typeof input === 'string') ? input : ((input && input.url) ? input.url : String(input));
                     return new URL(raw, window.location.href).origin === window.location.origin;
                 } catch (e) { return false; }
-            }
-            function __withPageToken(init, token) {
-                const opts = Object.assign({}, init || {});
-                const h = new Headers(opts.headers || {});
-                if (!h.has('x-ns-token')) h.set('x-ns-token', token);
-                opts.headers = h;
-                return opts;
             }
             const __origFetchBound = (typeof window.fetch === 'function') ? window.fetch.bind(window) : null;
             function refreshPageToken() {
@@ -5326,12 +5227,7 @@ const APP_JS = `
                     try {
                         if (!__origFetchBound) return false;
                         const r = await __origFetchBound('/api/page-token', { cache: 'no-store', credentials: 'same-origin' });
-                        const j = await r.json();
-                        if (r.ok && j && typeof j.token === 'string' && j.token) {
-                            __PAGE_KEY__ = j.token;
-                            try { window.__PAGE_KEY__ = j.token; } catch (e) {}
-                            return true;
-                        }
+                        return !!r.ok;
                     } catch (e) {}
                     return false;
                 })().then(function (ok) {
@@ -5344,11 +5240,10 @@ const APP_JS = `
             if (__origFetchBound) {
                 window.fetch = async function (input, init) {
                     const sameOrigin = __sameOriginInput(input);
-                    const canAttach = sameOrigin && __PAGE_KEY__;
-                    let res = await __origFetchBound(input, canAttach ? __withPageToken(init, __PAGE_KEY__) : init);
+                    let res = await __origFetchBound(input, init);
                     if (res && res.status === 403 && sameOrigin && !(init && init.__nsRetried)) {
                         if (await refreshPageToken()) {
-                            const retryInit = __withPageToken(init, __PAGE_KEY__);
+                            const retryInit = Object.assign({}, init || {});
                             retryInit.__nsRetried = true;
                             res = await __origFetchBound(input, retryInit);
                         }
@@ -5387,6 +5282,9 @@ const APP_JS = `
             // 弹层后台任务控制：关闭弹层时中止进行中的大流量/长任务，避免用户无法停止
             let activeToolAbort = null;
             let lastFocusedBeforeModal = null;
+            // 工具运行代号：切换工具即递增，让在途异步结果失效，避免旧任务把当前面板覆盖成别家的结果
+            let __toolRunGen = 0;
+            function __isStaleRun(gen) { return gen !== __toolRunGen; }
 
             function detectLang() {
                 let saved = null;
@@ -5411,7 +5309,6 @@ const APP_JS = `
             const jitterHistory = [];
             const MAX_JITTER_HISTORY = 10;
             let geoRetryCount = 0;
-            const MAX_GEO_RETRY = 5;
             let _userGeoCache = null; // ipapi.co 结果缓存：切语言/重复调用时不重复请求第三方
             let consecutiveLoss = 0;
             let totalLoss = 0;
@@ -5430,11 +5327,31 @@ const APP_JS = `
                 return patterns.test(BACKEND_DATA.asOrg);
             }
 
+            // 合并多个 AbortSignal：优先原生 AbortSignal.any，旧浏览器退化为自建 controller
+            function anySignal(signals) {
+                const list = (signals || []).filter(Boolean);
+                if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.any === 'function') {
+                    return AbortSignal.any(list);
+                }
+                const controller = new AbortController();
+                list.forEach(function (sig) {
+                    if (!sig) return;
+                    if (sig.aborted) { try { controller.abort(); } catch (e) {} return; }
+                    try {
+                        sig.addEventListener('abort', function () { try { controller.abort(); } catch (e) {} });
+                    } catch (e) {}
+                });
+                return controller.signal;
+            }
+
             function fetchWithTimeout(url, options = {}, timeout = 3000) {
                 const controller = new AbortController();
-                const id = setTimeout(() => controller.abort(), timeout);
-                return fetch(url, { ...options, signal: controller.signal })
-                    .finally(() => clearTimeout(id));
+                // 定时器覆盖整个请求生命周期（含响应体读取），不能在 finally 里清除：
+                // fetch 收到响应头就清掉会让随后的 reader.read() 永久失去超时保护
+                setTimeout(function () {
+                    try { controller.abort(); } catch (e) {}
+                }, timeout);
+                return fetch(url, { ...options, signal: controller.signal });
             }
 
             function calculateDistance(lat1, lon1, lat2, lon2) {
@@ -5479,6 +5396,32 @@ const APP_JS = `
                 const target = element || document.getElementById('toolModalBody');
                 if (!target) return;
                 target.innerHTML = isError ? '<div class="tool-error">' + html + '</div>' : html;
+            }
+
+            // 工具崩溃兜底：async runner 抛错会变成 unhandled rejection，
+            // 界面上只留下一个永不消失的 loading。这里统一转成可见的错误 + 真实原因。
+            function toolCrash(key, err) {
+                const msg = String((err && (err.message || err)) || 'unknown error').slice(0, 160);
+                try { console.error('tool_crash', key, msg); } catch (e) {}
+                showResult(null, '<i class="fas fa-exclamation-triangle"></i> 工具执行失败 / tool failed' +
+                    '<div class="side-desc" style="margin-top:8px">' + escapeHTML(String(key || 'unknown') + ': ' + msg) + '</div>', true);
+            }
+            function safeRunTool(runner, key) {
+                try {
+                    const p = runner();
+                    if (p && typeof p.then === 'function') p.catch(function (err) { toolCrash(key, err); });
+                } catch (err) {
+                    toolCrash(key, err);
+                }
+            }
+            if (typeof window !== 'undefined' && window.addEventListener) {
+                window.addEventListener('unhandledrejection', function (ev) {
+                    const reason = ev && ev.reason ? ev.reason : 'unknown rejection';
+                    try { console.error('unhandledrejection', String((reason && reason.message) || reason)); } catch (e) {}
+                    if (toolModalEl && toolModalEl.classList && toolModalEl.classList.contains('active')) {
+                        toolCrash(currentToolKey || 'unknown', reason);
+                    }
+                });
             }
 
             function resultTitle(text) {
@@ -5536,6 +5479,7 @@ const APP_JS = `
                 try { qualityStopRequested = true; } catch (e) {}
             }
             function openToolModal(title, desc) {
+                __toolRunGen++; // 切换工具/重开弹层：先让所有在途结果作废
                 stopActiveToolTask();
                 try { lastFocusedBeforeModal = document.activeElement; } catch (e) {}
                 const mt = document.getElementById('toolModalTitle');
@@ -5669,7 +5613,7 @@ const APP_JS = `
                 // 协议显示
                 if (elements.protoVal) {
                     const rawProto = BACKEND_DATA.httpProtocolRaw || '';
-                    let displayText = rawProto;
+                    let displayText = escapeHTML(rawProto);
                     if (rawProto.toUpperCase().includes('HTTP/3')) {
                         displayText += ' <span class="badge badge-info">QUIC</span>';
                     }
@@ -5698,11 +5642,14 @@ const APP_JS = `
                 // Bot Score
                 if (elements.botScoreVal) {
                     const score = parseInt(BACKEND_DATA.botScore, 10);
+                    // 分数缺失/非数字时显示 "--"，不要显示 NaN
+                    const scoreText = Number.isFinite(score) ? String(score) : '--';
                     let badgeClass = 'badge-info';
-                    if (score >= 80) badgeClass = 'badge-success';
+                    if (!Number.isFinite(score)) badgeClass = 'badge';
+                    else if (score >= 80) badgeClass = 'badge-success';
                     else if (score >= 30) badgeClass = 'badge-warning';
                     else badgeClass = 'badge-danger';
-                    elements.botScoreVal.innerHTML = '<span class="badge ' + badgeClass + '">' + score + '</span>';
+                    elements.botScoreVal.innerHTML = '<span class="badge ' + badgeClass + '">' + escapeHTML(scoreText) + '</span>';
                 }
 
                 // 文档标题 / 主题按钮提示 / 未解析的 IP 占位文案（随语言切换）
@@ -5724,13 +5671,10 @@ const APP_JS = `
                 // 动态生成的文本也跟随语言刷新（刷新硬件信息、网络质量、真实IP位置、历史/用量面板）
                 updateHardwareInfo();
                 renderLocalHistory();
-                loadUsageStats();
                 if (lastRtt !== null) updateQuality(lastRtt);
                 geoRetryCount = 0; // 重新允许地理定位重试
                 fetchUserGeo();
-                if (document.querySelector('.fraud-info')) loadFraudScore();
-                // 若工具结果弹层正打开，按新语言重新执行，保证结果正文也同步
-                if (toolModalEl && toolModalEl.classList.contains('active')) rerunCurrentTool();
+                // 切语言只做文案刷新：不再触发用量请求/欺诈评分/重跑当前工具，避免额外的网络测试请求
             };
 
             // ==================== 图表 ====================
@@ -5740,8 +5684,12 @@ const APP_JS = `
                 const container = canvas.parentElement;
                 const rect = container.getBoundingClientRect();
                 if (rect.width > 0) {
-                    canvas.width = rect.width;
-                    canvas.height = rect.height;
+                    // 按 devicePixelRatio 放大位图，再用 setTransform 缩回 CSS 像素坐标，避免高 DPI 下线条发虚
+                    const dpr = window.devicePixelRatio || 1;
+                    const w = Math.max(1, Math.round(rect.width * dpr));
+                    const h = Math.max(1, Math.round((rect.height || 0) * dpr));
+                    canvas.width = w;
+                    canvas.height = h;
                     drawChart();
                 }
             }
@@ -5750,29 +5698,34 @@ const APP_JS = `
                 const canvas = elements.chart;
                 const ctx = elements.ctx;
                 if (!canvas || !ctx || canvas.width === 0 || canvas.height === 0) return;
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                const dpr = window.devicePixelRatio || 1;
+                // 逻辑尺寸用 CSS 像素，位图尺寸是它的 dpr 倍
+                const w = canvas.width / dpr;
+                const h = canvas.height / dpr;
+                if (ctx.setTransform) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+                ctx.clearRect(0, 0, w, h);
                 if (rttData.length < 2) return;
                 
                 ctx.beginPath();
                 ctx.strokeStyle = cssColorVar('--chart-cyan', '#c3c7cd');
                 ctx.lineWidth = 2.5;
-                const stepX = canvas.width / (MAX_RTT_POINTS - 1);
+                const stepX = w / (MAX_RTT_POINTS - 1);
                 const maxRttVal = Math.max(...rttData, 100);
                 rttData.forEach((value, index) => {
                     const x = index * stepX;
-                    const y = canvas.height - (Math.min(value, maxRttVal) / maxRttVal) * (canvas.height - 20) - 10;
+                    const y = h - (Math.min(value, maxRttVal) / maxRttVal) * (h - 20) - 10;
                     if (index === 0) ctx.moveTo(x, y);
                     else ctx.lineTo(x, y);
                 });
                 ctx.stroke();
                 
-                const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+                const gradient = ctx.createLinearGradient(0, 0, 0, h);
                 const chartColor = cssColorVar('--chart-cyan', '#c3c7cd');
                 gradient.addColorStop(0, withAlpha(chartColor, 0.28));
                 gradient.addColorStop(1, withAlpha(chartColor, 0));
                 ctx.fillStyle = gradient;
-                ctx.lineTo(canvas.width, canvas.height);
-                ctx.lineTo(0, canvas.height);
+                ctx.lineTo(w, h);
+                ctx.lineTo(0, h);
                 ctx.fill();
             }
 
@@ -5961,61 +5914,30 @@ const APP_JS = `
                 }
             }
 
-            // ==================== 欺诈评分 ====================
-            async function loadFraudScore() {
-                try {
-                    const res = await fetch('/api/ip-fraud');
-                    if (!res.ok) return;
-                    const data = await res.json();
-                    const t = i18n[currentLang];
-                    const geoCard = elements.userGeoInfo;
-                    if (!geoCard) return;
-                    let fraudSection = geoCard.querySelector('.fraud-info');
-                    if (!fraudSection) {
-                        fraudSection = document.createElement('div');
-                        fraudSection.className = 'fraud-info';
-                        fraudSection.style.marginTop = '15px';
-                        fraudSection.style.paddingTop = '15px';
-                        fraudSection.style.borderTop = '1px solid var(--divider)';
-                        geoCard.appendChild(fraudSection);
-                    }
-                    
-                    let riskLabel = t.fraudUnknown;
-                    let riskBadge = 'badge-info';
-                    if (data.score !== null) {
-                        if (data.score >= 80) { riskLabel = t.fraudHigh; riskBadge = 'badge-danger'; }
-                        else if (data.score >= 50) { riskLabel = t.fraudMedium; riskBadge = 'badge-warning'; }
-                        else { riskLabel = t.fraudLow; riskBadge = 'badge-success'; }
-                    }
-                    
-                    fraudSection.innerHTML = \`
-                        <div class="info-row">
-                            <span class="info-label"><i class="fas fa-shield-alt"></i> \${t.fraudScore}</span>
-                            <span class="info-value"><span class="badge \${riskBadge}">\${data.score !== null ? data.score + ' - ' + riskLabel : 'N/A'}</span></span>
-                        </div>
-                        <div class="info-row">
-                            <span class="info-label"><i class="fas fa-user-secret"></i> \${t.proxy}</span>
-                            <span class="info-value"><span class="badge \${data.isProxy ? 'badge-danger' : 'badge-success'}">\${data.isProxy ? '⚠️ ' + t.yes : '✅ ' + t.no}</span></span>
-                        </div>
-                        <div class="info-row">
-                            <span class="info-label"><i class="fas fa-shield-virus"></i> \${t.vpn}</span>
-                            <span class="info-value"><span class="badge \${data.isVpn ? 'badge-danger' : 'badge-success'}">\${data.isVpn ? '⚠️ ' + t.yes : '✅ ' + t.no}</span></span>
-                        </div>
-                        <div class="info-row">
-                            <span class="info-label"><i class="fas fa-route"></i> \${t.tor}</span>
-                            <span class="info-value"><span class="badge \${data.isTor ? 'badge-danger' : 'badge-success'}">\${data.isTor ? '⚠️ ' + t.yes : '✅ ' + t.no}</span></span>
-                        </div>
-                        <div class="info-row">
-                            <span class="info-label"><i class="fas fa-server"></i> \${t.hosting}</span>
-                            <span class="info-value"><span class="badge \${data.isHosting ? 'badge-warning' : 'badge-success'}">\${data.isHosting ? '⚠️ ' + t.yes : '✅ ' + t.no}</span></span>
-                        </div>
-                    \`;
-                } catch (e) {}
-            }
+            // ==================== 欺诈评分（已下线） ====================
+            // /api/ip-fraud 端点已按「零出站」原则移除，不再发起请求。
+            // 原实现还会把 data.score 直接拼进 innerHTML（上游字段一旦变异即为 DOM XSS），一并去掉。
 
             // ==================== 地理位置 ====================
+            let geoInflight = null;   // 进行中的地理请求：切语言/重复调用复用同一 promise，避免并发第三方请求
+            let geoRetryTimer = null; // 重试定时器句柄：新请求前先清掉，避免定时器叠加
+            const GEO_RETRY_DELAYS = [1500, 3000, 6000]; // 指数退避，最多 3 次
+            function scheduleGeoRetry() {
+                if (geoRetryTimer) { clearTimeout(geoRetryTimer); geoRetryTimer = null; }
+                if (geoRetryCount >= GEO_RETRY_DELAYS.length) return false;
+                const delay = GEO_RETRY_DELAYS[geoRetryCount];
+                geoRetryCount++;
+                geoRetryTimer = setTimeout(function () { geoRetryTimer = null; fetchUserGeo(); }, delay);
+                return true;
+            }
             async function fetchUserGeo() {
                 if (!elements.userGeoInfo) return;
+                if (geoInflight) return geoInflight;
+                if (geoRetryTimer) { clearTimeout(geoRetryTimer); geoRetryTimer = null; }
+                geoInflight = fetchUserGeoOnce();
+                try { return await geoInflight; } finally { geoInflight = null; }
+            }
+            async function fetchUserGeoOnce() {
                 
                 if (BACKEND_DATA.realGeoCity && BACKEND_DATA.realGeoCountry) {
                     const t = i18n[currentLang];
@@ -6026,17 +5948,13 @@ const APP_JS = `
                         '<div class="info-row"><span class="info-label"><i class="fas fa-ethernet"></i> ' + t.userIp + '</span>' +
                         '<span class="info-value"><code>' + escapeHTML(BACKEND_DATA.realGeoIp) + '</code></span></div>';
                     elements.userGeoInfo.innerHTML = geoHtml;
-                    loadFraudScore();
                     return;
                 }
                 
                 const ip = resolvedV4;
                 const t = i18n[currentLang];
                 if (!ip) {
-                    if (geoRetryCount < MAX_GEO_RETRY) {
-                        geoRetryCount++;
-                        setTimeout(fetchUserGeo, 1500);
-                    } else {
+                    if (!scheduleGeoRetry()) {
                         // 重试耗尽：不要停留在初始 spinner，写入错误态
                         elements.userGeoInfo.innerHTML = '<div style="text-align:center;padding:30px;color:var(--danger);"><i class="fas fa-exclamation-triangle"></i> ' + escapeHTML(i18n[currentLang].geoQueryFailed) + '</div>';
                     }
@@ -6077,9 +5995,11 @@ const APP_JS = `
                             <span class="info-value"><code>\${escapeHTML(ip)}</code></span>
                         </div>
                     \`;
-                    loadFraudScore();
                 } catch (e) {
-                    elements.userGeoInfo.innerHTML = '<div style="text-align:center;padding:30px;color:var(--danger);"><i class="fas fa-exclamation-triangle"></i> ' + i18n[currentLang].geoQueryFailed + '</div>';
+                    // ipapi 抖动：按指数退避重试，耗尽后再写失败态
+                    if (!scheduleGeoRetry()) {
+                        elements.userGeoInfo.innerHTML = '<div style="text-align:center;padding:30px;color:var(--danger);"><i class="fas fa-exclamation-triangle"></i> ' + escapeHTML(i18n[currentLang].geoQueryFailed) + '</div>';
+                    }
                 }
             }
 
@@ -6093,11 +6013,11 @@ const APP_JS = `
                 const language = navigator.language;
                 const platform = navigator.platform;
                 elements.hwInfo.innerHTML = \`
-                    <div class="hw-chip"><i class="fas fa-tv"></i> \${screenInfo}</div>
-                    <div class="hw-chip"><i class="fas fa-microchip"></i> \${cores} \${t.cores}</div>
-                    <div class="hw-chip"><i class="fas fa-clock"></i> \${timezone}</div>
-                    <div class="hw-chip"><i class="fas fa-language"></i> \${language}</div>
-                    <div class="hw-chip"><i class="fas fa-desktop"></i> \${platform}</div>
+                    <div class="hw-chip"><i class="fas fa-tv"></i> \${escapeHTML(screenInfo)}</div>
+                    <div class="hw-chip"><i class="fas fa-microchip"></i> \${escapeHTML(String(cores))} \${t.cores}</div>
+                    <div class="hw-chip"><i class="fas fa-clock"></i> \${escapeHTML(timezone)}</div>
+                    <div class="hw-chip"><i class="fas fa-language"></i> \${escapeHTML(language)}</div>
+                    <div class="hw-chip"><i class="fas fa-desktop"></i> \${escapeHTML(platform)}</div>
                 \`;
             }
 
@@ -6110,14 +6030,21 @@ const APP_JS = `
                 showResult(elements.cpuResult, '<span class="loading"></span> ' + t.cpuTesting);
                 
                 try {
-                    const res = await fetch('/cpu-test?n=20000');
+                    const res = await fetch('/cpu-test', { cache: 'no-store', signal: AbortSignal.timeout(15000) });
                     if (!res.ok) throw new Error('http ' + res.status);
                     const data = await res.json();
-                    const tone = data.opsMs > 50 ? 'ok' : (data.opsMs > 20 ? 'warn' : 'bad');
-                    showResult(elements.cpuResult, resultTitle(t.cpuPerf) + metricGrid([
-                        metricCard('OPS/MS', data.opsMs, 'ops/ms', tone, Math.min(100, data.opsMs)),
-                        metricCard(t.metricDuration, data.duration, 'ms', null, null)
-                    ]));
+                    const ops = (typeof data.opsMs === 'number' && Number.isFinite(data.opsMs)) ? data.opsMs : null;
+                    // 真实量级约 1e4 ops/ms（不同设备差异很大），原阈值 50/20 是按那个假数值定的，等于恒判 ok + 满格
+                    const tone = ops === null ? 'warn' : (ops >= 12000 ? 'ok' : (ops >= 4000 ? 'warn' : 'bad'));
+                    const grid = metricGrid([
+                        metricCard('OPS/MS', ops === null ? '--' : ops, 'ops/ms', tone, ops === null ? 0 : Math.min(100, ops / 200)),
+                        metricCard(t.metricDuration, data.duration, 'ms', null, null),
+                        metricCard('SAMPLES', data.iterations, '', null, null)
+                    ]);
+                    const note = data.resolutionLimited
+                        ? '<div class="side-desc" style="margin-top:10px">无法测量：计时分辨率不足 / not measurable: timer resolution too low</div>'
+                        : '';
+                    showResult(elements.cpuResult, resultTitle(t.cpuPerf) + grid + note);
                 } catch (e) {
                     showResult(elements.cpuResult, '<i class="fas fa-exclamation-triangle"></i> ' + t.cpuFailed, true);
                 }
@@ -6162,7 +6089,8 @@ const APP_JS = `
                                     const pongTime = performance.now();
                                     if (data.type === 'pong') {
                                         const latency = pongTime - (data.echoTime || data.timestamp);
-                                        latencies.push(latency);
+                                        // 只统计有限数值，避免 NaN 进入平均值/min/max
+                                        if (Number.isFinite(latency)) latencies.push(latency);
                                         testCount++;
                                         
                                         if (testCount < maxTests) {
@@ -6171,6 +6099,7 @@ const APP_JS = `
                                             clearTimeout(timeoutId);
                                             ws.send(JSON.stringify({ type: 'close' }));
                                             setTimeout(() => ws.close(), 100);
+                                            if (!latencies.length) { resolve({ success: false }); return; }
                                             const avgLatency = Math.round(latencies.reduce((a,b) => a+b, 0) / latencies.length);
                                             resolve({ success: true, avg: avgLatency, min: Math.round(Math.min(...latencies)), max: Math.round(Math.max(...latencies)) });
                                         }
@@ -6182,6 +6111,12 @@ const APP_JS = `
                         };
                         
                         ws.onerror = () => {
+                            clearTimeout(timeoutId);
+                            resolve({ success: false });
+                        };
+
+                        // 服务端/网络提前关闭时也要落地 promise，否则测试会一直挂着
+                        ws.onclose = () => {
                             clearTimeout(timeoutId);
                             resolve({ success: false });
                         };
@@ -6223,6 +6158,7 @@ const APP_JS = `
             async function startConcurrentTest() {
                 if (concurrentTestRunning) return;
                 concurrentTestRunning = true;
+                const __gen = __toolRunGen;
                 const t = i18n[currentLang];
                 const out = elements.concurrentResult;
                 const streamsEl = document.getElementById('ccStreams');
@@ -6269,6 +6205,7 @@ const APP_JS = `
                 const rows = perStream.map(function (s) {
                     return '<div class="result-row"><span class="rr-name">#' + (s.idx + 1) + '</span><span class="rr-val">' + s.mbps.toFixed(2) + ' Mbps · ' + formatBytes(s.bytes) + ' · ' + s.ms + ' ms</span></div>';
                 }).join('');
+                if (__isStaleRun(__gen)) { concurrentTestRunning = false; return; }
                 if (out) out.innerHTML = resultTitle(t.concurrentResultTitle) + metricGrid(cards) +
                     '<div class="result-rows" style="margin-top:12px">' + rows + '</div>' +
                     (failed ? '<div class="result-row is-warn" style="margin-top:10px"><span class="rr-name">' + escapeHTML(t.concurrentFailed) + '</span><span class="rr-val">' + failed + '</span></div>' : '');
@@ -6280,6 +6217,7 @@ const APP_JS = `
             async function runStreamTest() {
                 if (streamTestRunning) return;
                 streamTestRunning = true;
+                const __gen = __toolRunGen;
                 const t = i18n[currentLang];
                 showResult(elements.streamResult, '<span class="loading"></span> ' + t.streamTesting);
                 
@@ -6289,7 +6227,10 @@ const APP_JS = `
                 for (const size of sizes) {
                     const start = performance.now();
                     try {
-                        const res = await fetchWithTimeout(\`/stream-test?size=\${size}\`, {}, 15000);
+                        // 读体阶段也要有超时：与关闭弹层的中止信号合并，60s 兜底
+                        const streamSignals = [AbortSignal.timeout(60000)];
+                        if (activeToolAbort) streamSignals.push(activeToolAbort.signal);
+                        const res = await fetch(\`/stream-test?size=\${size}\`, { signal: anySignal(streamSignals) });
                         const reader = res.body.getReader();
                         let bytesRead = 0;
                         
@@ -6308,6 +6249,7 @@ const APP_JS = `
                 }
                 
                 const cards = results.map(r => metricCard(r.sizeKB + ' KB', r.speed, 'Mbps', null, Math.min(100, (parseFloat(r.speed) || 0) * 2)));
+                if (__isStaleRun(__gen)) { streamTestRunning = false; return; }
                 showResult(elements.streamResult, resultTitle(t.streamThroughput) + metricGrid(cards));
                 streamTestRunning = false;
             }
@@ -6326,7 +6268,7 @@ const APP_JS = `
                     try {
                         const res = await fetchWithTimeout('/health?_loss=' + Date.now() + i, 
                             { method: 'HEAD', cache: 'no-store' }, 3000);
-                        if (res.status === 429) continue; // 限流响应不算成功样本，也不计入分母
+                        if (!res.ok) { attempted++; failed++; continue; } // 非 2xx（含 429）也算失败样本：原实现把分母一起剔除，10 次全 429 时反而显示丢包 0%
                         attempted++;
                     } catch (e) {
                         attempted++;
@@ -6371,7 +6313,8 @@ const APP_JS = `
                 const start = performance.now();
                 const res = await fetch('/speedtest?size=' + size, {
                     cache: 'no-store',
-                    signal: controller ? controller.signal : AbortSignal.timeout(30000)
+                    // 单次下载最长 60s：共用 activeToolAbort（可被关闭弹层中止），避免读体阶段无超时
+                    signal: controller ? anySignal([controller.signal, AbortSignal.timeout(60000)]) : AbortSignal.timeout(30000)
                 });
                 if (!res.ok) throw new Error('http ' + res.status);
                 let bytes = 0, firstByteAt = 0;
@@ -6395,6 +6338,7 @@ const APP_JS = `
             async function startSpeedTest() {
                 if (speedTestRunning) return;
                 speedTestRunning = true;
+                const __gen = __toolRunGen;
                 const t = i18n[currentLang];
                 const out = elements.speedResult;
                 const modeEl = document.getElementById('speedMode');
@@ -6423,6 +6367,7 @@ const APP_JS = `
                     }
                 } catch (e) {}
                 if (activeToolAbort === controller) activeToolAbort = null;
+                if (__isStaleRun(__gen)) { speedTestRunning = false; return; }
                 const valid = samples.filter(function (s) { return s && s.mbps > 0; });
                 if (!valid.length) {
                     if (out) out.innerHTML = '<div class="tool-error"><i class="fas fa-exclamation-triangle"></i> ' + escapeHTML(t.concurrentFailed) + '</div>';
@@ -6598,7 +6543,7 @@ const APP_JS = `
             // ---------- C1：本地历史（localStorage，零 KV 写入） ----------
             const LS_HISTORY_KEY = 'netsight-local-history';
             const LS_HISTORY_MAX = 100;
-            const historyViewState = { filter: 'all', a: -1, b: -1 };
+            const historyViewState = { filter: 'all', range: 'all', a: -1, b: -1 };
             function loadLocalHistoryArr() {
                 try {
                     const raw = localStorage.getItem(LS_HISTORY_KEY);
@@ -6635,29 +6580,74 @@ const APP_JS = `
                 const ctx = canvas.getContext('2d');
                 if (!ctx) return;
                 const dpr = window.devicePixelRatio || 1;
-                const rect = canvas.getBoundingClientRect ? canvas.getBoundingClientRect() : { width: 320, height: 120 };
-                const w = Math.max(220, Math.round((rect.width || 320) * dpr));
-                const h = Math.max(90, Math.round((rect.height || 120) * dpr));
-                canvas.width = w;
-                canvas.height = h;
-                const pad = Math.round(9 * dpr);
-                let minV = points[0].v, maxV = points[0].v;
+                const rect = canvas.getBoundingClientRect ? canvas.getBoundingClientRect() : { width: 320, height: 150 };
+                const cssW = Math.max(220, Math.round(rect.width || 320));
+                const cssH = Math.max(110, Math.round(rect.height || 150));
+                canvas.width = Math.round(cssW * dpr);
+                canvas.height = Math.round(cssH * dpr);
+                if (ctx.setTransform) ctx.setTransform(dpr, 0, 0, dpr, 0, 0); else ctx.scale(dpr, dpr);
+                ctx.clearRect(0, 0, cssW, cssH);
+                // 左侧留出刻度区：原来把 "89.2 Mbps" 画在 pad 内，直接压住了图表边框
+                const padL = 44, padR = 10, padT = 12, padB = 20;
+                const plotW = Math.max(10, cssW - padL - padR);
+                const plotH = Math.max(10, cssH - padT - padB);
+                let minV = Infinity, maxV = -Infinity;
                 points.forEach(function (p) { if (p.v < minV) minV = p.v; if (p.v > maxV) maxV = p.v; });
-                const span = Math.max(1, maxV - minV);
-                ctx.clearRect(0, 0, w, h);
+                if (!Number.isFinite(minV) || !Number.isFinite(maxV)) return;
+                if (maxV === minV) maxV = minV + 1;
+                const span = maxV - minV;
+                const xAt = function (i) { return padL + (i / Math.max(1, points.length - 1)) * plotW; };
+                const yAt = function (v) { return padT + (1 - (v - minV) / span) * plotH; };
+                const labelColor = cssColorVar('--text-quaternary', '#6a6d74');
+                ctx.font = '10px system-ui, -apple-system, sans-serif';
+                ctx.textBaseline = 'middle';
+                for (let g = 0; g <= 3; g++) {
+                    const v = minV + (span * g) / 3;
+                    const y = yAt(v);
+                    ctx.beginPath();
+                    ctx.strokeStyle = 'rgba(255,255,255,0.07)';
+                    ctx.lineWidth = 1;
+                    ctx.moveTo(padL, y);
+                    ctx.lineTo(padL + plotW, y);
+                    ctx.stroke();
+                    ctx.fillStyle = labelColor;
+                    ctx.textAlign = 'right';
+                    ctx.fillText(String(Math.round(v * 10) / 10), padL - 6, y);
+                }
+                const lineColor = cssColorVar('--chart-cyan', '#c3c7cd');
                 ctx.beginPath();
-                ctx.strokeStyle = cssColorVar('--chart-cyan', '#c3c7cd');
-                ctx.lineWidth = Math.max(1.5, 2 * dpr);
                 points.forEach(function (p, i) {
-                    const x = pad + (i / Math.max(1, points.length - 1)) * (w - pad * 2);
-                    const y = h - pad - ((p.v - minV) / span) * (h - pad * 2);
+                    const x = xAt(i), y = yAt(p.v);
                     if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
                 });
+                ctx.strokeStyle = lineColor;
+                ctx.lineWidth = 1.8;
+                ctx.lineJoin = 'round';
                 ctx.stroke();
-                ctx.fillStyle = cssColorVar('--text-secondary', '#9a9da3');
-                ctx.font = Math.round(11 * dpr) + 'px system-ui, sans-serif';
-                ctx.fillText(maxV.toFixed(1) + ' Mbps', pad, pad + 11 * dpr);
-                ctx.fillText(minV.toFixed(1), pad, h - pad);
+                ctx.lineTo(xAt(points.length - 1), padT + plotH);
+                ctx.lineTo(xAt(0), padT + plotH);
+                ctx.closePath();
+                const grad = ctx.createLinearGradient(0, padT, 0, padT + plotH);
+                grad.addColorStop(0, 'rgba(195,199,205,0.16)');
+                grad.addColorStop(1, 'rgba(195,199,205,0)');
+                ctx.fillStyle = grad;
+                ctx.fill();
+                ctx.fillStyle = lineColor;
+                points.forEach(function (p, i) {
+                    const x = xAt(i), y = yAt(p.v);
+                    ctx.beginPath();
+                    ctx.arc(x, y, 2, 0, Math.PI * 2);
+                    ctx.fill();
+                });
+                const fmt = function (ts) {
+                    try { return new Date(ts).toLocaleTimeString(localeOf(currentLang), { hour: '2-digit', minute: '2-digit' }); } catch (e) { return ''; }
+                };
+                ctx.fillStyle = labelColor;
+                ctx.textBaseline = 'top';
+                ctx.textAlign = 'left';
+                ctx.fillText(fmt(points[0].t), padL, padT + plotH + 5);
+                ctx.textAlign = 'right';
+                ctx.fillText(fmt(points[points.length - 1].t), padL + plotW, padT + plotH + 5);
             }
             function exportHistoryCsv() {
                 try {
@@ -6712,75 +6702,153 @@ const APP_JS = `
                 if (!panel) return;
                 const t = i18n[currentLang];
                 const arr = loadLocalHistoryArr();
-                if (!arr.length) {
-                    panel.innerHTML = '<div class="no-data"><i class="fas fa-inbox"></i> ' + escapeHTML(t.historyEmpty) + '</div>';
-                    return;
-                }
+                // 空历史也渲染完整仪表盘（KPI 为 0、表格空态），这样右侧用量块仍然可见
                 const types = [];
                 arr.forEach(function (r) { if (r && r.type && types.indexOf(r.type) === -1) types.push(r.type); });
                 if (historyViewState.filter !== 'all' && types.indexOf(historyViewState.filter) === -1) historyViewState.filter = 'all';
-                const filtered = historyViewState.filter === 'all' ? arr : arr.filter(function (r) { return r.type === historyViewState.filter; });
+                // 时间范围：今日 / 近 7 天 / 全部（与类型筛选叠加）
+                const rangeNow = Date.now();
+                let rangeCutoff = 0;
+                if (historyViewState.range === 'today') {
+                    const d0 = new Date();
+                    d0.setHours(0, 0, 0, 0);
+                    rangeCutoff = d0.getTime();
+                } else if (historyViewState.range === '7d') {
+                    rangeCutoff = rangeNow - 7 * 86400000;
+                }
+                const filtered = arr.filter(function (r) {
+                    if (!r) return false;
+                    if (rangeCutoff && !(Number(r.t) >= rangeCutoff)) return false;
+                    return historyViewState.filter === 'all' || r.type === historyViewState.filter;
+                });
                 historyViewState.a = (historyViewState.a >= 0 && historyViewState.a < filtered.length) ? historyViewState.a : -1;
                 historyViewState.b = (historyViewState.b >= 0 && historyViewState.b < filtered.length) ? historyViewState.b : -1;
-                let html = '<div class="history-toolbar">' +
-                    '<select id="historyFilter"><option value="all">' + escapeHTML(t.historyAll) + '</option>' +
-                    types.map(function (ty) { return '<option value="' + escapeHTML(ty) + '"' + (historyViewState.filter === ty ? ' selected' : '') + '>' + escapeHTML(ty) + '</option>'; }).join('') +
-                    '</select>' +
+                const typeLabel = function (ty) {
+                    const first = arr.find(function (r) { return r && r.type === ty; });
+                    return (first && first.label) || ty;
+                };
+                const fmtTime = function (ts) {
+                    try { return new Date(ts).toLocaleString(localeOf(currentLang), { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }); } catch (e) { return ''; }
+                };
+                const numeric = arr.filter(function (r) { return r && (r.type === 'speed' || r.type === 'concurrent'); })
+                    .map(function (r) { return { t: r.t, v: parseFloat(r.value) }; })
+                    .filter(function (x) { return Number.isFinite(x.v); });
+                const recentNumeric = numeric.slice(0, 10);
+                const avgNum = recentNumeric.length ? recentNumeric.reduce(function (a, b) { return a + b.v; }, 0) / recentNumeric.length : null;
+                const bestNum = numeric.length ? Math.max.apply(null, numeric.map(function (p) { return p.v; })) : null;
+                const latest = arr[0];
+                const kpi = function (label, value, sub, color) {
+                    return '<div class="hist-kpi ' + (color || '') + '"><div class="k">' + escapeHTML(label) + '</div><div class="v">' + escapeHTML(String(value)) + '</div>' +
+                        (sub ? '<div class="s">' + escapeHTML(String(sub)) + '</div>' : '') + '</div>';
+                };
+                const chip = function (attr, value, label, active) {
+                    return '<button class="hist-chip' + (active ? ' active' : '') + '" ' + attr + '="' + escapeHTML(value) + '">' + escapeHTML(label) + '</button>';
+                };
+                let html = '<div class="hist-kpis">' +
+                    kpi(t.histRecords, filtered.length, historyViewState.filter === 'all' ? '' : typeLabel(historyViewState.filter), 'c-cyan') +
+                    kpi(t.histLatest, latest ? fmtTime(latest.t) : '—', latest && latest.label ? latest.label : '', 'c-green') +
+                    kpi(t.histBest, bestNum === null ? '—' : (Math.round(bestNum * 100) / 100), bestNum === null ? '' : 'Mbps', 'c-amber') +
+                    kpi(t.historyAvgSpeed, avgNum === null ? '—' : (Math.round(avgNum * 100) / 100), avgNum === null ? '' : 'Mbps', 'c-violet') +
+                    '</div>';
+                html += '<div class="hist-toolbar">' +
+                    '<div class="grow">' +
+                    chip('data-hist-filter', 'all', t.historyAll, historyViewState.filter === 'all') +
+                    types.map(function (ty) { return chip('data-hist-filter', ty, typeLabel(ty), historyViewState.filter === ty); }).join('') +
+                    '<span class="hist-sep"></span>' +
+                    chip('data-hist-range', 'today', t.histToday, historyViewState.range === 'today') +
+                    chip('data-hist-range', '7d', t.histWeek, historyViewState.range === '7d') +
+                    chip('data-hist-range', 'all', t.historyAll, historyViewState.range === 'all') +
+                    '</div>' +
+                    '<div class="grow" style="flex:0 0 auto;justify-content:flex-end">' +
                     '<button class="btn btn-ghost btn-sm" id="historyExportCsv">' + escapeHTML(t.historyExportCsv) + '</button>' +
                     '<button class="btn btn-ghost btn-sm" id="historyExportJson">' + escapeHTML(t.historyExportJson) + '</button>' +
                     '<button class="btn btn-ghost btn-sm" id="historyImportJson">' + escapeHTML(t.historyImportJson) + '</button>' +
                     '<button class="btn btn-ghost btn-sm" id="clearLocalHistory">' + escapeHTML(t.historyClear) + '</button>' +
+                    '</div>' +
                     '</div>';
-                const numeric = arr.filter(function (r) { return r && (r.type === 'speed' || r.type === 'concurrent'); })
-                    .map(function (r) { return { t: r.t, v: parseFloat(r.value) }; })
-                    .filter(function (x) { return Number.isFinite(x.v); }).reverse();
+                html += '<div class="hist-block hist-trend"><div class="hist-block-head"><span class="hist-block-title">' + escapeHTML(t.historyTrend) + '</span>' +
+                    '<span class="hist-block-meta">' + escapeHTML(t.historyAvgSpeed) + ' ' + (avgNum === null ? '—' : (Math.round(avgNum * 100) / 100) + ' Mbps') + '</span></div>';
                 if (numeric.length >= 2) {
-                    html += '<div class="result-title">' + escapeHTML(t.historyTrend) + '</div><canvas id="historyTrendCanvas" class="trend-canvas"></canvas>';
+                    html += '<div class="trend-wrap"><canvas id="historyTrendCanvas" class="trend-canvas"></canvas></div>';
                 } else {
                     html += '<div class="no-data" style="padding:10px;font-size:12px">' + escapeHTML(t.historyNoNumeric) + '</div>';
                 }
+                html += '</div>';
+                // 数值序列已在上面算好（KPI 与趋势图共用），这里只负责图表渲染
+
                 const optionsHtml = filtered.slice(0, 50).map(function (r, i) {
-                    return '<option value="' + i + '"' + (historyViewState.a === i || historyViewState.b === i ? '' : '') + '>' + escapeHTML(historyRecordLabel(r)) + '</option>';
+                    return '<option value="' + i + '">' + escapeHTML(historyRecordLabel(r)) + '</option>';
                 }).join('');
-                html += '<div class="result-title" style="margin-top:12px">' + escapeHTML(t.historyCompare) + '</div>' +
-                    '<div class="history-toolbar">' +
+                html += '<div class="hist-grid-3"><div class="hist-block hist-cmp-block"><div class="hist-block-head"><span class="hist-block-title">' + escapeHTML(t.historyCompare) + '</span></div>' +
+                    '<div class="hist-cmp-grid">' +
                     '<select id="historyCompareA"><option value="-1">' + escapeHTML(t.historyCompareA) + '</option>' + optionsHtml + '</select>' +
                     '<select id="historyCompareB"><option value="-1">' + escapeHTML(t.historyCompareB) + '</option>' + optionsHtml + '</select>' +
                     '</div>';
-                let compareHtml = '<div class="no-data" style="padding:8px;font-size:12px">' + escapeHTML(t.historyCompareEmpty) + '</div>';
+                let compareHtml = '<div class="no-data" style="padding:10px;font-size:12px">' + escapeHTML(t.historyCompareEmpty) + '</div>';
                 const a = filtered[historyViewState.a], b = filtered[historyViewState.b];
                 if (a && b) {
                     const av = parseFloat(a.value), bv = parseFloat(b.value);
                     const hasNum = Number.isFinite(av) && Number.isFinite(bv);
                     const diff = hasNum ? (bv - av) : null;
                     const diffText = hasNum ? ((diff > 0 ? '+' : '') + (Math.round(diff * 100) / 100)) : '—';
-                    compareHtml = '<div class="result-rows">' +
-                        '<div class="result-row"><span class="rr-name">A</span><span class="rr-val">' + escapeHTML(historyRecordLabel(a)) + '</span></div>' +
-                        '<div class="result-row"><span class="rr-name">B</span><span class="rr-val">' + escapeHTML(historyRecordLabel(b)) + '</span></div>' +
-                        '<div class="result-row"><span class="rr-name">Δ</span><span class="rr-val">' + escapeHTML(diffText + (hasNum ? (a.unit || '') : '')) + '</span></div>' +
+                    const diffCls = hasNum ? (diff > 0 ? 'speed-good' : (diff < 0 ? 'speed-low' : '')) : '';
+                    compareHtml = '<div class="hist-cmp-result">' +
+                        '<div class="hist-cmp-col"><span class="k">A</span><span class="v">' + escapeHTML(historyRecordLabel(a)) + '</span></div>' +
+                        '<div class="hist-cmp-col"><span class="k">B</span><span class="v">' + escapeHTML(historyRecordLabel(b)) + '</span></div>' +
+                        '<div class="hist-cmp-col"><span class="k">Δ</span><span class="v mono ' + diffCls + '">' + escapeHTML(diffText + (hasNum ? (a.unit || '') : '')) + '</span></div>' +
                         '</div>';
                 }
-                html += '<div id="historyCompareOut">' + compareHtml + '</div>';
-                html += '<div class="result-title" style="margin-top:12px">' + escapeHTML(t.historyLocalTitle) + '</div>';
-                html += '<table class="speed-history-table"><thead><tr><th>' + escapeHTML(t.historyLocalTitle) + '</th><th>' + escapeHTML(t.status) + '</th></tr></thead><tbody>';
+                html += '<div id="historyCompareOut">' + compareHtml + '</div></div>';
+                html += '<div class="hist-block hist-table-block"><div class="hist-block-head"><span class="hist-block-title">' + escapeHTML(t.historyLocalTitle) + '</span>' +
+                    '<span class="hist-block-meta">' + filtered.length + '</span></div>';
+                const groupLabel = function (ts) {
+                    try { return new Date(ts).toLocaleDateString(localeOf(currentLang), { year: 'numeric', month: 'short', day: 'numeric' }); } catch (e) { return ''; }
+                };
+                html += '<table class="hist-table"><thead><tr><th>' + escapeHTML(t.histTime) + '</th><th>' + escapeHTML(t.histTool) + '</th><th>' + escapeHTML(t.histValue) + '</th><th></th></tr></thead><tbody>';
+                if (!filtered.length) {
+                    html += '<tr><td colspan="4" class="no-data" style="padding:16px 6px"><i class="fas fa-inbox"></i> ' + escapeHTML(t.historyEmpty) + '</td></tr>';
+                }
+                let lastGroup = '';
                 filtered.slice(0, 50).forEach(function (r) {
-                    let time = '';
-                    try { time = new Date(r.t).toLocaleString(localeOf(currentLang), { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }); } catch (e) {}
-                    const cls = r.tone === 'ok' ? 'speed-good' : (r.tone === 'warn' ? 'speed-mid' : (r.tone === 'bad' ? 'speed-low' : ''));
-                    html += '<tr><td><span style="color:var(--text-tertiary);font-size:11px">' + escapeHTML(time) + '</span></td>' +
-                        '<td><span style="color:var(--text-tertiary);font-size:11px">' + escapeHTML(r.label) + '</span> <span class="' + cls + '">' +
-                        escapeHTML(r.value) + escapeHTML(r.unit) + '</span></td></tr>';
+                    const g = groupLabel(r.t);
+                    if (g !== lastGroup) {
+                        html += '<tr class="hist-group"><td colspan="4">' + escapeHTML(g) + '</td></tr>';
+                        lastGroup = g;
+                    }
+                    const time = fmtTime(r.t);
+                    const cls = r.tone === 'ok' ? 'ok' : (r.tone === 'warn' ? 'warn' : (r.tone === 'bad' ? 'bad' : ''));
+                    const val = (r.value === undefined || r.value === null ? '' : String(r.value)) + (r.unit || '');
+                    const valCls = cls === 'ok' ? ' speed-good' : (cls === 'warn' ? ' speed-mid' : (cls === 'bad' ? ' speed-low' : ''));
+                    html += '<tr><td class="c-time">' + escapeHTML(time) + '</td>' +
+                        '<td class="c-tool">' + escapeHTML(r.label || r.type || '') + '</td>' +
+                        '<td class="c-val' + valCls + '">' + escapeHTML(val) + '</td>' +
+                        '<td><span class="hist-dot ' + cls + '"></span></td></tr>';
                 });
-                html += '</tbody></table>';
+                html += '</tbody></table></div>';
+                // 用量统计作为第三列，插在同一行网格里（明细 / 对比 / 用量）
+                html += '<div class="hist-block hist-usage-block"><div class="hist-block-head"><span class="hist-block-title">' + escapeHTML(t.usageTitle) + '</span>' +
+                    '<span class="hist-block-meta">' + escapeHTML(t.usageSub) + '</span></div>' +
+                    '<div id="usage-stats-panel"><div class="no-data" style="padding:14px 0"><i class="fas fa-spinner fa-spin"></i> ' + escapeHTML(t.loadingStats) + '</div></div></div>';
+                html += '</div>';
                 panel.innerHTML = html;
                 const trendCanvas = document.getElementById('historyTrendCanvas');
-                if (trendCanvas) drawHistoryTrend(trendCanvas, numeric);
-                const filterSel = document.getElementById('historyFilter');
-                if (filterSel) filterSel.addEventListener('change', function () {
-                    historyViewState.filter = this.value || 'all';
-                    historyViewState.a = -1;
-                    historyViewState.b = -1;
-                    renderLocalHistory();
+                if (trendCanvas) drawHistoryTrend(trendCanvas, numeric.slice().reverse());
+                // 类型 / 时间范围 chips 用事件委托，避免每次重渲染都要重新绑一堆监听
+                panel.querySelectorAll('[data-hist-filter]').forEach(function (btn) {
+                    btn.addEventListener('click', function () {
+                        historyViewState.filter = this.getAttribute('data-hist-filter') || 'all';
+                        historyViewState.a = -1;
+                        historyViewState.b = -1;
+                        renderLocalHistory();
+                    });
+                });
+                panel.querySelectorAll('[data-hist-range]').forEach(function (btn) {
+                    btn.addEventListener('click', function () {
+                        historyViewState.range = this.getAttribute('data-hist-range') || 'all';
+                        historyViewState.a = -1;
+                        historyViewState.b = -1;
+                        renderLocalHistory();
+                    });
                 });
                 const exportCsv = document.getElementById('historyExportCsv');
                 if (exportCsv) exportCsv.addEventListener('click', exportHistoryCsv);
@@ -6805,67 +6873,118 @@ const APP_JS = `
                     selB.value = String(historyViewState.b);
                     selB.addEventListener('change', function () { historyViewState.b = Number(this.value); renderLocalHistory(); });
                 }
+                // 用量块随历史面板一起重渲染，这里补一次数据填充
+                loadUsageStats();
             }
 
             // ---------- 公用：WebRTC 候选 IP 采集（浏览器直连，零 Worker 出站） ----------
             function isLocalIp(ip) {
                 return /^(10\\.|172\\.(1[6-9]|2\\d|3[01])\\.|192\\.168\\.|169\\.254\\.|127\\.)/.test(String(ip));
             }
-            function collectWebRtcIps(timeoutMs) {
+            // 现代浏览器会用 *.local mDNS 名隐藏内网 IP：这类候选不代表公网地址
+            function isMdnsHost(host) {
+                return /\\.local\\.?$/i.test(String(host || ''));
+            }
+            // ---------- WebRTC 候选采集 ----------
+            // 之前没有配置 STUN（iceServers: []），只能拿到 host 候选；而现代浏览器会把 host 候选
+            // 伪装成 *.local（mDNS），于是几乎永远"无候选"，工具只能显示"无法判定"。
+            // 配一个 STUN 服务器后能拿到 srflx（服务端反射）候选 —— 那才是浏览器真实出口 IP，
+            // 泄漏检测才有意义：把它与页面观测到的公网 IP 比对即可下结论。
+            const WEBRTC_ICE_SERVERS = [{ urls: 'stun:stun.cloudflare.com:3478' }];
+            function collectWebRtcCandidates(timeoutMs) {
                 return new Promise(function (resolve) {
-                    const found = new Set();
+                    const found = [];
+                    const seen = {};
                     let done = false;
-                    const finish = function () { if (!done) { done = true; resolve(found); } };
-                    const timeout = setTimeout(finish, timeoutMs || 5000);
+                    let pc = null;
+                    let timer = null;
+                    let iceErrors = 0;
+                    const finish = function () {
+                        if (done) return;
+                        done = true;
+                        if (timer) { clearTimeout(timer); timer = null; }
+                        if (pc) { try { pc.close(); } catch (e1) {} pc = null; }
+                        resolve({ list: found, errors: iceErrors });
+                    };
+                    timer = setTimeout(finish, timeoutMs || 8000);
                     try {
-                        const pc = new RTCPeerConnection({ iceServers: [] });
-                        pc.createDataChannel('');
+                        pc = new RTCPeerConnection({ iceServers: WEBRTC_ICE_SERVERS });
+                        pc.createDataChannel('probe');
+                        // STUN 不可达时浏览器会触发 candidateerror（如 701），用它把"网络拦截"与"浏览器禁用"区分开
+                        pc.onicecandidateerror = function () { iceErrors += 1; };
                         pc.onicecandidate = function (e) {
-                            if (!e.candidate) {
-                                clearTimeout(timeout);
-                                try { pc.close(); } catch (e1) {}
-                                finish();
-                                return;
-                            }
-                            const match = e.candidate.candidate.match(/(\\d{1,3}\\.){3}\\d{1,3}/);
-                            if (match) found.add(match[0]);
+                            if (!e.candidate) { finish(); return; }
+                            // candidate 字符串第 5 个字段是地址：IPv4 / IPv6 / *.local mDNS 名
+                            const parts = String(e.candidate.candidate || '').split(' ');
+                            const address = parts[4] || '';
+                            if (!address) return;
+                            const type = String(e.candidate.type || parts[7] || '').toLowerCase() || 'host';
+                            const key = type + '|' + address;
+                            if (seen[key]) return;
+                            seen[key] = true;
+                            found.push({
+                                address: address,
+                                type: type,
+                                protocol: String(e.candidate.protocol || parts[2] || '').toLowerCase(),
+                                mdns: isMdnsHost(address)
+                            });
                         };
-                        pc.createOffer().then(function (offer) { return pc.setLocalDescription(offer); }).catch(function () {
-                            clearTimeout(timeout);
-                            finish();
-                        });
-                    } catch (e) {
-                        clearTimeout(timeout);
-                        finish();
-                    }
+                        pc.createOffer().then(function (offer) { return pc.setLocalDescription(offer); }).catch(finish);
+                    } catch (e) { finish(); }
                 });
             }
+            // 采集结果现在是 { list, errors }：errors 为 ICE/STUN 失败次数，用于区分"网络拦截"与"浏览器禁用"。
 
             // ---------- A1：代理 / VPN 一致性检测 ----------
             let proxyTestRunning = false;
             async function runProxyCheckTool() {
                 if (proxyTestRunning) return;
                 proxyTestRunning = true;
+                const __gen = __toolRunGen;
                 const t = i18n[currentLang];
                 const out = document.getElementById('toolModalBody');
                 if (out) out.innerHTML = '<div class="tool-loading"><span class="loading"></span> ' + escapeHTML(t.running) + '</div>';
                 try {
-                    const ipSet = await collectWebRtcIps(5000);
-                    const ipList = Array.from(ipSet);
-                    const localIps = ipList.filter(isLocalIp);
-                    const publicIps = ipList.filter(function (ip) { return !isLocalIp(ip); });
-                    const httpIp = String(resolvedV4 || BACKEND_DATA.clientIp || '').trim();
-                    const mismatch = publicIps.length > 0 && (!httpIp || publicIps.indexOf(httpIp) === -1);
+                    // 与 WebRTC 泄漏检测共用同一采集器：拿候选对象而不是地址集合，
+                    // 这样才能区分「浏览器没给任何候选」「给了 mDNS 脱敏名」「拿到 srflx 公网地址」。
+                    const gathered = await collectWebRtcCandidates(8000);
+                    const cands = gathered.list;
+                    const httpIp = String(resolvedV4 || BACKEND_DATA.realGeoIp || BACKEND_DATA.clientIp || '').trim();
+                    const bare = function (a) { return String(a || '').replace(/^\[|\]$/g, ''); };
+                    const hosts = cands.filter(function (c) { return c.type === 'host'; });
+                    const mdnsCount = hosts.filter(function (c) { return c.mdns; }).length;
+                    const localIps = hosts.filter(function (c) { return !c.mdns && isLocalIp(c.address); }).map(function (c) { return c.address; });
+                    const publicIps = [];
+                    cands.forEach(function (c) {
+                        if (c.type !== 'srflx' && c.type !== 'prflx') return;
+                        const ip = bare(c.address);
+                        if (publicIps.indexOf(ip) < 0) publicIps.push(ip);
+                    });
+                    const relayCount = cands.filter(function (c) { return c.type === 'relay'; }).length;
+
+                    const mismatch = publicIps.length > 0 && (!httpIp || publicIps.indexOf(httpIp) < 0);
                     const verdict = publicIps.length === 0 ? t.proxyUndetermined : (mismatch ? t.proxyMismatch : t.proxyConsistent);
                     const badge = publicIps.length === 0 ? 'badge' : (mismatch ? 'badge-danger' : 'badge-success');
+                    const counts = 'host ' + hosts.length + ' · mDNS ' + mdnsCount + ' · srflx ' + publicIps.length + ' · relay ' + relayCount + (gathered.errors ? ' · ICE err ' + gathered.errors : '');
+
+                    let reason = '';
+                    if (!cands.length) {
+                        reason = 'WebRTC 不可用或已被浏览器/策略阻止，拿不到任何 ICE 候选 / WebRTC unavailable or blocked';
+                    } else if (!publicIps.length) {
+                        reason = '未拿到 srflx 公网候选：STUN 未响应（UDP 3478 可能被网络拦截）；浏览器已做 mDNS 脱敏 / no srflx: STUN unreachable (UDP 3478 blocked?)';
+                    }
+
                     let html = resultTitle(t.proxyBtn) + '<div class="result-rows">' +
                         rowItem(t.proxyEgressIp, httpIp || 'N/A') +
                         rowItem(t.proxyWebrtcPublic, publicIps.length ? publicIps.join(', ') : '—') +
                         rowItem(t.proxyLocalIp, localIps.length ? localIps.join(', ') : '—') +
+                        rowItem('ICE', counts) +
                         '<div class="result-row"><span class="rr-name">' + escapeHTML(t.status) + '</span><span class="rr-val"><span class="badge ' + badge + '">' + escapeHTML(verdict) + '</span></span></div>' +
                         '</div>' +
                         '<div style="margin-top:10px;font-size:11px;color:var(--text-tertiary)">' + escapeHTML(t.proxyNote) + '</div>';
+                    if (reason) html += '<div style="margin-top:6px;font-size:11px;color:var(--warn,#c8b07a)">' + escapeHTML(reason) + '</div>';
                     if (mismatch) html += adviceBlock([{ code: 'proxy_mismatch' }]);
+                    if (__isStaleRun(__gen)) { proxyTestRunning = false; return; }
                     if (out) out.innerHTML = html;
                     pushLocalHistory({
                         type: 'proxy',
@@ -6917,6 +7036,7 @@ const APP_JS = `
                 if (qualityRunning) return;
                 qualityRunning = true;
                 qualityStopRequested = false;
+                const __gen = __toolRunGen;
                 const t = i18n[currentLang];
                 const out = document.getElementById('qmOut');
                 const startBtn = document.getElementById('qmStart');
@@ -6950,7 +7070,7 @@ const APP_JS = `
                         if (res.status === 429) limited++;
                         else points.push({ v: Math.round(performance.now() - s), t: Math.round(performance.now() - t0) });
                     } catch (e) { lost++; }
-                    if (points.length % 5 === 0) showProgress();
+                    if (points.length > 0 && points.length % 5 === 0) showProgress();
                     await new Promise(function (r) { setTimeout(r, 1000); });
                 }
                 const values = points.map(function (p) { return p.v; });
@@ -6964,8 +7084,10 @@ const APP_JS = `
                 let jit = 0;
                 for (let k = 1; k < values.length; k++) jit += Math.abs(values[k] - values[k - 1]);
                 jit = values.length > 1 ? Math.round(jit / (values.length - 1)) : 0;
-                const attempted = values.length + lost;
-                const lossPct = attempted > 0 ? Math.round((lost / attempted) * 100) : 0;
+                const attempted = values.length + lost + limited;
+                // 分母必须包含被限流（403/429）的样本：原实现把它们从分子分母同时剔除，
+                // 于是「1 个成功 + 5 个 429」会显示成丢包 0%
+                const lossPct = attempted > 0 ? Math.round(((lost + limited) / attempted) * 100) : 0;
                 const stallThreshold = Math.max(1, p50 * 2);
                 const stalls = values.filter(function (v) { return v > stallThreshold; }).length;
                 // 时间线：每 5 秒一个桶，取桶内最差延迟
@@ -6997,6 +7119,12 @@ const APP_JS = `
                 if (stalls > 0) findings.push({ code: 'stall' });
                 if (limited > 0) findings.push({ code: 'rate_limited' });
                 const resultBox = outEl();
+                if (__isStaleRun(__gen)) {
+                    if (startBtn) startBtn.style.display = '';
+                    if (stopBtn) stopBtn.style.display = 'none';
+                    qualityRunning = false;
+                    return;
+                }
                 if (resultBox) {
                     resultBox.innerHTML = resultTitle(t.qualityBtn) +
                         metricGrid(cards) +
@@ -7031,6 +7159,7 @@ const APP_JS = `
             async function startMultiSpeedTest() {
                 if (multiSpeedRunning) return;
                 multiSpeedRunning = true;
+                const __gen = __toolRunGen;
                 const t = i18n[currentLang];
                 const STREAMS = 4;
                 const SIZE = 16777216; // 每流 16MB，合计约 64MB
@@ -7041,6 +7170,8 @@ const APP_JS = `
                     '<div class="chart-container" style="margin-top:10px"><canvas id="msChart"></canvas></div>';
                 const points = [];
                 let totalBytes = 0;
+                let limitedStreams = 0;
+                let failedStreams = 0;
                 const t0 = performance.now();
                 const drawChartNow = function () {
                     const cv = document.getElementById('msChart');
@@ -7072,15 +7203,24 @@ const APP_JS = `
                 };
                 const runStream = async function () {
                     try {
-                        const res = await fetch('/speedtest?size=' + SIZE, { cache: 'no-store', signal: msController.signal });
-                        if (!res.ok || !res.body) return;
+                        const res = await fetch('/speedtest?size=' + SIZE, {
+                            cache: 'no-store',
+                            signal: anySignal([msController.signal, AbortSignal.timeout(30000)])
+                        });
+                        if (res.status === 429) {
+                            // 4 路 16MB 共用大响应配额，被限流时要显式计为失败，而不是静默按 0 Mbps 参与平均
+                            limitedStreams++;
+                            failedStreams++;
+                            return;
+                        }
+                        if (!res.ok || !res.body) { failedStreams++; return; }
                         const reader = res.body.getReader();
                         while (true) {
                             const step = await reader.read();
                             if (step.done) break;
                             totalBytes += step.value ? step.value.length : 0;
                         }
-                    } catch (e) {}
+                    } catch (e) { failedStreams++; }
                 };
                 let lastTick = performance.now();
                 let lastTickBytes = 0;
@@ -7118,12 +7258,21 @@ const APP_JS = `
                 if (!totalBytes) findings.push({ code: 'down_low' });
                 else if (avg < 5) findings.push({ code: 'down_low' });
                 const msResultEl = document.getElementById('msOut');
+                // 失败/限流的流显式列出，避免被限流时静默按 0 Mbps 出结果
+                const failedNote = (limitedStreams || failedStreams)
+                    ? '<div class="result-row is-warn" style="margin-top:10px"><span class="rr-name">' + escapeHTML(t.concurrentFailed) + '</span><span class="rr-val">' + failedStreams + '/' + STREAMS + (limitedStreams ? ' · ' + escapeHTML(t.bbLimited) : '') + '</span></div>'
+                    : '';
+                if (__isStaleRun(__gen)) {
+                    if (activeToolAbort === msController) activeToolAbort = null;
+                    multiSpeedRunning = false;
+                    return;
+                }
                 if (msResultEl) {
                     msResultEl.innerHTML = !totalBytes
-                        ? '<div class="tool-error"><i class="fas fa-exclamation-triangle"></i> ' + escapeHTML(t.multispeedFailed) + '</div>'
+                        ? '<div class="tool-error"><i class="fas fa-exclamation-triangle"></i> ' + escapeHTML(t.multispeedFailed) + '</div>' + failedNote
                         : resultTitle(t.multispeedBtn) + metricGrid(cards) +
                           '<div style="margin-top:10px;font-size:11px;color:var(--text-tertiary)">' + escapeHTML(t.multispeedRate) + ': ' + avg.toFixed(2) + ' Mbps</div>' +
-                          adviceBlock(findings);
+                          adviceBlock(findings) + failedNote;
                 }
                 pushLocalHistory({
                     type: 'multispeed',
@@ -7231,7 +7380,12 @@ const APP_JS = `
                 if (!grid) return;
                 const t = i18n[currentLang];
                 grid.innerHTML = TOOL_GROUPS.map(function (g) {
-                    const items = TOOL_LIST.filter(function (x) { return x.group === g.key && !isToolDisabledBySite(x.key); });
+                    const items = TOOL_LIST.filter(function (x) {
+                        if (x.group !== g.key || isToolDisabledBySite(x.key)) return false;
+                        // 无 KV 构建没有站点监控：直接把卡片从网格里隐藏
+                        if (x.key === 'monitor' && !(window.__NETDIAG__ && window.__NETDIAG__.monitorKv)) return false;
+                        return true;
+                    });
                     if (!items.length) return '';
                     const cards = items.map(function (item) {
                         const name = t[item.nameKey] || item.key;
@@ -7265,7 +7419,7 @@ const APP_JS = `
                 if (!runner) return;
                 const item = TOOL_LIST.find(x => x.key === key);
                 openToolModal(t[item ? item.nameKey : key] || key, (t.toolDesc && t.toolDesc[key]) || '');
-                runner();
+                safeRunTool(runner, key);
             }
 
             const toolModalEl = document.getElementById('toolModal');
@@ -7289,7 +7443,7 @@ const APP_JS = `
                 if (!runner) return;
                 const item = TOOL_LIST.find(x => x.key === currentToolKey);
                 openToolModal(t[item ? item.nameKey : currentToolKey] || currentToolKey, (t.toolDesc && t.toolDesc[currentToolKey]) || '');
-                runner();
+                safeRunTool(runner, currentToolKey);
             }
             const toolRerunBtn = document.getElementById('toolModalRerun');
             if (toolRerunBtn) toolRerunBtn.addEventListener('click', rerunCurrentTool);
@@ -7297,13 +7451,22 @@ const APP_JS = `
             async function runMultiNodeTest(urls) {
                 const t = i18n[currentLang];
                 showResult(elements.multiResult, '<span class="loading"></span> ' + t.multiTesting);
-                
-                const nodes = urls.map(u => {
-                    if (!/^https?:\\/\\//i.test(u)) u = 'https://' + u;
-                    return u.replace(/\\/+$/, '');
-                });
 
-                const results = await Promise.all(nodes.map(async (node) => {
+                // 去重 + 上限 8 个节点，避免用户粘贴几十个地址时把面板和网络打满
+                const norm = [];
+                const seen = {};
+                (urls || []).forEach(function (u) {
+                    let s = String(u || '').trim();
+                    if (!s) return;
+                    if (!/^https?:\\/\\//i.test(s)) s = 'https://' + s;
+                    s = s.replace(/\\/+$/, '');
+                    if (seen[s]) return;
+                    seen[s] = 1;
+                    norm.push(s);
+                });
+                const nodes = norm.slice(0, 8);
+
+                const pingOne = async (node) => {
                     const start = performance.now();
                     let latency = null;
                     let status = 'error';
@@ -7323,7 +7486,13 @@ const APP_JS = `
                         errorMsg = e.message || t.loadFailed;
                     }
                     return { node, latency, status, errorMsg };
-                }));
+                };
+                // 分批并发（每批 4 个），控制同时在途的跨域请求数
+                const results = [];
+                for (let i = 0; i < nodes.length; i += 4) {
+                    const part = await Promise.all(nodes.slice(i, i + 4).map(pingOne));
+                    results.push.apply(results, part);
+                }
 
                 const rows = results.map(r => {
                     const bad = r.status !== 'success';
@@ -7338,33 +7507,107 @@ const APP_JS = `
             async function runWebRtcTest() {
                 if (webrtcTestRunning) return;
                 webrtcTestRunning = true;
+                const __gen = __toolRunGen;
                 const t = i18n[currentLang];
                 showResult(elements.webrtcResult, '<span class="loading"></span> ' + t.webrtcTesting);
 
                 try {
-                    // 复用 collectWebRtcIps：A1 代理检测与泄漏检测共用同一采集逻辑
-                    const ips = await collectWebRtcIps(5000);
+                    const gathered = await collectWebRtcCandidates(8000);
+                    const cands = gathered.list;
+                    if (__isStaleRun(__gen)) { webrtcTestRunning = false; return; }
+                    const observed = String(BACKEND_DATA.realGeoIp || BACKEND_DATA.clientIp || '').trim();
+                    const bare = function (a) { return String(a || '').replace(/^\[|\]$/g, ''); };
+                    const fam = function (a) { return String(a || '').indexOf(':') >= 0 ? 'v6' : 'v4'; };
 
-                    if (ips.size === 0) {
-                        showResult(elements.webrtcResult, resultTitle('WebRTC') + '<div class="result-row"><span class="rr-name">' + t.webrtcSafe + '</span><span class="rr-val">OK</span></div>');
-                    } else {
-                        const ipList = Array.from(ips);
-                        const localIps = ipList.filter(isLocalIp);
-                        const publicIps = ipList.filter(function (ip) { return !isLocalIp(ip); });
-                        let rows = '';
-                        localIps.forEach(ip => { rows += '<div class="result-row"><span class="rr-name">' + t.webrtcLocal + '</span><span class="rr-val">' + escapeHTML(ip) + '</span></div>'; });
-                        publicIps.forEach(ip => { rows += '<div class="result-row is-bad"><span class="rr-name">' + t.webrtcPublic + '</span><span class="rr-val">' + escapeHTML(ip) + '</span></div>'; });
-                        const verdict = (publicIps.length > 0 || localIps.length > 0) ? t.webrtcLeak : t.webrtcSafe;
-                        showResult(elements.webrtcResult, resultTitle('WebRTC · ' + verdict) + '<div class="result-rows">' + rows + '</div>');
+                    const hosts = cands.filter(function (c) { return c.type === 'host'; });
+                    const mdns = hosts.filter(function (c) { return c.mdns; });
+                    const localReal = hosts.filter(function (c) { return !c.mdns; });
+                    const srflx = cands.filter(function (c) { return c.type === 'srflx' || c.type === 'prflx'; });
+                    const relay = cands.filter(function (c) { return c.type === 'relay'; });
+
+                    const publics = [];
+                    srflx.forEach(function (c) {
+                        const ip = bare(c.address);
+                        if (publics.indexOf(ip) < 0) publics.push(ip);
+                    });
+                    // 只比较同一地址族：双栈网络下 IPv6 反射与 IPv4 出口本就不同，直接比会误报
+                    const comparable = publics.filter(function (ip) { return observed && fam(ip) === fam(observed); });
+                    const matched = comparable.filter(function (ip) { return ip === observed; });
+                    const mismatched = comparable.filter(function (ip) { return ip !== observed; });
+
+                    // 判定优先级：UDP 出口与 HTTP 出口不一致 > 暴露真实内网地址 > 出口一致 > 仅有 mDNS/中继 > 完全无候选
+                    let verdict, cls;
+                    if (mismatched.length) { verdict = t.webrtcLeak; cls = ' is-bad'; }
+                    else if (localReal.length) { verdict = t.webrtcLeak; cls = ' is-bad'; }
+                    else if (matched.length) { verdict = t.webrtcSafe; cls = ''; }
+                    else if (publics.length || mdns.length) { verdict = t.proxyUndetermined; cls = ' is-warn'; }
+                    else { verdict = t.webrtcNone; cls = ' is-warn'; }
+
+                    let rows = '<div class="result-row' + cls + '"><span class="rr-name">' + escapeHTML(t.status) + '</span><span class="rr-val">' + escapeHTML(verdict) + '</span></div>';
+                    if (observed) {
+                        rows += '<div class="result-row"><span class="rr-name">' + escapeHTML(t.proxyEgressIp) + '</span><span class="rr-val">' + escapeHTML(observed) + '</span></div>';
                     }
+                    if (publics.length) {
+                        const pcls = mismatched.length ? ' is-bad' : '';
+                        rows += '<div class="result-row' + pcls + '"><span class="rr-name">' + escapeHTML(t.webrtcPublic) + ' (srflx)</span><span class="rr-val">' + escapeHTML(publics.join(', ')) + '</span></div>';
+                    }
+                    localReal.forEach(function (c) {
+                        rows += '<div class="result-row is-bad"><span class="rr-name">' + escapeHTML(t.webrtcLocal) + '</span><span class="rr-val">' + escapeHTML(c.address) + '</span></div>';
+                    });
+                    if (mdns.length) {
+                        rows += '<div class="result-row"><span class="rr-name">' + escapeHTML(t.webrtcLocal) + ' (mDNS)</span><span class="rr-val">' + mdns.length + ' · masked</span></div>';
+                    }
+                    if (relay.length) {
+                        rows += '<div class="result-row"><span class="rr-name">relay</span><span class="rr-val">' + relay.length + '</span></div>';
+                    }
+
+                    let note = '';
+                    if (!publics.length && mdns.length) {
+                        note = '<div class="side-desc" style="margin-top:10px">未建立 STUN 反射（UDP 可能被拦截），只能看到 mDNS 脱敏地址 / STUN unreachable, only masked mDNS candidates</div>';
+                    } else if (!publics.length && !mdns.length) {
+                        note = '<div class="side-desc" style="margin-top:10px">WebRTC 不可用或已被浏览器/策略阻止 / WebRTC unavailable or blocked</div>';
+                    }
+                    if (gathered.errors) {
+                        note += '<div class="side-desc" style="margin-top:6px">STUN/ICE 错误 ' + gathered.errors + ' 次 / ICE candidate errors: ' + gathered.errors + '</div>';
+                    }
+                    showResult(elements.webrtcResult, resultTitle('WebRTC') + '<div class="result-rows">' + rows + '</div>' + note);
                 } catch (e) {
-                    showResult(elements.webrtcResult, resultTitle('WebRTC') + '<div class="result-row"><span class="rr-name">' + t.webrtcSafe + '</span><span class="rr-val">OK</span></div>', false);
+                    if (!__isStaleRun(__gen)) showResult(elements.webrtcResult, '<i class="fas fa-exclamation-triangle"></i> ' + escapeHTML(t.loadFailed), true);
                 }
                 webrtcTestRunning = false;
             }
 
             // ==================== TTFB 分阶段分析 ====================
             let ttfbTestRunning = false;
+            // 等一条 Resource Timing 记录：buffered:true 让"观察者注册前已入缓冲"的记录也能拿到；
+            // 老内核不支持 {type} 时退回 entryTypes 写法。拿不到就 reject，由上层走手动计时回退。
+            function observeResourceTiming(url, timeoutMs) {
+                return new Promise(function (resolve, reject) {
+                    if (typeof PerformanceObserver === 'undefined') { reject(new Error('no PerformanceObserver')); return; }
+                    let done = false;
+                    let timer = null;
+                    let observer = null;
+                    const stop = function (err, entry) {
+                        if (done) return;
+                        done = true;
+                        if (timer) { clearTimeout(timer); timer = null; }
+                        if (observer) { try { observer.disconnect(); } catch (e) {} }
+                        if (err) reject(err); else resolve(entry);
+                    };
+                    timer = setTimeout(function () { stop(new Error('resource timing timeout')); }, timeoutMs);
+                    const onEntries = function (list) {
+                        const arr = list.getEntries();
+                        for (let i = 0; i < arr.length; i++) {
+                            if (arr[i].name === url || arr[i].name.indexOf(url) === 0) { stop(null, arr[i]); return; }
+                        }
+                    };
+                    try {
+                        observer = new PerformanceObserver(onEntries);
+                        try { observer.observe({ type: 'resource', buffered: true }); }
+                        catch (e1) { observer.observe({ entryTypes: ['resource'] }); }
+                    } catch (e) { stop(e); }
+                });
+            }
             async function runTtfbTest() {
                 if (ttfbTestRunning) return;
                 ttfbTestRunning = true;
@@ -7372,33 +7615,52 @@ const APP_JS = `
                 showResult(elements.ttfbResult, '<span class="loading"></span> ' + t.ttfbTesting);
 
                 try {
-                    const testUrl = window.location.origin + '/health?_ttfb=' + Date.now();
-                    const entry = await new Promise((resolve, reject) => {
-                        const timeout = setTimeout(() => { observer.disconnect(); reject(new Error('timeout')); }, 5000);
-                        const observer = new PerformanceObserver((list) => {
-                            const entries = list.getEntriesByName(testUrl);
-                            if (entries.length > 0) {
-                                clearTimeout(timeout);
-                                observer.disconnect();
-                                resolve(entries[0]);
-                            }
-                        });
-                        observer.observe({ type: 'resource', buffered: false });
-                        fetch(testUrl, { cache: 'no-store' }).catch(() => {
-                            clearTimeout(timeout);
-                            observer.disconnect();
-                            reject(new Error('fetch failed'));
-                        });
-                    });
-                    
-                    const dns = Math.round(entry.domainLookupEnd - entry.domainLookupStart);
-                    const tcp = Math.round(entry.connectEnd - entry.connectStart);
-                    const tls = Math.round(entry.secureConnectionStart > 0 ? entry.connectEnd - entry.secureConnectionStart : 0);
-                    const wait = Math.round(entry.responseStart - entry.requestStart);
-                    const download = Math.round(entry.responseEnd - entry.responseStart);
-                    const total = Math.round(entry.responseEnd - entry.startTime);
-                    const maxVal = Math.max(dns, tcp, tls, wait, download, 1);
+                    const testUrl = window.location.origin + '/health?_ttfb=' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+                    const startedAt = performance.now();
+                    // 先起观察者再发请求；两个 promise 都不抛，失败时各自返回 null
+                    const entryPromise = observeResourceTiming(testUrl, 6000).catch(function () { return null; });
+                    const fetchOnce = function () {
+                        return fetch(testUrl, { cache: 'no-store', signal: AbortSignal.timeout(10000) }).catch(function () { return null; });
+                    };
+                    let res = await fetchOnce();
+                    if (!res) { await new Promise(function (r) { setTimeout(r, 300); }); res = await fetchOnce(); }
+                    // 请求结束后给观察者最多 700ms 补票；仍没有就走手动计时
+                    const entry = await Promise.race([
+                        entryPromise,
+                        new Promise(function (r) { setTimeout(function () { r(null); }, 700); })
+                    ]);
 
+                    let dns = 0, tcp = 0, tls = 0, wait = 0, download = 0, total = 0;
+                    let source = 'resource-timing';
+                    let httpStatus = res ? res.status : 0;
+
+                    if (entry) {
+                        dns = Math.round(entry.domainLookupEnd - entry.domainLookupStart);
+                        tcp = Math.round(entry.connectEnd - entry.connectStart);
+                        tls = Math.round(entry.secureConnectionStart > 0 ? entry.connectEnd - entry.secureConnectionStart : 0);
+                        wait = Math.round(entry.responseStart - entry.requestStart);
+                        download = Math.round(entry.responseEnd - entry.responseStart);
+                        total = Math.round(entry.responseEnd - entry.startTime);
+                    } else if (res) {
+                        // 回退：浏览器没有暴露 Resource Timing（隐私设置 / 插件 / 老内核），
+                        // 但网络请求本身是成功的 —— 至少给出总耗时与首字节，而不是整块判失败。
+                        const headerAt = performance.now();
+                        let bodyAt = headerAt;
+                        if (res.body) {
+                            const rd = res.body.getReader();
+                            try { await rd.read(); } catch (e) {}
+                            try { await rd.cancel(); } catch (e) {}
+                            bodyAt = performance.now();
+                        }
+                        wait = Math.round(headerAt - startedAt);
+                        download = Math.round(bodyAt - headerAt);
+                        total = Math.round(bodyAt - startedAt);
+                        source = 'manual';
+                    } else {
+                        throw new Error('request failed');
+                    }
+
+                    const maxVal = Math.max(dns, tcp, tls, wait, download, 1);
                     const bar = (label, val, color) => {
                         const pct = Math.max((val / maxVal) * 100, 2);
                         return '<div class="ttfb-row"><span class="ttfb-label">' + label + '</span><div class="ttfb-track"><i style="width:' + pct + '%;background:' + color + '"></i></div><span class="ttfb-val">' + val + 'ms</span></div>';
@@ -7407,15 +7669,25 @@ const APP_JS = `
                     let html = resultTitle('TTFB') + metricGrid([
                         metricCard(t.ttfbTotal, total, 'ms', null, null)
                     ]) + '<div style="margin-top:12px;">';
-                    html += bar(t.ttfbDns, dns, cssColorVar('--chart-cyan', '#c3c7cd'));
-                    html += bar(t.ttfbTcp, tcp, cssColorVar('--text-secondary', '#9a9da3'));
-                    html += bar(t.ttfbTls, tls, cssColorVar('--chart-teal', '#b0b4ba'));
+                    if (source === 'resource-timing') {
+                        html += bar(t.ttfbDns, dns, cssColorVar('--chart-cyan', '#c3c7cd'));
+                        html += bar(t.ttfbTcp, tcp, cssColorVar('--text-secondary', '#9a9da3'));
+                        html += bar(t.ttfbTls, tls, cssColorVar('--chart-teal', '#b0b4ba'));
+                    }
                     html += bar(t.ttfbWait, wait, cssColorVar('--text-tertiary', '#6a6d74'));
                     html += bar(t.ttfbDownload, download, cssColorVar('--text-quaternary', '#45484e'));
                     html += '</div>';
+                    if (source === 'manual') {
+                        html += '<div class="side-desc" style="margin-top:10px">浏览器未提供分阶段计时（Resource Timing 不可用），仅显示总耗时与首字节 / phase breakdown unavailable' + (httpStatus ? ' · HTTP ' + httpStatus : '') + '</div>';
+                    } else if (res && !res.ok) {
+                        html += '<div class="side-desc" style="margin-top:10px">HTTP ' + httpStatus + '</div>';
+                    }
                     showResult(elements.ttfbResult, html);
                 } catch (e) {
-                    showResult(elements.ttfbResult, '<i class="fas fa-exclamation-triangle"></i> ' + t.ttfbFailed, true);
+                    // 把真实原因带出来：只显示"分析失败"会让排障无从下手
+                    const reason = String((e && e.message) || e).slice(0, 80);
+                    showResult(elements.ttfbResult, '<i class="fas fa-exclamation-triangle"></i> ' + t.ttfbFailed +
+                        '<div class="side-desc" style="margin-top:8px">' + escapeHTML(reason) + '</div>', true);
                 }
                 ttfbTestRunning = false;
             }
@@ -7435,9 +7707,12 @@ const APP_JS = `
                         const payload = new Uint8Array(size);
                         fillRandomLocal(payload);
                         const start = performance.now();
-                        const res = await fetch('/upload-test', { method: 'POST', body: payload });
+                        const res = await fetch('/upload-test', { method: 'POST', body: payload, signal: AbortSignal.timeout(30000) });
                         const clientDuration = performance.now() - start;
-                        const data = await res.json();
+                        // 429/413 也返回 JSON，但那是"没测成"：不能当成有效上传算出速度
+                        if (res.status === 429) throw new Error('rate limited');
+                        if (!res.ok) throw new Error('http ' + res.status);
+                        await res.json();
                         const speedMbps = ((size * 8) / (clientDuration / 1000)) / 1000000;
                         results.push({ sizeKB: Math.round(size / 1024), speed: speedMbps.toFixed(2) });
                     }
@@ -7483,6 +7758,7 @@ const APP_JS = `
             }
 
             async function startSiteAudit(rawUrl, checkCert) {
+                const __gen = __toolRunGen;
                 const t = i18n[currentLang];
                 let u = (rawUrl || '').trim();
                 if (!u) return;
@@ -7500,10 +7776,11 @@ const APP_JS = `
                 try {
                     const res = await fetch('/api/site-audit?url=' + encodeURIComponent(u) + (checkCert ? '&cert=1' : ''), { cache: 'no-store', signal: AbortSignal.timeout(40000) });
                     const data = await res.json();
+                    if (__isStaleRun(__gen)) return;
                     if (!res.ok || data.error) throw new Error(data.error || 'failed');
                     renderSiteAudit(data);
                 } catch (e) {
-                    showResult(null, '<i class="fas fa-triangle-exclamation"></i> ' + escapeHTML(t.auditFailed), true);
+                    if (!__isStaleRun(__gen)) showResult(null, '<i class="fas fa-triangle-exclamation"></i> ' + escapeHTML(t.auditFailed), true);
                 }
             }
 
@@ -7569,6 +7846,7 @@ const APP_JS = `
             }
 
             async function doDnsCompare() {
+                const __gen = __toolRunGen;
                 const t = i18n[currentLang];
                 const out = document.getElementById('dcOut');
                 const inp = document.getElementById('dcNameInput');
@@ -7584,10 +7862,11 @@ const APP_JS = `
                     const qType = typeEl ? typeEl.value : 'A';
                     const res = await fetch('/api/dns-compare?name=' + encodeURIComponent(name) + '&type=' + encodeURIComponent(qType), { cache: 'no-store', signal: AbortSignal.timeout(25000) });
                     const data = await res.json();
+                    if (__isStaleRun(__gen)) return;
                     if (!res.ok || data.error) throw new Error('failed');
                     renderDnsCompare(data, out);
                 } catch (e) {
-                    out.innerHTML = '<div class="no-data"><i class="fas fa-exclamation-circle"></i> ' + escapeHTML(t.dcFailed) + '</div>';
+                    if (!__isStaleRun(__gen)) out.innerHTML = '<div class="no-data"><i class="fas fa-exclamation-circle"></i> ' + escapeHTML(t.dcFailed) + '</div>';
                 }
             }
 
@@ -7774,12 +8053,27 @@ const APP_JS = `
                 } catch (e) {}
             }
             function csvEscape(v) {
-                const s = String(v === undefined || v === null ? '' : v);
+                let s = String(v === undefined || v === null ? '' : v);
+                // CSV 公式注入防护：= + - @ 开头的字段前置单引号
+                if (/^[=+\\-@]/.test(s)) s = "'" + s;
                 const hasSpecial = s.indexOf('"') >= 0 || s.indexOf(',') >= 0 || s.indexOf(String.fromCharCode(10)) >= 0 || s.indexOf(String.fromCharCode(13)) >= 0; return hasSpecial ? '"' + s.replace(/"/g, '""') + '"' : s;
+            }
+            // 分享编解码：UTF-8 安全实现，不再使用已废弃的 escape/unescape
+            function utf8ToBase64(str) {
+                const bytes = new TextEncoder().encode(String(str));
+                let bin = '';
+                for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+                return btoa(bin);
+            }
+            function base64ToUtf8(b64) {
+                const bin = atob(b64);
+                const bytes = new Uint8Array(bin.length);
+                for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+                return new TextDecoder().decode(bytes);
             }
             function encodeSharePayload(obj) {
                 const json = JSON.stringify(obj);
-                let b64 = btoa(unescape(encodeURIComponent(json)));
+                let b64 = utf8ToBase64(json);
                 b64 = b64.split('+').join('-').split('/').join('_');
                 while (b64.length && b64.charAt(b64.length - 1) === '=') b64 = b64.slice(0, -1);
                 return b64;
@@ -7787,7 +8081,7 @@ const APP_JS = `
             function decodeSharePayload(str) {
                 let raw = String(str || '').split('-').join('+').split('_').join('/');
                 while (raw.length % 4) raw += '=';
-                return JSON.parse(decodeURIComponent(escape(atob(raw))));
+                return JSON.parse(base64ToUtf8(raw));
             }
             function buildShareSnapshot() {
                 const nums = rttData.slice(-20);
@@ -7795,13 +8089,11 @@ const APP_JS = `
                 let hist = [];
                 try { hist = loadLocalHistoryArr(); } catch (e) {}
                 const last = hist.length ? hist[0] : null;
+                // 隐私：分享快照不带 IP / 机房 / ASN，只保留 RTT、丢包与最近一次本地记录
                 return {
                     v: 1,
                     time: Date.now(),
                     lang: currentLang,
-                    ip: BACKEND_DATA.clientIp || '',
-                    colo: BACKEND_DATA.colo || '',
-                    org: BACKEND_DATA.asOrg || '',
                     rtt: avgRtt,
                     loss: totalAttempts ? Math.round((totalLoss / totalAttempts) * 100) : 0,
                     last: last ? { label: String(last.label || ''), value: String(last.value || ''), unit: String(last.unit || '') } : null
@@ -7861,7 +8153,8 @@ const APP_JS = `
             let _bbUploadPayload = null;
             function getBbUploadPayload() {
                 if (!_bbUploadPayload) {
-                    const arr = new Uint8Array(33554432);
+                    // 8MB 已足够压满上行；原来的 32MB 会让每个 isolate 常驻大缓冲
+                    const arr = new Uint8Array(8 * 1024 * 1024);
                     fillRandomLocal(arr);
                     _bbUploadPayload = arr;
                 }
@@ -7989,6 +8282,8 @@ const APP_JS = `
                     if (out) out.innerHTML = html;
                 } catch (e) {
                     if (out) out.innerHTML = '<div class="no-data"><i class="fas fa-exclamation-circle"></i> ' + escapeHTML(t.bbFailed) + '</div>';
+                } finally {
+                    _bbUploadPayload = null; // 测试结束立即释放 8MB 上行缓冲
                 }
                 bbRunning = false;
             }
@@ -8026,7 +8321,8 @@ const APP_JS = `
                         const s = performance.now();
                         try {
                             const r = await fetch('/health?_wiz=' + Date.now() + '_' + i, { method: 'HEAD', cache: 'no-store', signal: controller.signal });
-                            if (r.status === 429) continue;
+                            // 非 2xx（含 429 限流）都是无效样本：原来直接 continue，会让丢包率分母恒为 6 而被低估
+                            if (!r.ok) { result.loss++; continue; }
                             result.rtts.push(Math.round(performance.now() - s));
                         } catch (e) { result.loss++; }
                         await new Promise(function (res) { setTimeout(res, 200); });
@@ -8123,6 +8419,7 @@ const APP_JS = `
             async function startWaterfallScan() {
                 if (waterfallRunning) return;
                 waterfallRunning = true;
+                const __gen = __toolRunGen;
                 const t = i18n[currentLang];
                 const out = document.getElementById('wfOut');
                 if (out) out.innerHTML = '<div class="tool-loading"><span class="loading"></span> ' + escapeHTML(t.running) + '</div>';
@@ -8131,8 +8428,8 @@ const APP_JS = `
                 try {
                     // 触发两个新请求，确保页面已有可分析的资源时序（均为同源、零 Worker 出站）
                     await Promise.all([
-                        fetch('/health?wf=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.arrayBuffer(); }).catch(function () {}),
-                        fetch('/app.js?wf=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.arrayBuffer(); }).catch(function () {})
+                        fetch('/health?wf=' + Date.now(), { cache: 'no-store', signal: AbortSignal.timeout(8000) }).then(function (r) { return r.arrayBuffer(); }).catch(function () {}),
+                        fetch('/app.js?wf=' + Date.now(), { cache: 'no-store', signal: AbortSignal.timeout(8000) }).then(function (r) { return r.arrayBuffer(); }).catch(function () {})
                     ]);
                     const entries = performance.getEntriesByType('resource') || [];
                     const rows = entries.map(function (e) {
@@ -8151,7 +8448,7 @@ const APP_JS = `
                         };
                     }).filter(function (r) { return r.total > 0; }).sort(function (a, b) { return b.total - a.total; });
                     if (!rows.length) {
-                        if (out) out.innerHTML = '<div class="no-data">' + escapeHTML(t.wfEmpty) + '</div>';
+                        if (out && !__isStaleRun(__gen)) out.innerHTML = '<div class="no-data">' + escapeHTML(t.wfEmpty) + '</div>';
                         return;
                     }
                     const maxTotal = Math.max.apply(null, rows.map(function (r) { return r.total; })) || 1;
@@ -8187,13 +8484,16 @@ const APP_JS = `
                         const proto = r.protocol ? ' <span class="badge">' + escapeHTML(r.protocol) + '</span>' : '';
                         return '<div class="wf-bar-row" title="' + escapeHTML(r.url) + '"><span class="wf-name">' + escapeHTML(r.name) + proto + '</span>' + seg + '<span class="wf-total">' + escapeHTML(formatMs(r.total)) + '</span></div>';
                     }).join('');
+                    if (__isStaleRun(__gen)) return;
                     if (out) out.innerHTML = summary + legend + '<div class="result-rows">' + bars + '</div>';
                 } catch (e) {
-                    if (out) out.innerHTML = '<div class="no-data">' + escapeHTML(t.wfEmpty) + '</div>';
+                    if (out && !__isStaleRun(__gen)) out.innerHTML = '<div class="no-data">' + escapeHTML(t.wfEmpty) + '</div>';
+                } finally {
+                    // 空结果/异常/正常结束都必须恢复运行状态与按钮，否则瀑布扫描会永久卡住
+                    waterfallRunning = false;
+                    const go2 = document.getElementById('wfStart');
+                    if (go2) go2.disabled = false;
                 }
-                waterfallRunning = false;
-                const go2 = document.getElementById('wfStart');
-                if (go2) go2.disabled = false;
             }
 
             // ==================== A4：浏览器网络信息面板（零 Worker 出站） ====================
@@ -8366,7 +8666,8 @@ const APP_JS = `
             let _qcUpPayloads = null;
             function getQcUpPayloads() {
                 if (!_qcUpPayloads) {
-                    _qcUpPayloads = [new Uint8Array(1048576), new Uint8Array(8388608)];
+                    // 上传样本从 1MB/8MB 收敛到 256KB/2MB：足够测出上行速率，又不会长时间占用内存与流量
+                    _qcUpPayloads = [new Uint8Array(262144), new Uint8Array(2097152)];
                     fillRandomLocal(_qcUpPayloads[0]);
                     fillRandomLocal(_qcUpPayloads[1]);
                 }
@@ -8385,13 +8686,14 @@ const APP_JS = `
             async function startQuickCheck() {
                 if (qcRunning) return;
                 qcRunning = true;
+                const __gen = __toolRunGen;
                 const t = i18n[currentLang];
                 const out = document.getElementById('qcResult');
                 const setProgress = (label) => {
                     if (out) out.innerHTML = '<div class="tool-loading"><span class="loading"></span> ' + escapeHTML(label) + '</div>';
                 };
                 try {
-                    setProgress(t.qcRunning + ' [1/6] ' + t.qcItemRtt);
+                    setProgress(t.qcRunning + ' [1/5] ' + t.qcItemRtt);
                     const rttSamples = [];
                     let rttLost = 0;
                     let rttLimited = 0;
@@ -8412,7 +8714,7 @@ const APP_JS = `
                     const rttAttempted = rttLost + rttSamples.length;
                     const lossPct = rttAttempted > 0 ? Math.round((rttLost / rttAttempted) * 100) : 0;
 
-                    setProgress(t.qcRunning + ' [2/6] ' + t.qcItemDown);
+                    setProgress(t.qcRunning + ' [2/5] ' + t.qcItemDown);
                     let downMbps = 0;
                     for (const size of [524288, 2097152]) {
                         const s = performance.now();
@@ -8434,10 +8736,10 @@ const APP_JS = `
                         } catch (e) {}
                     }
 
-                    setProgress(t.qcRunning + ' [3/6] ' + t.qcItemUp);
+                    setProgress(t.qcRunning + ' [3/5] ' + t.qcItemUp);
                     let upMbps = 0;
                     const payloads = getQcUpPayloads();
-                    const upSizes = [1048576, 8388608];
+                    const upSizes = [262144, 2097152];
                     for (let i = 0; i < payloads.length; i++) {
                         const s = performance.now();
                         try {
@@ -8449,52 +8751,42 @@ const APP_JS = `
                             }
                         } catch (e) {}
                     }
+                    _qcUpPayloads = null; // 上传样本用完立即释放，避免 2MB 缓冲常驻
 
-                    setProgress(t.qcRunning + ' [4/6] ' + t.qcItemProto);
+                    setProgress(t.qcRunning + ' [4/5] ' + t.qcItemProto);
                     let protoLevel = 1;
                     let protoText = 'HTTP/1.1';
                     try {
-                        const res = await fetch('/http2-test', { cache: 'no-store' });
+                        const res = await fetch('/http2-test', { cache: 'no-store', signal: AbortSignal.timeout(10000) });
                         const d = await res.json();
                         if (d.http3) { protoLevel = 5; protoText = 'HTTP/3'; }
                         else if (d.http2) { protoLevel = 4; protoText = 'HTTP/2'; }
                     } catch (e) {}
 
-                    setProgress(t.qcRunning + ' [5/6] ' + t.qcItemDns);
+                    setProgress(t.qcRunning + ' [5/5] ' + t.qcItemDns);
                     let dnsOk = false;
                     let dnsMs = 0;
                     try {
                         const s = performance.now();
-                        const res = await fetch('/api/dns-lookup?name=' + encodeURIComponent(window.location.hostname.toLowerCase()) + '&type=A', { cache: 'no-store' });
+                        const res = await fetch('/api/dns-lookup?name=' + encodeURIComponent(window.location.hostname.toLowerCase()) + '&type=A', { cache: 'no-store', signal: AbortSignal.timeout(10000) });
                         const d = await res.json();
                         dnsMs = performance.now() - s;
                         dnsOk = res.ok && !d.error;
                     } catch (e) {}
 
-                    setProgress(t.qcRunning + ' [6/6] ' + t.qcItemFraud);
-                    let fraudScore = null;
-                    try {
-                        const res = await fetch('/api/ip-fraud', { cache: 'no-store' });
-                        if (res.ok) {
-                            const d = await res.json();
-                            if (d && typeof d.score === 'number') fraudScore = d.score;
-                        }
-                    } catch (e) {}
-
                     const score = {
-                        rtt: !rttOk ? 0 : (rttAvg <= 30 ? 25 : rttAvg <= 80 ? 20 : rttAvg <= 150 ? 14 : rttAvg <= 300 ? 8 : 3),
+                        rtt: !rttOk ? 0 : (rttAvg <= 30 ? 30 : rttAvg <= 80 ? 24 : rttAvg <= 150 ? 17 : rttAvg <= 300 ? 10 : 4),
                         jitter: !rttOk ? 0 : (jitter <= 5 ? 10 : jitter <= 15 ? 7 : jitter <= 30 ? 4 : 1),
                         loss: lossPct === 0 ? 10 : lossPct <= 2 ? 6 : lossPct <= 5 ? 3 : 0,
                         down: downMbps >= 100 ? 25 : downMbps >= 50 ? 20 : downMbps >= 20 ? 14 : downMbps >= 5 ? 8 : 3,
                         up: upMbps >= 50 ? 15 : upMbps >= 20 ? 11 : upMbps >= 5 ? 6 : 2,
                         proto: protoLevel,
-                        dns: dnsOk ? 5 : 2,
-                        fraud: fraudScore === null ? 3 : (fraudScore <= 20 ? 5 : fraudScore <= 50 ? 3 : 1)
+                        dns: dnsOk ? 5 : 2
                     };
-                    const total = score.rtt + score.jitter + score.loss + score.down + score.up + score.proto + score.dns + score.fraud;
+                    // /api/ip-fraud 已下线：删除该计分项，并把 5 分并入延迟档位，满分仍是 100
+                    const total = score.rtt + score.jitter + score.loss + score.down + score.up + score.proto + score.dns;
                     const grade = total >= 90 ? 'A' : total >= 75 ? 'B' : total >= 55 ? 'C' : total >= 35 ? 'D' : 'F';
                     const upStr = upMbps > 0 ? upMbps.toFixed(1) + ' Mbps' : 'N/A';
-                    const fraudStr = fraudScore === null ? 'N/A' : fraudScore + '/100';
 
                     // E1：findings 携带 code，既生成人类可读的 issues 文案，也驱动「原因 + 建议」规则表
                     const findings = [];
@@ -8507,24 +8799,23 @@ const APP_JS = `
                     if (upMbps < 5) findings.push({ code: 'up_low', text: t.qcItemUp + ': ' + upStr });
                     if (protoLevel < 4) findings.push({ code: 'proto_old', text: t.qcItemProto + ': ' + protoText });
                     if (!dnsOk) findings.push({ code: 'dns_fail', text: t.qcItemDns + ': FAIL' });
-                    if (fraudScore !== null && fraudScore > 50) findings.push({ code: 'fraud_high', text: t.qcItemFraud + ': ' + fraudStr });
                     const issues = findings.map(f => f.text);
 
                     const qcRow = (label, val, pts, max) =>
                         '<div class="result-row' + (pts < max ? ' is-warn' : '') + '"><span class="rr-name">' + escapeHTML(label) + '</span>' +
                         '<span class="rr-val">' + escapeHTML(val) + ' <span class="badge ' + (pts < max ? 'badge-warning' : 'badge-success') + '">' + pts + '/' + max + '</span></span></div>';
                     const rowsHtml =
-                        qcRow(t.qcItemRtt, (rttOk ? rttAvg + ' ms' : 'N/A') + ' · jitter ' + jitter + ' ms · loss ' + lossPct + '%', score.rtt + score.jitter + score.loss, 45) +
+                        qcRow(t.qcItemRtt, (rttOk ? rttAvg + ' ms' : 'N/A') + ' · jitter ' + jitter + ' ms · loss ' + lossPct + '%', score.rtt + score.jitter + score.loss, 50) +
                         qcRow(t.qcItemDown, downMbps.toFixed(1) + ' Mbps', score.down, 25) +
                         qcRow(t.qcItemUp, upStr, score.up, 15) +
                         qcRow(t.qcItemProto, protoText, score.proto, 5) +
-                        qcRow(t.qcItemDns, (dnsOk ? 'OK' : 'FAIL') + ' · ' + Math.round(dnsMs) + ' ms', score.dns, 5) +
-                        qcRow(t.qcItemFraud, fraudStr, score.fraud, 5);
+                        qcRow(t.qcItemDns, (dnsOk ? 'OK' : 'FAIL') + ' · ' + Math.round(dnsMs) + ' ms', score.dns, 5);
                     const issueHtml = issues.length
                         ? issues.map(x => '<div class="result-row is-warn"><span class="rr-name"><i class="fas fa-triangle-exclamation"></i> ' + escapeHTML(x) + '</span></div>').join('')
                         : '<div class="result-row"><span class="rr-name"><i class="fas fa-circle-check"></i> ' + escapeHTML(t.qcNoIssues) + '</span></div>';
                     const gradeBadge = total >= 75 ? 'badge-success' : total >= 55 ? 'badge-warning' : 'badge-danger';
 
+                    if (__isStaleRun(__gen)) { qcRunning = false; return; }
                     if (out) out.innerHTML =
                         '<div class="usage-total" style="font-size:44px">' + total + '</div>' +
                         '<div class="usage-total-label">' + escapeHTML(t.qcScore + ' / 100') + ' · <span class="badge ' + gradeBadge + '">' + grade + '</span></div>' +
@@ -8546,15 +8837,13 @@ const APP_JS = `
                         t.qcItemUp + ': ' + upStr + '\\n' +
                         t.qcItemProto + ': ' + protoText + '\\n' +
                         t.qcItemDns + ': ' + (dnsOk ? 'OK' : 'FAIL') + ' / ' + Math.round(dnsMs) + ' ms\\n' +
-                        t.qcItemFraud + ': ' + fraudStr + '\\n' +
                         (issues.length ? t.qcIssues + ':\\n' + issues.map(x => ' - ' + x).join('\\n') + '\\n' : t.qcNoIssues + '\\n');
                     qcLastShare = { total: total, grade: grade, lines: [
                         t.qcItemRtt + ': ' + (rttOk ? rttAvg + ' ms' : 'N/A') + ' / ' + jitter + ' ms / ' + lossPct + '%',
                         t.qcItemDown + ': ' + downMbps.toFixed(1) + ' Mbps',
                         t.qcItemUp + ': ' + upStr,
                         t.qcItemProto + ': ' + protoText,
-                        t.qcItemDns + ': ' + (dnsOk ? 'OK' : 'FAIL') + ' / ' + Math.round(dnsMs) + ' ms',
-                        t.qcItemFraud + ': ' + fraudStr
+                        t.qcItemDns + ': ' + (dnsOk ? 'OK' : 'FAIL') + ' / ' + Math.round(dnsMs) + ' ms'
                     ] };
                     const copyBtn = document.getElementById('qcCopyBtn');
                     if (copyBtn) copyBtn.addEventListener('click', () => copyQuickCheckReport(copyBtn));
@@ -8563,7 +8852,9 @@ const APP_JS = `
                     const qcShareLink = document.getElementById('qcShareLinkBtn');
                     if (qcShareLink) qcShareLink.addEventListener('click', () => copyShareLink(qcLastShare, qcShareLink));
                 } catch (e) {
-                    if (out) out.innerHTML = '<div class="no-data"><i class="fas fa-exclamation-circle"></i> ' + escapeHTML(t.loadFailed) + '</div>';
+                    if (out && !__isStaleRun(__gen)) out.innerHTML = '<div class="no-data"><i class="fas fa-exclamation-circle"></i> ' + escapeHTML(t.loadFailed) + '</div>';
+                } finally {
+                    _qcUpPayloads = null; // 异常/中断也释放上传缓冲
                 }
                 qcRunning = false;
             }
@@ -8684,7 +8975,7 @@ const APP_JS = `
             function copyShareLink(payload, btn) {
                 try {
                     const json = JSON.stringify(payload);
-                    let b64 = btoa(unescape(encodeURIComponent(json)));
+                    let b64 = utf8ToBase64(json);
                     b64 = b64.split('+').join('-').split('/').join('_');
                     while (b64.length && b64.charAt(b64.length - 1) === '=') b64 = b64.slice(0, -1);
                     const url = location.origin + location.pathname + '#qc=' + b64;
@@ -8697,9 +8988,13 @@ const APP_JS = `
                     let raw = location.hash.slice(4);
                     raw = raw.split('-').join('+').split('_').join('/');
                     while (raw.length > 0 && raw.length % 4 !== 0) raw += '=';
-                    const json = decodeURIComponent(escape(atob(raw)));
-                    const d = JSON.parse(json);
+                    const d = JSON.parse(base64ToUtf8(raw));
                     if (!d || typeof d.total !== 'number' || !Array.isArray(d.lines)) return;
+                    // 分享内容来自 URL：只接受最多 20 行、每行短字符串，挡住超长/非字符串注入
+                    const lines = d.lines.slice(0, 20);
+                    for (let i = 0; i < lines.length; i++) {
+                        if (typeof lines[i] !== 'string' || lines[i].length >= 200) return;
+                    }
                     setTimeout(function() {
                         const body = document.getElementById('toolModalBody');
                         const modal = document.getElementById('toolModal');
@@ -8715,7 +9010,7 @@ const APP_JS = `
                         setToolActions('');
                         body.innerHTML = '<div class="usage-total" style="font-size:44px">' + escapeHTML(String(d.total)) + '</div>' +
                             '<div class="usage-total-label">' + escapeHTML((i18n[currentLang].qcScore || 'Score') + ' / 100 · ' + String(d.grade || '')) + '</div>' +
-                            '<div class="result-rows" style="margin-top:12px">' + d.lines.map(function(x) { return '<div class="result-row"><span class="rr-name" style="word-break:break-all">' + escapeHTML(String(x)) + '</span></div>'; }).join('') + '</div>';
+                            '<div class="result-rows" style="margin-top:12px">' + lines.map(function(x) { return '<div class="result-row"><span class="rr-name" style="word-break:break-all">' + escapeHTML(String(x)) + '</span></div>'; }).join('') + '</div>';
                         modal.classList.add('active');
                     }, 700);
                 } catch (e) {}
@@ -8744,6 +9039,7 @@ const APP_JS = `
                 }
             }
             async function startDomainCheck() {
+                const __gen = __toolRunGen;
                 const t = i18n[currentLang];
                 const out = document.getElementById('dcOut');
                 const inp = document.getElementById('dcDomain');
@@ -8769,10 +9065,11 @@ const APP_JS = `
                 try {
                     const res = await fetch('/api/domain-check?domain=' + encodeURIComponent(domain) + '&selector=' + encodeURIComponent(selector), { cache: 'no-store', signal: AbortSignal.timeout(20000) });
                     const d = await res.json();
+                    if (__isStaleRun(__gen)) return;
                     if (!res.ok || d.error) throw new Error('failed');
                     renderDomainCheck(d);
                 } catch (e) {
-                    out.innerHTML = '<div class="no-data"><i class="fas fa-exclamation-circle"></i> ' + escapeHTML(t.loadFailed) + '</div>';
+                    if (!__isStaleRun(__gen)) out.innerHTML = '<div class="no-data"><i class="fas fa-exclamation-circle"></i> ' + escapeHTML(t.loadFailed) + '</div>';
                 }
             }
             function renderDomainCheck(d) {
@@ -8872,6 +9169,8 @@ const APP_JS = `
             }
 
             // ==================== 站点监控 ====================
+            // 管理密钥只保存在当前页面内存里（不落 sessionStorage/localStorage），刷新即失效
+            let monKeyMemory = '';
             function monErrHtml(msg) {
                 return '<div class="no-data"><i class="fas fa-exclamation-circle"></i> ' + escapeHTML(msg) + '</div>';
             }
@@ -8879,13 +9178,25 @@ const APP_JS = `
             function monAdminKey() {
                 const el = document.getElementById('monKey');
                 let k = el ? (el.value || '').trim() : '';
-                if (!k) { try { k = sessionStorage.getItem('mon-admin-key') || ''; } catch (e) {} }
+                if (!k) k = monKeyMemory;
                 return k;
             }
             function runMonitorTool() {
                 const t = i18n[currentLang];
                 const body = document.getElementById('toolModalBody');
                 if (!body) return;
+                // 零-KV 部署：站点监控的「配置 / 状态 / 告警日志」必须跨请求持久化，
+                // 没绑定 KV 时直接说明，而不是渲染一个永远 503 的表单。
+                if (!(window.__NETDIAG__ && window.__NETDIAG__.monitorKv)) {
+                    setToolParams('');
+                    setToolActions('');
+                    showResult(null, '<div class="no-data" style="padding:18px 10px;line-height:1.7">' +
+                        '<i class="fas fa-database" style="opacity:.5"></i> ' + escapeHTML(t.monKvMissing) +
+                        '<div class="side-desc" style="margin-top:10px">站点监控需要 KV 保存配置 / 状态 / 告警日志；未绑定 KV 时该工具不可用。' +
+                        '其余工具与本地历史不受影响，也不会产生任何 KV 写入。<br/>Site monitoring needs a KV namespace; without it this tool is disabled. No KV writes are attempted.</div>' +
+                        '</div>');
+                    return;
+                }
                 setToolParams(
                     '<input type="password" id="monKey" class="tool-input" placeholder="' + escapeHTML(t.monKeyPh) + '" autocomplete="off">' +
                     '<span class="side-label">' + escapeHTML(t.monUrlsPh) + '</span>' +
@@ -8908,24 +9219,24 @@ const APP_JS = `
                     primaryAction('monSave', 'fa-floppy-disk', t.monSave) +
                     secondaryAction('monRun', 'fa-play', t.monRun));
                 body.innerHTML = '<div id="monOut"></div>';
-                let savedKey = '';
-                try { savedKey = sessionStorage.getItem('mon-admin-key') || ''; } catch (e) {}
+                // 不再用上次保存的密钥自动发请求：必须由用户显式点「保存/立即检测」
                 const keyEl = document.getElementById('monKey');
-                if (keyEl && savedKey) keyEl.value = savedKey;
+                if (keyEl && monKeyMemory) keyEl.value = monKeyMemory;
                 const saveBtn = document.getElementById('monSave');
                 const runBtn = document.getElementById('monRun');
                 if (saveBtn) saveBtn.addEventListener('click', saveMonitorConfig);
                 if (runBtn) runBtn.addEventListener('click', runMonitorNow);
-                if (savedKey) loadMonitorStatus(savedKey);
             }
             async function loadMonitorStatus(key) {
                 const t = i18n[currentLang];
                 const o = monOutEl();
                 if (!o) return;
+                const __gen = __toolRunGen;
                 o.innerHTML = '<div class="tool-loading"><span class="loading"></span> ' + escapeHTML(t.running) + '</div>';
                 try {
-                    const res = await fetch('/api/monitor', { headers: { 'x-admin-key': key }, cache: 'no-store' });
+                    const res = await fetch('/api/monitor', { headers: { 'x-admin-key': key }, cache: 'no-store', signal: AbortSignal.timeout(15000) });
                     const d = await res.json();
+                    if (__isStaleRun(__gen)) return;
                     if (res.status === 403) { o.innerHTML = monErrHtml(t.monKeyBad); return; }
                     if (!res.ok || d.error) {
                         const msg = d.error === 'key_not_set' ? t.monKeyNeeded : (d.error === 'kv_missing' ? t.monKvMissing : t.loadFailed);
@@ -8933,7 +9244,7 @@ const APP_JS = `
                         return;
                     }
                     renderMonitor(d);
-                } catch (e) { o.innerHTML = monErrHtml(t.loadFailed); }
+                } catch (e) { if (!__isStaleRun(__gen)) o.innerHTML = monErrHtml(t.loadFailed); }
             }
             function renderMonitor(d) {
                 const t = i18n[currentLang];
@@ -8991,7 +9302,7 @@ const APP_JS = `
                 const key = monAdminKey();
                 const o = monOutEl();
                 if (!key) { if (o) o.innerHTML = monErrHtml(t.monKeyNeeded); return; }
-                try { sessionStorage.setItem('mon-admin-key', key); } catch (e) {}
+                monKeyMemory = key; // 仅当前页面内存有效，不落任何 Web Storage
                 const urlsEl = document.getElementById('monUrls');
                 const hookEl = document.getElementById('monHook');
                 const fmtEl = document.getElementById('monFmt');
@@ -9020,9 +9331,11 @@ const APP_JS = `
                     const res = await fetch('/api/monitor', {
                         method: 'POST',
                         headers: { 'content-type': 'application/json', 'x-admin-key': key },
+                        signal: AbortSignal.timeout(15000),
                         body: JSON.stringify({
-                            urls: urls, webhook: webhook, format: format, chatId: chatId,
+                            urls: urls, clear: urls.length === 0, webhook: webhook, format: format, chatId: chatId,
                             failureThreshold: failureThreshold, quietHours: quietHours,
+                            tzOffset: -new Date().getTimezoneOffset() / 60,
                             maintenanceUntil: maintenanceUntil, certCheck: certCheck
                         })
                     });
@@ -9047,16 +9360,18 @@ const APP_JS = `
                 const key = monAdminKey();
                 const o = monOutEl();
                 if (!key) { if (o) o.innerHTML = monErrHtml(t.monKeyNeeded); return; }
+                const __gen = __toolRunGen;
                 if (o) o.innerHTML = '<div class="tool-loading"><span class="loading"></span> ' + escapeHTML(t.running) + '</div>';
                 try {
-                    const res = await fetch('/api/monitor-run', { method: 'POST', headers: { 'x-admin-key': key }, cache: 'no-store' });
+                    const res = await fetch('/api/monitor-run', { method: 'POST', headers: { 'x-admin-key': key }, cache: 'no-store', signal: AbortSignal.timeout(15000) });
                     const d = await res.json();
+                    if (__isStaleRun(__gen)) return;
                     if (res.status === 403) { if (o) o.innerHTML = monErrHtml(t.monKeyBad); return; }
                     if (!res.ok || d.error) {
                         if (o) o.innerHTML = monErrHtml(d.error === 'no_config' ? t.monNoConfig : t.loadFailed);
                         return;
                     }
-                } catch (e) {}
+                } catch (e) { if (__isStaleRun(__gen)) return; }
                 loadMonitorStatus(key);
             }
 
@@ -9067,7 +9382,8 @@ const APP_JS = `
                     await fetch('/api/log-speed', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ avgSpeed: avgSpeed, results: results })
+                        body: JSON.stringify({ avgSpeed: avgSpeed, results: results }),
+                        signal: AbortSignal.timeout(15000)
                     });
                 } catch (e) {}
             }
@@ -9081,21 +9397,30 @@ const APP_JS = `
                 const panel = document.getElementById('usage-stats-panel');
                 if (!panel) return;
                 try {
-                    const res = await fetch('/api/usage-stats');
+                    const res = await fetch('/api/usage-stats', { cache: 'no-store', signal: AbortSignal.timeout(15000) });
                     const stats = await res.json();
-                    let html = '<div class="usage-total">' + (stats.totalRequests || 0).toLocaleString() + '</div>';
-                    html += '<div class="usage-total-label">' + i18n[currentLang].totalRequests + '</div>';
+                    const total = Number.isFinite(Number(stats.totalRequests)) ? Number(stats.totalRequests) : 0;
+                    let html = '<div class="usage-big"><span class="n">' + total.toLocaleString() + '</span><span class="l">' + escapeHTML(i18n[currentLang].totalRequests) + '</span></div>';
                     const endpoints = stats.endpoints || {};
-                    const entries = Object.entries(endpoints).sort((a, b) => b[1] - a[1]).slice(0, 8);
-                    for (const [ep, count] of entries) {
-                        const safeCount = Number.isFinite(Number(count)) ? Number(count) : 0;
-                        html += '<div class="usage-row"><span class="ep">' + escapeHTML(ep) + '</span><span class="count">' + safeCount.toLocaleString() + '</span></div>';
-                    }
-                    if (entries.length === 0) {
-                        html += '<div class="usage-row"><span class="ep" style="color:var(--text-quaternary)">' + i18n[currentLang].waitingFirstReq + '</span></div>';
+                    const entries = Object.entries(endpoints)
+                        .map(function (e) { return [e[0], Number.isFinite(Number(e[1])) ? Number(e[1]) : 0]; })
+                        .sort(function (a, b) { return b[1] - a[1]; })
+                        .slice(0, 8);
+                    const maxCount = entries.length ? entries[0][1] : 0;
+                    if (entries.length) {
+                        html += '<div class="usage-list">';
+                        for (const [ep, count] of entries) {
+                            const pct = maxCount > 0 ? Math.max(2, Math.round((count / maxCount) * 100)) : 0;
+                            html += '<div class="usage-item"><span class="ep" title="' + escapeHTML(ep) + '">' + escapeHTML(ep) + '</span>' +
+                                '<span class="n">' + count.toLocaleString() + '</span>' +
+                                '<span class="bar"><i style="width:' + pct + '%"></i></span></div>';
+                        }
+                        html += '</div>';
+                    } else {
+                        html += '<div class="no-data" style="padding:14px 0"><i class="fas fa-hourglass-start"></i> ' + escapeHTML(i18n[currentLang].waitingFirstReq) + '</div>';
                     }
                     if (!(window.__NETDIAG__ && window.__NETDIAG__.usageBackend === 'kv')) {
-                        html += '<div class="usage-total-label" style="margin-top:6px;opacity:.7">' + i18n[currentLang].usageLocalNote + '</div>';
+                        html += '<div class="hist-block-meta" style="margin-top:12px">' + escapeHTML(i18n[currentLang].usageLocalNote) + '</div>';
                     }
                     panel.innerHTML = html;
                 } catch (e) {
@@ -9104,37 +9429,50 @@ const APP_JS = `
             }
 
             // ==================== 主题切换 ====================
-            const themeToggle = document.getElementById('themeToggle');
-            let currentTheme = 'auto';
-            try { currentTheme = localStorage.getItem('theme') || 'auto'; } catch(e) {}
-            const darkMQ = window.matchMedia('(prefers-color-scheme: dark)');
-            function applyTheme(theme) {
-                const html = document.documentElement;
-                if (theme === 'auto') {
-                    if (darkMQ.matches) html.removeAttribute('data-theme');
-                    else html.setAttribute('data-theme', 'light');
-                    themeToggle.innerHTML = '<i class="fas fa-adjust"></i>';
-                } else if (theme === 'dark') {
-                    html.removeAttribute('data-theme');
-                    themeToggle.innerHTML = '<i class="fas fa-sun"></i>';
-                } else {
-                    html.setAttribute('data-theme', 'light');
-                    themeToggle.innerHTML = '<i class="fas fa-moon"></i>';
+            // 整块容错：themeToggle 可能缺失、旧 Safari 没有 MediaQueryList.addEventListener，
+            // 任何异常都不能让文件末尾的 init() 不执行
+            try {
+                const themeToggle = document.getElementById('themeToggle');
+                let currentTheme = 'auto';
+                try { currentTheme = localStorage.getItem('theme') || 'auto'; } catch(e) {}
+                const darkMQ = (typeof window.matchMedia === 'function') ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+                const setThemeIcon = function (icon) {
+                    if (themeToggle) themeToggle.innerHTML = '<i class="fas ' + icon + '"></i>';
+                };
+                function applyTheme(theme) {
+                    const html = document.documentElement;
+                    if (theme === 'auto') {
+                        if (darkMQ && darkMQ.matches) html.removeAttribute('data-theme');
+                        else html.setAttribute('data-theme', 'light');
+                        setThemeIcon('fa-adjust');
+                    } else if (theme === 'dark') {
+                        html.removeAttribute('data-theme');
+                        setThemeIcon('fa-sun');
+                    } else {
+                        html.setAttribute('data-theme', 'light');
+                        setThemeIcon('fa-moon');
+                    }
+                    try { localStorage.setItem('theme', theme); } catch(e) {}
+                    // 同步 PWA/移动端状态栏颜色
+                    const themeMeta = document.querySelector('meta[name="theme-color"]');
+                    if (themeMeta) themeMeta.setAttribute('content', html.hasAttribute('data-theme') ? '#f4f5f6' : '#0a0b0d');
+                    currentTheme = theme;
                 }
-                try { localStorage.setItem('theme', theme); } catch(e) {}
-                // 同步 PWA/移动端状态栏颜色
-                const themeMeta = document.querySelector('meta[name="theme-color"]');
-                if (themeMeta) themeMeta.setAttribute('content', html.hasAttribute('data-theme') ? '#f4f5f6' : '#0a0b0d');
-                currentTheme = theme;
-            }
-            // 系统主题变化时，若当前为 auto 则实时跟随
-            darkMQ.addEventListener('change', () => { if (currentTheme === 'auto') applyTheme('auto'); });
-            themeToggle.addEventListener('click', () => {
-                if (currentTheme === 'auto') applyTheme('dark');
-                else if (currentTheme === 'dark') applyTheme('light');
-                else applyTheme('auto');
-            });
-            applyTheme(currentTheme);
+                const onSystemThemeChange = function () { if (currentTheme === 'auto') applyTheme('auto'); };
+                // 系统主题变化时，若当前为 auto 则实时跟随（旧 Safari 只有 addListener）
+                if (darkMQ) {
+                    if (darkMQ.addEventListener) darkMQ.addEventListener('change', onSystemThemeChange);
+                    else if (darkMQ.addListener) darkMQ.addListener(onSystemThemeChange);
+                }
+                if (themeToggle) {
+                    themeToggle.addEventListener('click', () => {
+                        if (currentTheme === 'auto') applyTheme('dark');
+                        else if (currentTheme === 'dark') applyTheme('light');
+                        else applyTheme('auto');
+                    });
+                }
+                applyTheme(currentTheme);
+            } catch (e) {}
 
             // ==================== 初始化 ====================
             function init() {
@@ -9148,9 +9486,11 @@ const APP_JS = `
                 updateHardwareInfo();
                 testHttp2();
                 window.addEventListener('resize', resizeCanvas);
-                if (elements.chart && elements.chart.parentElement) {
-                    const observer = new ResizeObserver(() => resizeCanvas());
-                    observer.observe(elements.chart.parentElement);
+                if (elements.chart && elements.chart.parentElement && typeof ResizeObserver === 'function') {
+                    try {
+                        const observer = new ResizeObserver(() => resizeCanvas());
+                        observer.observe(elements.chart.parentElement);
+                    } catch (e) {}
                 }
                 resizeCanvas();
                 getIP('v4');
@@ -9229,7 +9569,7 @@ const APP_JS = `
         })();
     `;
 
-const ASSET_VER = '5.1.0-' + fnv1aHash(APP_CSS + APP_JS);
+const ASSET_VER = '5.1.1-' + fnv1aHash(APP_CSS + APP_JS);
 
 // ==================== 主请求处理 ====================
 async function handleRequest(event) {
@@ -9240,33 +9580,21 @@ async function handleRequest(event) {
   const clientIp = request.headers.get('cf-connecting-ip') || 'unknown';
   const siteCfg = getSiteConfig();
   
-  // 限流前置：OPTIONS 预检与已停用端点同样消耗 Worker 请求额度，不能绕过限流
-  // （跳过静态资源；/health 使用独立配额，RTT/丢包轮询不挤占工具请求额度）
-  const rateLimitExempt = url.pathname.startsWith('/static/') || UNLIMITED_PATHS.has(url.pathname);
-  if (!rateLimitExempt) {
+  // 预检成本极低且浏览器会复用（access-control-max-age），必须在限流之前放行：
+  // 超限时返回的 429 不带 CORS 头，前端会把 CORS 错误误判成网络故障。
+  if (request.method === 'OPTIONS') {
+    return handleOptions(request);
+  }
+
+  // 限流：已停用端点同样消耗 Worker 请求额度，不能绕过；/static/ 不再豁免（它只会返回 410）。
+  // 静态资源走独立宽松配额（STATIC_RATE_MAX）而不是完全豁免，避免成为不计数的入口。
+  if (UNLIMITED_PATHS.has(url.pathname)) {
+    if (isRateLimited(clientIp, STATIC_RATE_MAX, 60000, staticRateLimit)) return tooManyRequests(request, 60);
+  } else {
     const limited = url.pathname === '/health'
       ? isRateLimited(clientIp, HEALTH_RATE_MAX, 60000, healthRateLimit)
       : isRateLimited(clientIp);
-    if (limited) {
-      obs.status429 += 1;
-      return new Response(JSON.stringify({
-        error: 'Too Many Requests',
-        message: '请稍后再试 / Please try again later'
-      }), {
-        status: 429,
-        headers: {
-          'content-type': 'application/json',
-          'retry-after': '60',
-          ...corsHeaders(request),
-          ...SECURITY_HEADERS
-        }
-      });
-    }
-  }
-
-  // 处理 OPTIONS 预检请求
-  if (request.method === 'OPTIONS') {
-    return handleOptions(request);
+    if (limited) return tooManyRequests(request, 60);
   }
   
   // SITE_CONFIG 配置停用的端点：403（先于令牌校验与用量统计；限流已在上方执行）
@@ -9293,19 +9621,46 @@ async function handleRequest(event) {
     });
   }
 
+  // 只读端点方法校验（GET/HEAD 之外一律 405）
+  if (READ_ONLY_ENDPOINTS.has(url.pathname)) {
+    const methodError = requireReadMethod(request);
+    if (methodError) return methodError;
+  }
+
   // 自动用量记录（仅统计白名单端点；内存聚合 + 定时落盘，刻意限制 KV 写入频率）
   if (COUNTED_ENDPOINTS.has(url.pathname)) {
     event.waitUntil(recordUsage(url.pathname));
   }
   
   // ==================== 页面令牌续期端点（无状态令牌过期后前端静默换取，避免整页刷新） ====================
+  // 过去该端点匿名无限签发，等于给「令牌门禁」开了后门：任何脚本两步即可拿到有效令牌。
+  // 现在要求同源浏览器上下文（Fetch Metadata / Origin / Referer）+ 独立签发配额，并禁止 GET/HEAD 以外方法。
   if (url.pathname === '/api/page-token') {
+    if (request.method !== 'GET' && request.method !== 'HEAD') {
+      obs.status405 += 1;
+      return new Response(JSON.stringify({ error: 'method_not_allowed' }), {
+        status: 405,
+        headers: { 'content-type': 'application/json', 'allow': 'GET, HEAD', 'cache-control': 'no-store', ...SECURITY_HEADERS }
+      });
+    }
+    if (!isSameOriginRequestContext(request, url)) {
+      obs.status403 += 1;
+      return new Response(JSON.stringify({
+        error: 'forbidden',
+        message: 'Token issuance requires a same-origin browser context'
+      }), {
+        status: 403,
+        headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...SECURITY_HEADERS }
+      });
+    }
+    if (isRateLimited(clientIp, TOKEN_RATE_MAX, 60000, tokenRateLimit)) return tooManyRequests(request, 60);
     const newToken = await issuePageToken();
-    return new Response(JSON.stringify({ ok: true, token: newToken, expiresIn: Math.floor(PAGE_TOKEN_TTL_MS / 1000) }), {
+    // 令牌只通过 HttpOnly Cookie 下发，响应体不再回传明文令牌。
+    return new Response(JSON.stringify({ ok: true, expiresIn: Math.floor(PAGE_TOKEN_TTL_MS / 1000) }), {
       headers: {
         'content-type': 'application/json',
         'cache-control': 'no-store',
-        'set-cookie': '__ns_t=' + newToken + '; HttpOnly; SameSite=Strict; Path=/; Max-Age=3600' + (url.protocol === 'https:' ? '; Secure' : ''),
+        'set-cookie': pageTokenCookie(newToken, url.protocol === 'https:'),
         ...SECURITY_HEADERS
       }
     });
@@ -9315,38 +9670,11 @@ async function handleRequest(event) {
   if (url.pathname === '/health') {
     // 会话令牌校验：/health 被 RTT 轮询高频调用，未持有主页面签发令牌的客户端一律 403（防爬虫/扫描器）
     if (!(await isSameOriginNavigation(request))) return forbiddenResponse(request);
+    // 只返回存活信息：版本号、限流键数、KV 写预算、监控最近结果都属于运维信息，
+    // 统一走 /metrics（需 metricsKey）；原实现把它们暴露给任何持令牌的访客。
     return new Response(JSON.stringify({
       status: 'ok',
-      timestamp: Date.now(),
-      version: '5.1.0',
-      storage: { usageBackend: USAGE_BACKEND, speedHistoryKv: SPEED_HISTORY_KV_ENABLED },
-      kvWrite: {
-        today: kvWriteStats.dayCount,
-        blocked: kvWriteStats.blocked,
-        failed: kvWriteStats.failed,
-        budgetPerDay: KV_WRITE_MAX_PER_DAY,
-        budgetPerMin: KV_WRITE_MAX_PER_MIN,
-        note: 'per-isolate counters; writes beyond budget are dropped by design'
-      },
-      site: {
-        siteName: siteCfg.siteName,
-        defaultLang: siteCfg.defaultLang || null,
-        disabledTools: siteCfg.disabledTools.length,
-        disabledEndpoints: siteCfg.disabledEndpoints.length,
-        offline: siteCfg.offline
-      },
-      metrics: {
-        uptimeMs: Date.now() - obs.startedAt,
-        requestsTotal: liveUsage.totalRequests,
-        status403: obs.status403,
-        status429: obs.status429,
-        errors500: obs.errors500,
-        disabledByConfig: obs.disabledByConfig,
-        rateLimitKeys: { default: rateLimit.size, health: healthRateLimit.size, largeDl: largeDlRateLimit.size },
-        kvWrites: { attempts: obs.kv.attempts, success: obs.kv.success, blocked: obs.kv.blocked, failed: obs.kv.failed },
-        monitor: obs.monitor
-      },
-      note: 'Cloudflare Workers are stateless; per-request context only'
+      timestamp: Date.now()
     }), {
       headers: {
         'content-type': 'application/json',
@@ -9360,13 +9688,16 @@ async function handleRequest(event) {
   if (url.pathname === '/metrics') {
     const metricsKey = siteCfg.metricsKey || ((typeof MONITOR_ADMIN_KEY !== 'undefined' && MONITOR_ADMIN_KEY) ? String(MONITOR_ADMIN_KEY) : '');
     const reqKey = request.headers.get('x-metrics-key') || request.headers.get('x-admin-key') || '';
+    if (adminAuthBlocked(clientIp)) return tooManyRequests(request, 600);
     if (!metricsKey || !timingSafeEqualString(reqKey, metricsKey)) {
+      noteAdminAuthFailure(clientIp);
       obs.status403 += 1;
       return new Response(JSON.stringify({ error: 'forbidden' }), {
         status: 403,
         headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...SECURITY_HEADERS }
       });
     }
+    clearAdminAuthFailures(clientIp);
     const lines = [
       '# HELP netsight_uptime_seconds Worker isolate uptime',
       '# TYPE netsight_uptime_seconds gauge',
@@ -9383,26 +9714,14 @@ async function handleRequest(event) {
       '# HELP netsight_errors_500_total unhandled errors',
       '# TYPE netsight_errors_500_total counter',
       'netsight_errors_500_total ' + obs.errors500,
-      '# HELP netsight_kv_writes_total KV write attempts',
-      '# TYPE netsight_kv_writes_total counter',
-      'netsight_kv_writes_total ' + obs.kv.attempts,
-      '# HELP netsight_kv_writes_blocked_total KV writes blocked by budget',
-      '# TYPE netsight_kv_writes_blocked_total counter',
-      'netsight_kv_writes_blocked_total ' + obs.kv.blocked,
-      '# HELP netsight_kv_writes_failed_total KV write failures',
-      '# TYPE netsight_kv_writes_failed_total counter',
-      'netsight_kv_writes_failed_total ' + obs.kv.failed,
       '# HELP netsight_rate_limit_keys Rate limit map entries',
       '# TYPE netsight_rate_limit_keys gauge',
       'netsight_rate_limit_keys{store="default"} ' + rateLimit.size,
       'netsight_rate_limit_keys{store="health"} ' + healthRateLimit.size,
       'netsight_rate_limit_keys{store="large_dl"} ' + largeDlRateLimit.size,
-      '# HELP netsight_monitor_last_run_seconds Last monitor run duration seconds',
-      '# TYPE netsight_monitor_last_run_seconds gauge',
-      'netsight_monitor_last_run_seconds ' + Math.round((obs.monitor.lastDurationMs || 0) / 1000),
-      '# HELP netsight_monitor_last_notified Last monitor run notifications succeeded',
-      '# TYPE netsight_monitor_last_notified gauge',
-      'netsight_monitor_last_notified ' + (obs.monitor.lastNotified || 0),
+      '# HELP netsight_page_token_stateless 1 when PAGE_TOKEN_SECRET is set (tokens valid across isolates)',
+      '# TYPE netsight_page_token_stateless gauge',
+      'netsight_page_token_stateless ' + (getPageTokenSecret() ? 1 : 0),
       ''
     ];
     return new Response(lines.join('\n'), {
@@ -9470,58 +9789,31 @@ async function handleRequest(event) {
     });
   }
   
-  // ==================== 静态资源缓存 ====================
-  if (url.pathname.startsWith('/static/')) {
-    const cacheKey = new Request(url.toString(), { method: 'GET' });
-    const cachedResponse = await cache.match(cacheKey);
-    if ((request.method === 'GET' || request.method === 'HEAD') && cachedResponse) return cachedResponse;
-    
-    let contentType = 'text/plain';
-    if (url.pathname.endsWith('.css')) contentType = 'text/css';
-    else if (url.pathname.endsWith('.js')) contentType = 'application/javascript';
-    else if (url.pathname.endsWith('.png')) contentType = 'image/png';
-    else if (url.pathname.endsWith('.jpg') || url.pathname.endsWith('.jpeg')) contentType = 'image/jpeg';
-    else if (url.pathname.endsWith('.svg')) contentType = 'image/svg+xml';
-    
-    if (typeof CACHE_KV !== 'undefined' && CACHE_KV) {
-      const kvValue = await CACHE_KV.get(url.pathname);
-      if (kvValue) {
-        const response = new Response(kvValue, {
-          headers: {
-            'content-type': contentType,
-            'cache-control': 'public, max-age=86400',
-            'cdn-cache-control': 'public, max-age=604800',
-            ...SECURITY_HEADERS
-          }
-        });
-        if (request.method === 'GET') event.waitUntil(cache.put(cacheKey, response.clone()));
-        return response;
-      }
-    }
-    
-    return new Response('Not Found', { status: 404 });
-  }
+  // ==================== 静态资源缓存（已下线） ====================
+  // /static/ 前缀在 DISABLED_PATH_PREFIXES 中已被前置短路为 410，这里的 KV + Cache 实现不可能被执行。
+  // 原实现保留会让人误以为「只删一个常量就能恢复」，故整体移除（减少攻击面与包体）。
   
   // ==================== 速度测试端点 ====================
   if (url.pathname === '/speedtest') {
     if (!(await isSameOriginNavigation(request))) return forbiddenResponse(request);
-    const size = clampInt(url.searchParams.get('size'), 102400, 1, 67108864);
+    if (request.method !== 'GET' && request.method !== 'HEAD') {
+      obs.status405 += 1;
+      return new Response(JSON.stringify({ error: 'method_not_allowed' }), {
+        status: 405,
+        headers: { 'content-type': 'application/json', 'allow': 'GET, HEAD', ...corsHeaders(request), ...SECURITY_HEADERS }
+      });
+    }
+    // 上限由 64MB 降到 25MB：单 IP 30 次/分 × 64MB = 1.9GB/分 的放大面过大
+    const size = clampInt(url.searchParams.get('size'), 102400, 1, 26214400);
     if (size > 2097152) {
       // 大响应（缓冲膨胀/长时测速用）：独立配额防放大；流式生成，内存恒定
-      if (isRateLimited(clientIp, LARGE_DL_MAX, 60000, largeDlRateLimit)) {
-        return new Response(JSON.stringify({
-          error: 'Too Many Requests',
-          message: '请稍后再试 / Please try again later'
-        }), {
-          status: 429,
-          headers: { 'content-type': 'application/json', 'retry-after': '60', ...corsHeaders(request), ...SECURITY_HEADERS }
-        });
-      }
+      if (isRateLimited(clientIp, LARGE_DL_MAX, 60000, largeDlRateLimit)) return tooManyRequests(request, 60);
       const CHUNK = 262144;
       let sent = 0;
+      const deadline = Date.now() + 30000; // 慢读者保护：30s 后主动结束，避免长事务长期占住并发
       const stream = new ReadableStream({
         pull(controller) {
-          if (sent >= size) { controller.close(); return; }
+          if (sent >= size || Date.now() > deadline) { controller.close(); return; }
           const n = Math.min(CHUNK, size - sent);
           const chunk = new Uint8Array(n);
           chunk.set(getRandomTemplate().subarray(0, n));
@@ -9537,7 +9829,12 @@ async function handleRequest(event) {
         }
       });
     }
-    const data = fillRandom(new Uint8Array(size));
+    // 小响应同样复用随机模板，避免每请求最多 2MB 的 CSPRNG 开销（原实现正好把最贵的路径留在了 ≤2MB 一侧）
+    const data = new Uint8Array(size);
+    const tpl = getRandomTemplate();
+    for (let off = 0; off < size; off += tpl.length) {
+      data.set(tpl.subarray(0, Math.min(tpl.length, size - off)), off);
+    }
     return new Response(data, {
       headers: {
         'content-type': 'application/octet-stream',
@@ -9551,12 +9848,7 @@ async function handleRequest(event) {
   if (url.pathname === '/upload-test' && request.method === 'POST') {
     if (!(await isSameOriginNavigation(request))) return forbiddenResponse(request);
     // 大 body 端点与 /speedtest 共享独立配额，防止上传流量绕过预算
-    if (isRateLimited(clientIp, LARGE_DL_MAX, 60000, largeDlRateLimit)) {
-      return new Response(JSON.stringify({ error: 'Too Many Requests', message: '请稍后再试 / Please try again later' }), {
-        status: 429,
-        headers: { 'content-type': 'application/json', 'retry-after': '60', ...corsHeaders(request), ...SECURITY_HEADERS }
-      });
-    }
+    if (isRateLimited(clientIp, LARGE_DL_MAX, 60000, largeDlRateLimit)) return tooManyRequests(request, 60);
     const contentLength = Number.parseInt(request.headers.get('content-length') || '', 10);
     const MAX_UPLOAD = 33554432;
     const tooLargeResponse = () => new Response(JSON.stringify({ error: 'Payload too large', max: '32MB' }), {
@@ -9620,17 +9912,32 @@ async function handleRequest(event) {
       if (oldestCpu !== undefined) cpuRateLimit.delete(oldestCpu);
     }
 
-    const iterations = clampInt(url.searchParams.get('n'), 20000, 1, 20000);
-    const start = performance.now();
+    // 自校准基准测试：Workers 的 performance.now() 分辨率可能被钳制，
+    // 固定 20000 次循环经常测出 0ms —— 原实现在 duration=0 时把 ops/ms 直接填成 iterations（=20000），
+    // 界面上就会出现一个"看起来很正常"的假数值（而且恰好是迭代次数）。这里按时间预算累加，直到可测量为止。
+    const WARMUP = 5000;          // 预热 JIT，避免把编译时间算进吞吐
+    const CHUNK = 5000;
+    const BUDGET_MS = 3;          // 测到这个时长即可停
+    const MIN_MEASURED = 20000;   // 但样本量不得低于 2 万次：否则计时分辨率 1ms 时相对误差过大
+    const MAX_MEASURED = 120000;  // 兜底上限：极慢设备也不会无休止循环
     let result = 0;
-    for (let i = 0; i < iterations; i++) {
-      result += Math.sqrt(i) * Math.sin(i);
-    }
-    const duration = Math.round((performance.now() - start) * 100) / 100;
+    for (let i = 0; i < WARMUP; i++) result += Math.sqrt(i) * Math.sin(i);
+    let measured = 0;
+    const start = performance.now();
+    let elapsed = 0;
+    do {
+      for (let i = 0; i < CHUNK; i++) result += Math.sqrt(i) * Math.sin(i);
+      measured += CHUNK;
+      elapsed = performance.now() - start;
+    } while ((elapsed < BUDGET_MS || measured < MIN_MEASURED) && measured < MAX_MEASURED);
+    const duration = Math.round(elapsed * 100) / 100;
+    const measurable = duration > 0;
     return new Response(JSON.stringify({
       duration: duration,
-      iterations: iterations,
-      opsMs: duration > 0 ? Math.round(iterations / duration * 100) / 100 : iterations,
+      iterations: measured,
+      warmup: WARMUP,
+      opsMs: measurable ? Math.round(measured / duration * 100) / 100 : null,
+      resolutionLimited: !measurable,
       result: Number.isFinite(result) ? result.toFixed(2) : '0'
     }), {
       headers: {
@@ -9642,10 +9949,10 @@ async function handleRequest(event) {
   }
   
   // ==================== 多节点对比探测端点（跨域 CORS，供其它 NetSight 部署节点互测延迟） ====================
-  // 其它工具端点均有「页面会话令牌」校验，跨域调用会被 403；该端点响应极小（~60B）、
-  // 不设令牌要求，仅暴露版本与时间，且受默认 60 次/分/IP 限流约束。
+  // 其它工具端点均有「页面会话令牌」校验，跨域调用会被 403；该端点响应极小，不设令牌要求，
+  // 受默认 60 次/分/IP 限流约束。不再暴露精确版本号（免费的指纹与存活探测信号）。
   if (url.pathname === '/node-ping') {
-    return new Response(JSON.stringify({ ok: true, version: '5.1.0', time: Date.now() }), {
+    return new Response(JSON.stringify({ ok: true, time: Date.now() }), {
       headers: {
         'content-type': 'application/json',
         'cache-control': 'no-store',
@@ -9655,62 +9962,10 @@ async function handleRequest(event) {
     });
   }
   
-  // ==================== DNS 代理测试端点 ====================
-  if (url.pathname === '/dns-proxy') {
-    if (!(await isSameOriginNavigation(request))) return forbiddenResponse(request);
-    const targetUrl = url.searchParams.get('url');
-    if (!targetUrl) {
-      return new Response(JSON.stringify({ error: 'missing url' }), {
-        status: 400,
-        headers: { 'content-type': 'application/json', ...corsHeaders(request), ...SECURITY_HEADERS }
-      });
-    }
-    
-    let parsedTarget;
-    try { parsedTarget = new URL(targetUrl); } catch (e) {
-      return new Response(JSON.stringify({ error: 'invalid url' }), {
-        status: 400,
-        headers: { 'content-type': 'application/json', ...corsHeaders(request), ...SECURITY_HEADERS }
-      });
-    }
-    const hostname = parsedTarget.hostname;
-    if (!['http:', 'https:'].includes(parsedTarget.protocol)) {
-      return new Response(JSON.stringify({ error: 'invalid scheme' }), {
-        status: 400,
-        headers: { 'content-type': 'application/json', ...corsHeaders(request), ...SECURITY_HEADERS }
-      });
-    }
-    if (!isAllowedTargetPort(parsedTarget)) {
-      return new Response(JSON.stringify({ error: 'forbidden port' }), {
-        status: 403,
-        headers: { 'content-type': 'application/json', ...corsHeaders(request), ...SECURITY_HEADERS }
-      });
-    }
-    
-    const allowed = ['cloudflare.com', 'google.com', 'github.com'];
-    if (!allowed.some(d => hostname === d || hostname.endsWith('.' + d))) {
-      return new Response(JSON.stringify({ error: 'forbidden domain' }), {
-        status: 403,
-        headers: { 'content-type': 'application/json', ...corsHeaders(request), ...SECURITY_HEADERS }
-      });
-    }
-    
-    const start = Date.now();
-    let status = null;
-    try {
-      const res = await fetch(parsedTarget.href, { method: 'HEAD', redirect: 'manual', signal: AbortSignal.timeout(5000) });
-      status = res.status;
-    } catch (e) {
-      const time = Date.now() - start;
-      return new Response(JSON.stringify({ time, status: null, error: 'fetch failed' }), {
-        headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...corsHeaders(request), ...SECURITY_HEADERS }
-      });
-    }
-    const time = Date.now() - start;
-    return new Response(JSON.stringify({ time, status }), {
-      headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...corsHeaders(request), ...SECURITY_HEADERS }
-    });
-  }
+  // ==================== DNS 代理测试端点（已下线） ====================
+  // /dns-proxy 位于 DISABLED_ENDPOINTS，前置短路返回 410，此实现不可达。
+  // 该实现只有字符串后缀白名单、没有 DNS 解析校验，恢复时极易变成 DNS 重绑定 SSRF，
+  // 因此整体移除（而不是留一段「删个常量就能上线」的危险代码）。
   
   // ==================== DNS 工具箱端点（DoH 查询 + 黑名单检测） ====================
   if (url.pathname === '/api/dns-lookup') {
@@ -9809,6 +10064,9 @@ async function handleRequest(event) {
   // ==================== DNS 多解析器对比端点 ====================
   if (url.pathname === '/api/dns-compare') {
     if (!(await isSameOriginNavigation(request))) return forbiddenResponse(request);
+    // 单请求 6 次出站 DoH：独立配额 + 浏览器上下文，避免被脚本当作 DNS 放大器
+    if (!isSameOriginRequestContext(request, url)) return forbiddenResponse(request);
+    if (isRateLimited(clientIp, DNS_TOOL_RATE_MAX, 60000, dnsToolRateLimit)) return tooManyRequests(request, 60);
     const cmpJson = (data, status = 200) => new Response(JSON.stringify(data), {
       status: status,
       headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...corsHeaders(request), ...SECURITY_HEADERS }
@@ -9864,6 +10122,9 @@ async function handleRequest(event) {
   // ==================== 域名安全体检端点（MX/SPF/DMARC/DKIM + 声誉） ====================
   if (url.pathname === '/api/domain-check') {
     if (!(await isSameOriginNavigation(request))) return forbiddenResponse(request);
+    // 单请求最多 12 次出站 DoH：独立配额 + 浏览器上下文
+    if (!isSameOriginRequestContext(request, url)) return forbiddenResponse(request);
+    if (isRateLimited(clientIp, DNS_TOOL_RATE_MAX, 60000, dnsToolRateLimit)) return tooManyRequests(request, 60);
     const jsonOut = (data, status = 200) => new Response(JSON.stringify(data), {
       status: status,
       headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...corsHeaders(request), ...SECURITY_HEADERS }
@@ -9999,96 +10260,15 @@ async function handleRequest(event) {
     return jsonOut(payload);
   }
 
-  // ==================== 站点监控端点（配置 / 状态 / 立即巡检） ====================
+  // ==================== 站点监控端点（无 KV 构建已移除） ====================
   if (url.pathname === '/api/monitor' || url.pathname === '/api/monitor-run') {
-    if (!(await isSameOriginNavigation(request))) return forbiddenResponse(request);
-    const jsonOut = (data, status = 200) => new Response(JSON.stringify(data), {
-      status: status,
+    return new Response(JSON.stringify({
+      error: 'monitor_removed',
+      message: 'This build ships without KV storage; site monitoring is unavailable.'
+    }), {
+      status: 410,
       headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...corsHeaders(request), ...SECURITY_HEADERS }
     });
-    const kv = monitorKv();
-    if (!kv) return jsonOut({ error: 'kv_missing' }, 503);
-    const adminKey = (typeof MONITOR_ADMIN_KEY !== 'undefined' && MONITOR_ADMIN_KEY) ? String(MONITOR_ADMIN_KEY) : '';
-    if (!adminKey) return jsonOut({ error: 'key_not_set' }, 503);
-    // 管理密钥只走请求头：放 URL query 会泄漏到访问日志/浏览器历史/Referer
-    const reqKey = request.headers.get('x-admin-key') || '';
-    if (!timingSafeEqualString(reqKey, adminKey)) return jsonOut({ error: 'bad_key' }, 403);
-    if (url.pathname === '/api/monitor' && request.method === 'GET') {
-      let config = null, state = {}, log = [];
-      try { const raw = await kv.get('monitor:config'); if (raw) config = JSON.parse(raw); } catch (e) {}
-      try { const raw = await kv.get('monitor:state'); if (raw) state = JSON.parse(raw); } catch (e) {}
-      if (!state || typeof state !== 'object' || Array.isArray(state)) state = {};
-      try { const raw = await kv.get('monitor:log'); if (raw) log = JSON.parse(raw); } catch (e) {}
-      if (!Array.isArray(log)) log = [];
-      return jsonOut({ ok: true, config: config, state: state, log: log });
-    }
-    if (url.pathname === '/api/monitor' && request.method === 'POST') {
-      let body = null;
-      try {
-        const rawBody = await readTextCapped(request, 65536);
-        body = rawBody ? JSON.parse(rawBody) : null;
-      } catch (e) {}
-      if (!body || typeof body !== 'object') return jsonOut({ error: 'bad_body' }, 400);
-      const urlsIn = Array.isArray(body.urls) ? body.urls : [];
-      if (urlsIn.length > 10) return jsonOut({ error: 'too_many_urls' }, 400);
-      const urls = [];
-      for (const u of urlsIn) {
-        const raw = (u && typeof u === 'object') ? u : { url: String(u || '') };
-        const s = String(raw.url || '').trim();
-        const label = String(raw.label || '').trim().slice(0, 60);
-        if (!s) continue;
-        if (s.length > 300) return jsonOut({ error: 'bad_url', detail: s.slice(0, 120) }, 400);
-        let ok = false, portBlocked = false;
-        try {
-          const p = new URL(s);
-          const schemeOk = (p.protocol === 'http:' || p.protocol === 'https:');
-          const hostOk = schemeOk && p.hostname.includes('.') && !isPrivateHost(p.hostname);
-          const portOk = isAllowedTargetPort(p);
-          ok = hostOk && portOk;
-          portBlocked = hostOk && !portOk;
-        } catch (e) {}
-        if (!ok) return jsonOut({ error: portBlocked ? 'bad_port' : 'bad_url', detail: s.slice(0, 120) }, 400);
-        urls.push({ url: s, label: label });
-      }
-      const webhook = String(body.webhook || '').trim().slice(0, 500);
-      if (webhook) {
-        let ok = false, portBlocked = false;
-        try {
-          const p = new URL(webhook);
-          // Webhook SSRF 防护：拒绝内网/本机主机；端口只放行 80/443
-          const schemeOk = (p.protocol === 'https:' || p.protocol === 'http:');
-          const hostOk = schemeOk && !isPrivateHost(p.hostname);
-          const portOk = isAllowedTargetPort(p);
-          ok = hostOk && portOk;
-          portBlocked = hostOk && !portOk;
-        } catch (e) {}
-        if (!ok) return jsonOut({ error: portBlocked ? 'bad_port' : 'bad_webhook' }, 400);
-      }
-      const allowedFormats = ['generic', 'dingtalk', 'feishu', 'wecom', 'slack', 'discord', 'telegram', 'ntfy'];
-      const format = allowedFormats.includes(body.format) ? body.format : 'generic';
-      const chatId = String(body.chatId || '').trim().slice(0, 64);
-      const failureThreshold = Math.min(5, Math.max(1, Number(body.failureThreshold) || 1));
-      const quietHours = String(body.quietHours || '').trim().slice(0, 11);
-      if (quietHours && !/^([01]\d|2[0-3]):([0-5]\d)-([01]\d|2[0-3]):([0-5]\d)$/.test(quietHours)) return jsonOut({ error: 'bad_quiet_hours' }, 400);
-      const maintenanceUntil = Number(body.maintenanceUntil) > Date.now() ? Number(body.maintenanceUntil) : 0;
-      const certCheck = body.certCheck !== false;
-      // 保存配置：跳过同键去抖（用户可能连续保存），但仍受分钟/每日写入预算约束
-      const configSaved = await kvPut(kv, 'monitor:config', JSON.stringify({
-        urls: urls, webhook: webhook, format: format, chatId: chatId,
-        failureThreshold: failureThreshold, quietHours: quietHours,
-        maintenanceUntil: maintenanceUntil, certCheck: certCheck, updatedAt: Date.now()
-      }), undefined, { skipDebounce: true });
-      if (!configSaved) return jsonOut({ error: 'write_budget_exceeded' }, 503);
-      return jsonOut({ ok: true, urls: urls, webhook: webhook, format: format, chatId: chatId, failureThreshold: failureThreshold, quietHours: quietHours, maintenanceUntil: maintenanceUntil, certCheck: certCheck });
-    }
-    if (url.pathname === '/api/monitor-run' && request.method === 'POST') {
-      let cfg = null;
-      try { const raw = await kv.get('monitor:config'); if (raw) cfg = JSON.parse(raw); } catch (e) {}
-      if (!cfg || typeof cfg !== 'object' || Array.isArray(cfg) || !Array.isArray(cfg.urls) || cfg.urls.length === 0) return jsonOut({ error: 'no_config' }, 400);
-      const result = await handleMonitorCheck();
-      return jsonOut({ ok: true, result: result });
-    }
-    return jsonOut({ error: 'method_not_allowed' }, 405);
   }
   
   // ==================== 管理面板 API（只读概览，需 x-admin-key） ====================
@@ -10102,24 +10282,18 @@ async function handleRequest(event) {
         headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...corsHeaders(request), ...SECURITY_HEADERS }
       });
     }
-    if (!timingSafeEqualString(reqKey, adminKey)) return forbiddenResponse(request);
-    const kv = monitorKv();
-    let config = null, state = {}, log = [];
-    if (kv) {
-      try { const raw = await kv.get('monitor:config'); if (raw) config = JSON.parse(raw); } catch (e) {}
-      try { const raw = await kv.get('monitor:state'); if (raw) state = JSON.parse(raw); } catch (e) {}
-      try { const raw = await kv.get('monitor:log'); if (raw) log = JSON.parse(raw); } catch (e) {}
+    if (adminAuthBlocked(clientIp)) return tooManyRequests(request, 600);
+    if (!timingSafeEqualString(reqKey, adminKey)) {
+      noteAdminAuthFailure(clientIp);
+      return forbiddenResponse(request);
     }
-    if (!state || typeof state !== 'object' || Array.isArray(state)) state = {};
-    if (!Array.isArray(log)) log = [];
+    clearAdminAuthFailures(clientIp);
     return new Response(JSON.stringify({
       ok: true,
-      version: '5.1.0',
+      version: '5.1.1',
       site: { siteName: siteCfg.siteName, defaultLang: siteCfg.defaultLang || null, offline: siteCfg.offline, disabledTools: siteCfg.disabledTools, disabledEndpoints: siteCfg.disabledEndpoints },
-      config: config, state: state, log: log.slice(0, 20),
       usage: liveUsage,
       obs: obs,
-      kvWrite: { today: kvWriteStats.dayCount, blocked: kvWriteStats.blocked, failed: kvWriteStats.failed, budgetPerDay: KV_WRITE_MAX_PER_DAY, budgetPerMin: KV_WRITE_MAX_PER_MIN }
     }), {
       headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...corsHeaders(request), ...SECURITY_HEADERS }
     });
@@ -10128,6 +10302,10 @@ async function handleRequest(event) {
   // ==================== 站点体检端点（HTTP 安全头审计） ====================
   if (url.pathname === '/api/site-audit') {
     if (!(await isSameOriginNavigation(request))) return forbiddenResponse(request);
+    // 该端点本质是「任意公网 GET 代理」：必须要求浏览器上下文 + 独立严格配额，
+    // 否则任何脚本都能把它当作低成本反射面（1 入站 → 最多 6 次出站到任意第三方）。
+    if (!isSameOriginRequestContext(request, url)) return forbiddenResponse(request);
+    if (isRateLimited(clientIp, AUDIT_RATE_MAX, 60000, auditRateLimit)) return tooManyRequests(request, 60);
     const target = url.searchParams.get('url') || '';
     let parsed;
     try { parsed = new URL(target); } catch (e) {
@@ -10136,21 +10314,21 @@ async function handleRequest(event) {
         headers: { 'content-type': 'application/json', ...corsHeaders(request), ...SECURITY_HEADERS }
       });
     }
-    if (!['http:', 'https:'].includes(parsed.protocol) || !isAllowedTargetPort(parsed) || isPrivateHost(parsed.hostname) || !(await resolvesToPublicOnly(parsed.hostname))) {
+    if (!['http:', 'https:'].includes(parsed.protocol) || !isAllowedTargetPort(parsed) || isPrivateHost(parsed.hostname) || !(await resolvesToPublicOnly(parsed.hostname, true))) {
       return new Response(JSON.stringify({ error: 'forbidden target' }), {
         status: 403,
         headers: { 'content-type': 'application/json', ...corsHeaders(request), ...SECURITY_HEADERS }
       });
     }
     const auditStart = Date.now();
-    const AUDIT_DEADLINE_MS = 25000;
+    const AUDIT_DEADLINE_MS = 10000;
     let current = parsed.href;
     let resp = null;
     let ttfb = 0;
     let redirectCount = 0;
     try {
-      for (let hop = 0; hop < 6; hop++) {
-        // 总 deadline：6 跳 × (逐跳 DoH + 8s fetch) 最坏可达 ~84s，超过客户端/平台耐心上限
+      for (let hop = 0; hop < 3; hop++) {
+        // 总 deadline：3 跳 × (逐跳 DoH + 8s fetch) 仍可能超过客户端耐心上限
         if (Date.now() - auditStart > AUDIT_DEADLINE_MS) break;
         const t0 = Date.now();
         resp = await fetch(current, {
@@ -10161,10 +10339,10 @@ async function handleRequest(event) {
         });
         if (hop === 0) ttfb = Date.now() - t0;
         const loc = resp.headers.get('location');
-        if (resp.status >= 300 && resp.status < 400 && loc && hop < 5) {
+        if (resp.status >= 300 && resp.status < 400 && loc && hop < 2) {
           let next;
           try { next = new URL(loc, current); } catch (e) { break; }
-          if (!['http:', 'https:'].includes(next.protocol) || !isAllowedTargetPort(next) || isPrivateHost(next.hostname) || !(await resolvesToPublicOnly(next.hostname))) break;
+          if (!['http:', 'https:'].includes(next.protocol) || !isAllowedTargetPort(next) || isPrivateHost(next.hostname) || !(await resolvesToPublicOnly(next.hostname, true))) break;
           current = next.href;
           redirectCount++;
           // 不消费 3xx 响应体：显式取消，避免连接/缓冲被占用
@@ -10458,62 +10636,28 @@ async function handleRequest(event) {
     });
   }
   
-  // ==================== 多文件并发下载测试 ====================
-  if (url.pathname === '/concurrent-test') {
-    if (!(await isSameOriginNavigation(request))) return forbiddenResponse(request);
-    const count = clampInt(url.searchParams.get('count'), 4, 1, 16);
-    const size = clampInt(url.searchParams.get('size'), 1024, 1, 65536);
-    
-    const limit = pLimit(4);
-    const promises = [];
-    
-    for (let i = 0; i < count; i++) {
-      promises.push(
-        limit(async () => {
-          const start = Date.now();
-          const data = fillRandom(new Uint8Array(size));
-          await new Promise(resolve => setTimeout(resolve, 0));
-          return {
-            index: i,
-            size: size,
-            duration: Date.now() - start
-          };
-        })
-      );
-    }
-    
-    const results = await Promise.all(promises);
-    return new Response(JSON.stringify(results), {
-      headers: {
-        'content-type': 'application/json',
-        ...corsHeaders(request),
-        ...SECURITY_HEADERS
-      }
-    });
-  }
+  // ==================== 多文件并发下载测试（端点已移除） ====================
+  // 原实现零网络 I/O，只做 pLimit + fillRandom + setTimeout(0)，返回的是伪造的 duration；
+  // 前端"并发下载"工具现在直接用 N 路 /speedtest 真实下载测量，该端点已无调用方，故删除。
   
   // ==================== 大文件流式传输测试 ====================
   if (url.pathname === '/stream-test') {
     if (!(await isSameOriginNavigation(request))) return forbiddenResponse(request);
-    if (isRateLimited(clientIp, LARGE_DL_MAX, 60000, largeDlRateLimit)) {
-      return new Response(JSON.stringify({ error: 'Too Many Requests', message: '请稍后再试 / Please try again later' }), {
-        status: 429,
-        headers: { 'content-type': 'application/json', 'retry-after': '60', ...corsHeaders(request), ...SECURITY_HEADERS }
-      });
-    }
+    if (isRateLimited(clientIp, LARGE_DL_MAX, 60000, largeDlRateLimit)) return tooManyRequests(request, 60);
     const size = clampInt(url.searchParams.get('size'), 1048576, 1, 5242880);
     const chunkSize = 65536;
     let sent = 0;
-    
+    const deadline = Date.now() + 30000; // 慢读者保护
+    const template = getRandomTemplate();
     const stream = new ReadableStream({
       pull(controller) {
-        if (sent >= size) {
+        if (sent >= size || Date.now() > deadline) {
           controller.close();
           return;
         }
         const remaining = size - sent;
         const currentChunk = Math.min(remaining, chunkSize);
-        controller.enqueue(fillRandom(new Uint8Array(currentChunk)));
+        controller.enqueue(template.slice(0, currentChunk));
         sent += currentChunk;
       }
     });
@@ -10529,145 +10673,29 @@ async function handleRequest(event) {
     });
   }
   
-  // ==================== 测速历史记录 (POST) ====================
+  // ==================== 测速历史记录（无 KV 构建：不落盘） ====================
   if (url.pathname === '/api/log-speed' && request.method === 'POST') {
     if (!(await isSameOriginNavigation(request))) return forbiddenResponse(request);
-    try {
-      // 有 Content-Length 时快速拒绝；缺失/非法长度（chunked、HTTP/2）改为流式限长读取，避免误拒合法客户端
-      const contentLength = Number.parseInt(request.headers.get('content-length') || '', 10);
-      if (Number.isFinite(contentLength) && (contentLength < 0 || contentLength > 10240)) {
-        return new Response(JSON.stringify({ ok: false, error: 'payload too large' }), {
-          status: 413,
-          headers: { 'content-type': 'application/json', ...corsHeaders(request, 'POST, OPTIONS'), ...SECURITY_HEADERS }
-        });
-      }
-      const rawText = await readTextCapped(request, 10240);
-      if (!rawText) {
-        return new Response(JSON.stringify({ ok: false, error: 'payload too large' }), {
-          status: 413,
-          headers: { 'content-type': 'application/json', ...corsHeaders(request, 'POST, OPTIONS'), ...SECURITY_HEADERS }
-        });
-      }
-      const body = JSON.parse(rawText);
-      const avgSpeed = Math.min(Math.max(safeNumber(body.avgSpeed, 0), 0), 100000);
-      const results = Array.isArray(body.results) ? body.results.slice(0, 10).map(item => ({
-        sizeKB: Math.min(Math.max(safeNumber(item?.sizeKB, 0), 0), 10485760),
-        speed: Math.min(Math.max(safeNumber(item?.speed, 0), 0), 100000)
-      })) : [];
-      const record = {
-        timestamp: Date.now(),
-        avgSpeed,
-        results,
-        colo: (request.cf || {}).colo || 'N/A',
-        asn: (request.cf || {}).asn || 'N/A'
-      };
-      
-      if (SPEED_HISTORY_KV_ENABLED && typeof SPEED_HISTORY !== 'undefined' && SPEED_HISTORY) {
-        // ===== KV 防爆：单键环形缓冲写入 =====
-        // 写入限制：按 IP 15s 节流 + 单 isolate 全局 30 次/分 + 功能默认关闭；
-        // 每次落盘仅 1 get + 1 put，无 list/delete（旧实现见常量区注释）。
-        const nowTs = Date.now();
-        const lastLog = speedLogThrottle.get(clientIp) || 0;
-        if (nowTs - lastLog >= SPEED_LOG_MIN_INTERVAL_MS) {
-          speedLogThrottle.set(clientIp, nowTs);
-          if (speedLogThrottle.size > 5000) speedLogThrottle.clear();
-          if (isSpeedLogGloballyAllowed()) {
-            try {
-              const raw = await SPEED_HISTORY.get('speed:history');
-              let arr = raw ? JSON.parse(raw) : [];
-              if (!Array.isArray(arr)) arr = [];
-              arr.unshift(record);
-              if (arr.length > SPEED_HISTORY_MAX) arr = arr.slice(0, SPEED_HISTORY_MAX);
-              const speedWrote = await kvPut(SPEED_HISTORY, 'speed:history', JSON.stringify(arr), { expirationTtl: 86400 * 7 });
-              if (speedWrote) invalidateStatsCache();
-            } catch (e) {
-              // 落盘失败直接忽略：测速历史非关键路径，不做重试（避免失败重试放大写入）
-            }
-          }
-        }
-      }
-      return new Response(JSON.stringify({ ok: true }), {
-        headers: { 'content-type': 'application/json', ...corsHeaders(request, 'POST, OPTIONS'), ...SECURITY_HEADERS }
-      });
-    } catch (e) {
-      return new Response(JSON.stringify({ ok: false, error: 'invalid data' }), {
-        status: 400,
-        headers: { 'content-type': 'application/json', ...corsHeaders(request, 'POST, OPTIONS'), ...SECURITY_HEADERS }
-      });
-    }
-  }
-  
-  // ==================== 测速历史查询 (GET) ====================
-  if (url.pathname === '/api/speed-history') {
-    if (!(await isSameOriginNavigation(request))) return forbiddenResponse(request);
-    const limit = clampInt(url.searchParams.get('limit'), 10, 1, 20);
-    let records = getStatsCache('speed:' + limit);
-    if (!records) {
-      records = [];
-      if (SPEED_HISTORY_KV_ENABLED && typeof SPEED_HISTORY !== 'undefined' && SPEED_HISTORY) {
-        // KV 防爆：单键读取（speed:history）。旧实现为 list + 逐键 get（均按量计费）；
-        // 现在每次查询仅 1 次 get，且结果被 statsCache 缓存 60s，读量恒定不随记录数增长
-        try {
-          const raw = await SPEED_HISTORY.get('speed:history');
-          const arr = raw ? JSON.parse(raw) : [];
-          if (Array.isArray(arr)) {
-            records = arr
-              .filter(r => r && typeof r === 'object')
-              .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
-              .slice(0, limit);
-          }
-        } catch (e) {}
-      }
-      setStatsCache('speed:' + limit, records);
-    }
-    
-    return new Response(JSON.stringify(records.slice(0, limit)), {
-      headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...corsHeaders(request), ...SECURITY_HEADERS }
+    // 无 KV 构建：不再读取/校验请求体，直接确认接收（前端调用是 fire-and-forget）
+    return new Response(JSON.stringify({ ok: true, stored: false }), {
+      headers: { 'content-type': 'application/json', ...corsHeaders(request, 'POST, OPTIONS'), ...SECURITY_HEADERS }
     });
   }
   
+  // ==================== 测速历史查询（无 KV 构建已移除） ====================
+  if (url.pathname === '/api/speed-history') {
+    return new Response(JSON.stringify({ error: 'no_kv_build', message: 'History is stored locally in your browser.' }), {
+      status: 410,
+      headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...corsHeaders(request), ...SECURITY_HEADERS }
+    });
+  }
+
   // ==================== 用量统计 (GET) ====================
   if (url.pathname === '/api/usage-stats') {
     if (!(await isSameOriginNavigation(request))) return forbiddenResponse(request);
-    let stats;
-    if (USAGE_BACKEND === 'memory') {
-      stats = liveUsage;
-    } else {
-      stats = getStatsCache('usage');
-      if (!stats) {
-        stats = { totalRequests: 0, endpoints: {}, lastReset: 0 };
-        if (typeof SPEED_HISTORY !== 'undefined' && SPEED_HISTORY) {
-          try {
-            const raw = await SPEED_HISTORY.get('usage:stats');
-            if (raw) stats = JSON.parse(raw);
-          } catch (e) {}
-        }
-        setStatsCache('usage', stats);
-      }
-    }
-    
+    const stats = liveUsage;
     return new Response(JSON.stringify(stats), {
       headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...corsHeaders(request), ...SECURITY_HEADERS }
-    });
-  }
-  
-  // ==================== IP 欺诈评分端点 ====================
-  if (url.pathname === '/api/ip-fraud') {
-    if (!(await isSameOriginNavigation(request))) return forbiddenResponse(request);
-    const ip = clientIp;
-    const fraudData = await getIpFraudScore(ip);
-    if (!fraudData) {
-      return new Response(JSON.stringify({ error: '无法获取风险数据' }), {
-        status: 503,
-        headers: { 'content-type': 'application/json', ...corsHeaders(request), ...SECURITY_HEADERS }
-      });
-    }
-    return new Response(JSON.stringify(fraudData), {
-      headers: {
-        'content-type': 'application/json',
-        ...corsHeaders(request),
-        ...SECURITY_HEADERS
-      }
     });
   }
   
@@ -10682,7 +10710,16 @@ async function handleRequest(event) {
   // ==================== 管理面板（/admin） ====================
   if (url.pathname === '/admin') return await renderAdminPage(siteCfg, url);
 
-  return renderMainPage(request, url, siteCfg, clientIp, workerStart);
+  // 只有根路径渲染主页面：未匹配路径统一 404。
+  // 原实现把任何未命中路径都渲染成 200 主页面，既误导 API 调用方，
+  // 也让 SITE_CONFIG.disabledEndpoints 的「精确匹配」被 /speedtest/ 这类变体路径绕过。
+  if (url.pathname === '/' || url.pathname === '/index.html') {
+    return renderMainPage(request, url, siteCfg, clientIp, workerStart);
+  }
+  return new Response('Not Found', {
+    status: 404,
+    headers: { 'content-type': 'text/plain;charset=UTF-8', 'cache-control': 'no-store', ...SECURITY_HEADERS }
+  });
 }
 
 // ==================== 管理面板（/admin，只读概览；需 x-admin-key） ====================
@@ -10714,14 +10751,12 @@ async function renderAdminPage(siteCfg, url) {
     '<button id="load">Load</button><button id="refresh">Refresh</button><a href="/">← Back</a></div>' +
     '<div id="out" class="muted">Enter the admin key and click Load.</div>' +
     '</div><script nonce="' + nonce + '">' +
-    'window.__ADMIN_TOKEN__=' + JSON.stringify(token) + ';' +
     'var out=document.getElementById("out"),keyEl=document.getElementById("key");' +
-    'try{var saved=sessionStorage.getItem("netsight-admin-key")||"";if(saved)keyEl.value=saved;}catch(e){}' +
     'function esc(v){return String(v===undefined||v===null?"":v).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;","\\"":"&quot;"}[c];});}' +
     'function card(k,v){return "<div class=\\"card\\"><div class=\\"k\\">"+esc(k)+"</div><div class=\\"v\\">"+esc(v)+"</div></div>";}' +
     'function row(k,v,cls){return "<div class=\\"row\\"><span>"+esc(k)+"</span><span class=\\""+(cls||"")+"\\">"+esc(v)+"</span></div>";}' +
-    'function load(){var key=keyEl.value.trim();if(!key){out.textContent="Admin key required.";return;}try{sessionStorage.setItem("netsight-admin-key",key);}catch(e){}' +
-    'out.textContent="Loading...";fetch("/api/admin/overview",{headers:{"x-admin-key":key,"x-ns-token":window.__ADMIN_TOKEN__},cache:"no-store"}).then(function(r){return r.json().then(function(d){return {s:r.status,d:d};});}).then(function(x){' +
+    'function load(){var key=keyEl.value.trim();if(!key){out.textContent="Admin key required.";return;}' +
+    'out.textContent="Loading...";fetch("/api/admin/overview",{headers:{"x-admin-key":key},credentials:"same-origin",cache:"no-store"}).then(function(r){return r.json().then(function(d){return {s:r.status,d:d};});}).then(function(x){' +
     'if(x.s!==200){out.textContent=(x.d&&x.d.error)||("HTTP "+x.s);return;}var d=x.d;' +
     'var h="<div class=\\"grid\\">"+card("Version",d.version)+card("Site",d.site&&d.site.siteName)+card("Uptime (s)",Math.round((d.obs&&d.obs.uptimeMs||0)/1000))+card("Requests",d.usage&&d.usage.totalRequests)+card("403",d.obs&&d.obs.status403)+card("429",d.obs&&d.obs.status429)+"</div>";' +
     'h+="<h3>KV / 预算</h3><div class=\\"card\\">"+row("Writes today",d.kvWrite&&d.kvWrite.today)+row("Blocked",d.kvWrite&&d.kvWrite.blocked)+row("Failed",d.kvWrite&&d.kvWrite.failed)+row("Budget/day",d.kvWrite&&d.kvWrite.budgetPerDay)+row("Budget/min",d.kvWrite&&d.kvWrite.budgetPerMin)+"</div>";' +
@@ -10742,7 +10777,7 @@ async function renderAdminPage(siteCfg, url) {
       'content-type': 'text/html;charset=UTF-8',
       'cache-control': 'no-cache, no-store, must-revalidate',
       'content-security-policy': csp,
-      'set-cookie': '__ns_t=' + token + '; HttpOnly; SameSite=Strict; Path=/; Max-Age=3600' + (url.protocol === 'https:' ? '; Secure' : ''),
+      'set-cookie': pageTokenCookie(token, url.protocol === 'https:'),
       ...SECURITY_HEADERS
     }
   });
@@ -10817,7 +10852,8 @@ async function renderMainPage(request, url, siteCfg, clientIp, workerStart) {
     'ko': 'NetSight Pro | 네트워크 진단',
     'es': 'NetSight Pro | Diagnóstico de red'
   };
-  const pageTitle = (PAGE_TITLES[defaultLang] || PAGE_TITLES.en).split('NetSight Pro').join(siteCfg.siteName);
+  // siteName 来自 SITE_CONFIG（环境变量），但仍要转义：它会拼进 <title>，未转义时一个 `</title><…>` 就能注入 HTML
+  const pageTitle = escapeHtml((PAGE_TITLES[defaultLang] || PAGE_TITLES.en).split('NetSight Pro').join(siteCfg.siteName));
   
   const workerDuration = Date.now() - workerStart;
   
@@ -11129,31 +11165,17 @@ async function renderMainPage(request, url, siteCfg, clientIp, workerStart) {
         </div>
 
         <div class="tab-panel" id="panel-history">
-        <!-- ==================== 历史与统计 ==================== -->
-        <div class="stats-grid">
-            <div class="stats-card">
-                <div class="card-header">
-                    <i class="fas fa-chart-line"></i>
-                    <div>
-                        <h3><span id="t-history-title">测试历史（本地）</span></h3>
-                        <p><span id="t-history-sub">最近 20 条记录 · 仅保存在本机浏览器</span></p>
-                    </div>
-                </div>
-                <div class="card-body" id="speed-history-panel">
-                    <div class="no-data"><i class="fas fa-inbox"></i> <span id="t-no-records">暂无测速记录</span></div>
+        <!-- ==================== 历史与统计（仪表盘：KPI → 趋势 → 明细/对比/用量） ==================== -->
+        <div class="stats-card hist-card">
+            <div class="card-header">
+                <i class="fas fa-clock-rotate-left"></i>
+                <div>
+                    <h3><span id="t-history-title">测试历史（本地）</span></h3>
+                    <p><span id="t-history-sub">仅保存在本机浏览器</span></p>
                 </div>
             </div>
-            <div class="stats-card">
-                <div class="card-header">
-                    <i class="fas fa-chart-bar"></i>
-                    <div>
-                        <h3><span id="t-usage-title">用量统计</span></h3>
-                        <p><span id="t-usage-sub">API 端点调用统计</span></p>
-                    </div>
-                </div>
-                <div class="card-body" id="usage-stats-panel">
-                    <div class="no-data"><i class="fas fa-spinner fa-spin"></i> <span id="t-loading-stats">加载中...</span></div>
-                </div>
+            <div class="card-body" id="speed-history-panel">
+                <div class="no-data"><i class="fas fa-inbox"></i> <span id="t-no-records">暂无测速记录</span></div>
             </div>
         </div>
 
@@ -11231,8 +11253,7 @@ async function renderMainPage(request, url, siteCfg, clientIp, workerStart) {
                 tlsClientJa3: "${data.tlsClientJa3}", tlsClientJa4: "${data.tlsClientJa4}"
             };
         window.__DEFAULT_LANG__ = '${defaultLang}';
-        window.__PAGE_KEY__ = '${escapeForJS(pageToken)}';
-        window.__NETDIAG__ = { usageBackend: '${USAGE_BACKEND}', speedHistoryKv: ${SPEED_HISTORY_KV_ENABLED} };
+        window.__NETDIAG__ = { usageBackend: 'memory', monitorKv: false };
         window.__SITE__ = {
             siteName: '${escapeForJS(siteCfg.siteName)}',
             defaultLang: '${escapeForJS(siteCfg.defaultLang)}',
@@ -11258,7 +11279,7 @@ async function renderMainPage(request, url, siteCfg, clientIp, workerStart) {
       'content-type': 'text/html;charset=UTF-8',
       'cache-control': 'no-cache, no-store, must-revalidate',
       'content-security-policy': cspHeader,
-      'set-cookie': '__ns_t=' + pageToken + '; HttpOnly; SameSite=Strict; Path=/; Max-Age=3600' + (url.protocol === 'https:' ? '; Secure' : ''),
+      'set-cookie': pageTokenCookie(pageToken, url.protocol === 'https:'),
       ...SECURITY_HEADERS,
       'server-timing': `worker;dur=${Date.now() - workerStart}`
     }
@@ -11288,7 +11309,7 @@ function renderServiceWorker(siteCfg) {
       "});",
       "self.addEventListener('activate', function (e) {",
       "  e.waitUntil(caches.keys().then(function (keys) {",
-      "    return Promise.all(keys.filter(function (k) { return k.indexOf('netshell-shell-') === 0 || (k.indexOf('netsight-shell-') === 0 && k !== CACHE); }).map(function (k) { return caches.delete(k); }));",
+      "    return Promise.all(keys.filter(function (k) { return k.indexOf('netsight-shell-') === 0 && k !== CACHE; }).map(function (k) { return caches.delete(k); }));",
       "  }).then(function () { return self.clients.claim(); }));",
       "});",
       "self.addEventListener('fetch', function (e) {",
