@@ -569,7 +569,6 @@ A：按浏览器时区（前端提交 `-getTimezoneOffset()/60`），未提交�
 
 ## 十五、致谢与许可
 
-- 灵感与早期版本来自 [BlueDriftHK/CF-workers-netdiag](https://github.com/BlueDriftHK/CF-workers-netdiag)。
 - 运行平台：[Cloudflare Workers](https://workers.cloudflare.com/)；DNS over HTTPS 对比使用 Cloudflare / Google / Quad9 / AdGuard / DNS.SB / AliDNS 的公开 DoH 服务。
 - 图标：[Font Awesome](https://fontawesome.com/)（CDN 引入）。
 
