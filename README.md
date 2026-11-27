@@ -1,852 +1,578 @@
 # NetSight Pro
 
-> 把网络，看透。一个文件、一个 Worker，装下整条网络链路。
+> 极简、零依赖、单文件的 Cloudflare Worker 网络诊断工具集 —— 打开网页即可测延迟、带宽、DNS、TLS、WebRTC 泄漏与站点安全，全部在你的浏览器里完成。
 
-<p align="center">
-  <a href="#快速开始"><img alt="version" src="https://img.shields.io/badge/version-5.1.0-0a84ff?style=flat-square" /></a>
-  <a href="#部署"><img alt="Cloudflare Workers" src="https://img.shields.io/badge/Cloudflare-Workers-F38020?style=flat-square" /></a>
-  <a href="#测试与-ci"><img alt="tests" src="https://img.shields.io/badge/tests-164%20passed-30d158?style=flat-square" /></a>
-  <a href="#多语言"><img alt="i18n" src="https://img.shields.io/badge/i18n-6%20languages-64d2ff?style=flat-square" /></a>
-  <a href="#运行时依赖"><img alt="deps" src="https://img.shields.io/badge/runtime%20deps-0-8e8e93?style=flat-square" /></a>
-  <a href="#许可证"><img alt="license" src="https://img.shields.io/badge/license-AGPL--3.0-blueviolet?style=flat-square" /></a>
-</p>
 
-**NetSight Pro** 是一个运行在 Cloudflare Workers 上的边缘网络诊断工具箱。浏览器侧完成大部分测量，Worker 只在你显式触发时做少量出站（DoH、证书日志、站点监控、告警 webhook），默认情况下**零第三方埋点、零外部 CDN 依赖、零构建**。
+![version](https://img.shields.io/badge/version-5.1.1-2f6feb)
+![runtime](https://img.shields.io/badge/runtime-Cloudflare%20Workers-f38020)
+![deps](https://img.shields.io/badge/dependencies-0-brightgreen)
+![files](https://img.shields.io/badge/deploy-single%20file-6e7781)
+![i18n](https://img.shields.io/badge/i18n-6%20languages-8250df)
 
-它既是一份可以直接部署的**单文件 Worker**，也是一套可维护的模块化源码：`project/` 负责源码、构建、测试与 CI，`dist/_workers.js` 负责分发。
-
-> English abstract: NetSight Pro is a single-file Cloudflare Worker for edge network diagnostics — 26 tools, 6 languages, live RTT monitoring, bandwidth tests, DNS/DoH comparison, domain security audits, uptime monitoring and alerting. Browser-first by default, with zero third-party analytics and zero runtime dependencies.
+**English summary** — NetSight Pro is a zero-dependency, single-file network diagnostics suite that runs on Cloudflare Workers. Latency, jitter, packet loss, bandwidth, DNS comparison, DoH, TLS/HTTP2, WebRTC leak, TTFB waterfall and site security-header audits all run in your browser; the Worker only handles tokens, rate limiting and the few endpoints that must originate from the edge. No build step, no database required (an optional KV namespace powers the monitoring feature). Deploy by pasting one file into a Worker, or with `wrangler`. UI ships in EN / 简体 / 繁體 / 日本語 / 한국어 / Español.
 
 ---
 
 ## 目录
 
-- [项目简介](#项目简介)
-- [功能速览](#功能速览)
-- [工具目录](#工具目录)
-- [界面与截图](#界面与截图)
-- [架构与数据流](#架构与数据流)
-- [快速开始](#快速开始)
-- [部署](#部署)
-- [配置参考](#配置参考)
-- [API 参考](#api-参考)
-- [站点监控与告警](#站点监控与告警)
-- [安全模型](#安全模型)
-- [可观测性](#可观测性)
-- [多语言、主题与 PWA](#多语言主题与-pwa)
-- [性能、成本与额度](#性能成本与额度)
-- [测试与 CI](#测试与-ci)
-- [项目结构](#项目结构)
-- [静态展示页](#静态展示页)
-- [常见问题](#常见问题)
-- [路线图与待办](#路线图与待办)
-- [更新日志](#更新日志)
-- [贡献指南](#贡献指南)
-- [许可证与致谢](#许可证与致谢)
+- [一、这是什么](#一这是什么)
+- [二、两种构建，先选一个](#二两种构建先选一个)
+- [三、功能清单](#三功能清单)
+- [四、设计取舍](#四设计取舍)
+- [五、快速部署](#五快速部署)
+- [六、配置项](#六配置项)
+- [七、API 参考](#七api-参考)
+- [八、安全模型](#八安全模型)
+- [九、本地开发与自检](#九本地开发与自检)
+- [十、目录结构](#十目录结构)
+- [十一、常见问题](#十一常见问题)
+- [十二、配额与性能](#十二配额与性能)
+- [十三、已知限制](#十三已知限制)
+- [十四、贡献](#十四贡献)
+- [十五、致谢与许可](#十五致谢与许可)
 
 ---
 
-## 项目简介
+## 一、这是什么
 
-大多数「在线测速 / ping」网站把测量放在服务端，你只能看到一个结果；NetSight Pro 的思路相反：
+一个可以直接粘贴到 Cloudflare Workers 的 **单文件 JavaScript 程序**（不需要 Node、不需要打包、没有 `node_modules`）。它把两件事塞进了同一个文件：
 
-1. **能由浏览器完成的，交给浏览器**：RTT、抖动、丢包、吞吐、WebRTC 泄漏、Resource Timing、`navigator.connection` 都在本地计算；
-2. **必须由边缘完成的，收敛到少量受控端点**：健康检查、流式大响应、DoH 查询、证书日志、监控巡检；
-3. **一切可能被滥用或烧钱的地方，都有硬上限**：限流、KV 写预算、大响应配额、端点开关、SITE_CONFIG 白名单；
-4. **结果解释优先于数字堆叠**：诊断向导、Bufferbloat 建议、域名体检评分，把「测到了什么」翻译成「下一步做什么」。
+1. **服务端（Worker）**：签发会话令牌、限流、SSRF 防护、提供测速/上传/CPU 等需要边缘节点参与的小接口，以及一个完全内嵌的网页。
+2. **前端（浏览器）**：全部诊断逻辑（RTT、抖动、DNS、TLS、WebRTC、TTFB、瀑布图……），以 `APP_JS` 的形式内嵌在 Worker 里，运行时通过 `/app.css`、`/app.js` 提供。
 
-适合：
+**它不做什么**：不采集你的浏览记录、不要求登录、不把诊断数据上传到第三方（除你在页面里主动点击会用到 STUN / crt.sh / IP 查询之外，见[隐私说明](#隐私说明)）。
 
-- 家庭 / 办公室网络排障：延迟、丢包、DNS、Wi-Fi 与缓冲膨胀；
-- 自己站点 / 域名的巡检：TLS 证书到期、站点可用性、DNS 与邮件安全配置；
-- 网络工程 / 运维人员的日常工具箱：DoH 对比、站点安全头体检、多节点延迟；
-- 想拥有一个**完全属于自己的诊断站**、不想把数据交给第三方的人。
+### 特点
 
-不做什么：
-
-- 不做 ICMP ping / traceroute（浏览器与 Worker 都没有原始套接字权限）；
-- 不做任意公网 URL 代理、端口扫描或流量穿透；
-- 不做用户账号体系与云端结果存储（监控状态是唯一的可选持久化）。
-
----
-
-## 功能速览
-
-| 模块 | 能力 | 数据流向 |
-|---|---|---|
-| **实时监控** | RTT / 抖动 / 丢包，5 秒采样，自动暂停与恢复，质量评分 | 浏览器侧，零 Worker 出站 |
-| **带宽测速** | 快速 / 标准 / 精准三档；多轮中位数、标准差、首字节；多流并发；上传；Bufferbloat | Worker 流式大响应 |
-| **DNS 工具箱** | DoH 查询（8 种记录类型）、6 个解析器对比、DNSSEC `AD` 标志、DNSBL 黑名单查询 | DoH（Cloudflare） |
-| **域名体检** | MX / SPF / DMARC / DKIM / DNSSEC / DS / CAA / MTA-STS / BIMI / NS 一致性，A–F 评分 | DoH |
-| **站点体检** | HSTS / CSP / X-Frame-Options / `X-Content-Type-Options` / Referrer-Policy / Permissions-Policy / COOP / Server / redirect 链 | 逐跳受控出站 |
-| **站点监控** | Cron 巡检、证书到期、连续失败阈值、静默时段、维护窗口、8 种告警通道 | 受控出站 + 可选 KV |
-| **智能诊断** | 延迟 → 丢包 → DNS → 吞吐 → 协议，引导式评分与建议 | 浏览器 + Worker |
-| **资源瀑布** | DNS / TCP / TLS / TTFB / 下载分阶段，协议占比与缓存命中 | 浏览器侧 |
-| **网络信息** | `navigator.connection`、协议、存储配额、时区/地理一致性 | 浏览器侧 |
-| **安全与隐私** | WebRTC 泄漏、代理/VPN 启发式、CSP / 安全头、IP 地理信息 | 浏览器侧 |
-| **工程化** | 26 工具 / 6 分组 / 6 语言 / 主题 / PWA / 管理面板 / Prometheus 指标 | — |
+| | |
+|---|---|
+| **单文件部署** | 12,110 行 / 706 KB 一个文件，粘贴即上线；前端 CSS/JS 内嵌并自动做内容哈希版本 |
+| **零依赖** | 没有 `package.json`、没有构建步骤、没有第三方运行时 |
+| **6 语言** | 简体中文 / 繁体中文 / English / 日本語 / 한국어 / Español，缺 key 自动回退英文 |
+| **PWA** | 内置 service worker、manifest、图标，可安装到桌面 |
+| **深/浅色** | 跟随系统或手动切换 |
+| **安全设计** | HttpOnly Cookie 会话令牌、四级限流、SSRF 全链路防护、CSP、安全响应头 |
+| **可验证** | 附带 4 套离线自检脚本（共 159 项断言），不需要联网也不需要真实浏览器 |
 
 ---
 
-## 工具目录
+## 二、两种构建，先选一个
 
-> 下表按「能力」归类，部分 UI 工具会合并多个能力（例如 DNS 查询工具同时包含 DNSBL）；前端实际工具入口为 **26 个**、分为 6 组。
+仓库里有两个可直接部署的版本，**功能代码完全相同，差别只在"要不要站点监控"**：
 
-### 1. 网络质量与延迟（Quality）
-
-| 工具 | 说明 | 出站 |
+| | `_workers.js`（完整版） | `_workers-nokv.js`（无 KV 版） |
 |---|---|---|
-| 一键体检 | 6 个维度快速体检并给出评分与建议 | 少量 |
-| 长时质量监控 | 1 / 5 / 10 分钟持续采样，输出 p50/p95/p99、卡顿时间线 | 浏览器侧 |
-| 丢包率 | 多次探测统计丢包与连续丢包 | 浏览器侧 |
-| TTFB 分析 | 用 Resource Timing 拆解 DNS / TCP / TLS / 首字节 / 下载 | 浏览器侧 |
-| 资源瀑布 | 页面所有资源的阶段耗时、协议、缓存 | 浏览器侧 |
-| WebSocket 延迟 | 101 升级、ping/pong RTT、心跳与最大时长保护 | 双向 |
-| 代理 / VPN 检测 | HTTP 出口 IP 与 WebRTC 暴露 IP 对比 | 浏览器侧 |
-| WebRTC 泄漏 | 收集 ICE 候选，区分内网 / 公网 IP | 浏览器侧 |
-| 智能诊断 | 延迟+丢包 → DNS → 吞吐 → 协议，一步出结论 | 少量 |
+| 文件大小 | 706,896 B / 12,110 行 | **664,982 B / 11,333 行** |
+| 全部浏览器侧诊断工具 | ✅ | ✅ |
+| 本地历史 / 趋势 / 对比 | ✅ | ✅ |
+| 站点监控（定时巡检 + Webhook 告警） | ✅ 需绑定 KV | ❌ 无此功能 |
+| 需要 KV 命名空间 | 可选（不绑定即零写入） | **不需要** |
+| 需要 Cron Trigger | 可选 | **不需要** |
+| 可能产生 KV 写入的代码路径 | 4 处（均有前置判断） | **0 处** |
+| 自检套件 | `tools/verify-all.mjs`（159 项） | `tools/verify-nokv.mjs`（21 项） |
 
-### 2. 带宽与吞吐（Bandwidth）
+**怎么选：**
 
-| 工具 | 说明 | 出站 |
-|---|---|---|
-| 带宽测速 | 快速 / 标准 / 精准三档，实际字节计速、预热连接、多轮中位数 | 流式大响应 |
-| 多流并发测速 | 4 × 16 MB 并行下载，实时速率曲线与 p95 | 流式大响应 |
-| 上传测试 | 流式读取、32 MB 硬上限 | 入站 |
-| Bufferbloat | 空闲 vs 负载延迟、加载丢包、上/下行分档建议 | 轻量 + 大响应 |
-| 流式测速 | 长连接持续下载，观察速率抖动 | 流式 |
-| 并发测速 | 2 / 4 / 8 路真实并行下载，聚合吞吐与逐流明细 | 流式大响应 |
-
-### 3. DNS
-
-| 工具 | 说明 | 出站 |
-|---|---|---|
-| DNS 查询 | A / AAAA / CNAME / MX / TXT / NS / SOA / CAA | DoH |
-| DNS 对比 | Cloudflare / Google / Quad9 / AdGuard / DNS.SB / AliDNS 六解析器，wireformat + DNSSEC AD | DoH ×6 |
-| DNSBL | Spamhaus / S5H / DroneBL 黑名单查询（并行、缓存） | DoH |
-
-### 4. 安全与合规（Security）
-
-| 工具 | 说明 | 出站 |
-|---|---|---|
-| 站点安全头体检 | HSTS / CSP / XFO / XCTO / Referrer / Permissions / COOP / redirect / 证书 | 受控 |
-| 域名体检 | SPF / DMARC / DKIM / DNSSEC / CAA / MTA-STS / BIMI / NS | DoH |
-| 证书日志 | 可选 CT 日志查询（crt.sh），展示签发与到期时间 | 受控 |
-
-### 5. 可达性与多节点（Reach）
-
-| 工具 | 说明 | 出站 |
-|---|---|---|
-| 流媒体解锁 | 基于浏览器 `no-cors` / favicon 探测 | 浏览器侧 |
-| 可达性 | 目标站点连接性、重定向与状态 | 浏览器侧 |
-| 多节点对比 | 对比其他 NetSight 节点的 `/node-ping` RTT | 跨节点 |
-
-### 6. 监控与系统（Monitor）
-
-| 工具 | 说明 | 出站 |
-|---|---|---|
-| 站点监控 | Cron 巡检、证书到期、失败阈值、静默/维护、8 通道告警 | 受控 + KV |
-| 网络信息 | Network Information API、存储配额、连接类型、时区一致性 | 浏览器侧 |
-| CPU 测试 | 浏览器侧计算与主线程响应（仅作参考） | 无 |
-
-> 26 个工具 / 6 个分组；其中 **大部分在浏览器侧完成**，需要 Worker 出站的工具会在界面中标注数据流向。
+- 怕 KV 额度被写爆、或只想白嫖免费额度 → **无 KV 版**（推荐给个人使用）。
+- 需要"站点挂了自动发钉钉/飞书/Slack 告警" → 完整版 + 绑定 KV + Cron。
+- 两个版本不能部署在同一个 Worker 名上，建议分别命名（如 `netsight` / `netsight-nokv`）。
 
 ---
 
-## 界面与截图
+## 三、功能清单
 
-当前应用界面为原生 HTML/CSS/JS（无框架），支持深/浅主题、6 种语言和移动端。
+工具按 6 组分类，共 26 项（无 KV 版隐藏「站点监控」后为 25 项）。
 
-`index.html` 是早一版的静态介绍页：三语切换（简体 / 繁體 / English）、纯 CSS/SVG 复刻界面、无 CDN 请求，可直接部署到 Cloudflare Pages / GitHub Pages。
+### 质量与体验（quality）
+
+| 工具 | 说明 |
+|---|---|
+| 一键体检 | 依次测延迟、DNS、HTTP/2、风险项，汇总评分与建议 |
+| 智能诊断 | 引导式诊断：延迟/丢包 → DNS → 下行吞吐 → 协议，给出评分与可执行建议 |
+| 长时质量监控 | 持续采样 RTT，输出 p50/p95/p99、抖动、卡顿时间线与稳定性评级 |
+| 丢包测试 | 连续 10 次探测统计丢包率与失败样本（限流样本计入失败，不会虚报 0%） |
+| TTFB 分析 | 拆解 DNS / TCP / TLS / 等待 / 下载；浏览器不提供分阶段数据时自动回退为总耗时并注明原因 |
+| 资源瀑布 | 用 Performance API 画出当前页面资源的 DNS/TCP/TLS/TTFB/下载分段 |
+| WebSocket 测试 | 建立 WS 连接测往返延迟与可用性 |
+| 代理 / VPN 检测 | 对比「HTTP 出口 IP」与「WebRTC 反射 IP」，不一致通常意味着分流或代理未覆盖 UDP |
+| WebRTC 泄漏 | 用 Cloudflare STUN 取 srflx 反射候选，按 host/mDNS/srflx/relay 分类展示并给出是否泄漏的结论 |
+
+### 带宽（bandwidth）
+
+| 工具 | 说明 |
+|---|---|
+| 带宽测速 | 单流下载，三种模式（快速/标准/精确），带 TTFB 与稳定度 |
+| 多流并发 | 多路并行下载，观察总吞吐与单流差异 |
+| 上传测速 | 分档上传，测客户端上行 |
+| 缓冲区膨胀 | 加载态下测延迟增量，判断 bufferbloat 等级 |
+| 流式下载 | 大流量流式读取，观察持续吞吐与卡顿 |
+| 并发下载 | N 路并行下载同一资源，测并发效率与失败率 |
+
+### DNS（dns）
+
+| 工具 | 说明 |
+|---|---|
+| DNS 解析 | 查询 A/AAAA/CNAME/MX/TXT/NS/SOA/CAA |
+| DNS 查询 | 指定域名 + 类型 + 黑名单检测 |
+| DNS 对比 | 6 个解析器（Cloudflare/Google/Quad9/AdGuard/DNS.SB/AliDNS）DoH wireformat 并发对比，检测解析不一致与污染 |
+| 域名安全体检 | MX/SPF/DMARC/DKIM/NS/CAA/DNSSEC/MTA-STS/BIMI + 黑名单，输出评分与问题清单 |
+
+### 安全（security）
+
+| 工具 | 说明 |
+|---|---|
+| 站点体检 | 审计目标站点的 HSTS / CSP / X-Frame-Options / nosniff / Referrer-Policy / Permissions-Policy / COOP 等并打分 |
+| 域名安全体检 | 见上（DNS 层） |
+| 代理/VPN 检测 | 见上（出口一致性） |
+| WebRTC 泄漏 | 见上 |
+
+### 可达性（reach）
+
+| 工具 | 说明 |
+|---|---|
+| IP 连通性 | 用浏览器探测常见站点是否可达（no-cors favicon 探测，零 Worker 出站） |
+| 可达性探测 | 多目标批量探测，给出可达/超时矩阵 |
+| 多节点对比 | 输入其它 NetSight 节点 URL，并行测 `/node-ping` 延迟，比较各边缘节点 |
+
+### 监控与信息（monitor）
+
+| 工具 | 说明 |
+|---|---|
+| 网络信息 | 浏览器 Network Information API + 硬件信息 + 时区/语言 |
+| CPU 性能 | Worker 端自校准基准测试（预热 + 按时间预算累加），返回真实 ops/ms；无法测量时明确返回 `null` 而不是编一个数 |
+| 站点监控 | 定时巡检 + Webhook 告警（钉钉 / 飞书 / 企微 / Slack / Discord / Telegram / ntfy，或通用 JSON）+ 证书到期提醒；**仅完整版 + 绑定 KV 可用** |
+
+### 页面其它能力
+
+- **概览**：边缘节点、ASN、TLS/协议、JA3/JA4、真实 IP 位置、数据中心/机器人评分
+- **历史统计**：本地历史（localStorage）+ 趋势图 + 日期分组 + 记录对比 + CSV/JSON 导入导出 + 内存用量统计
+- **管理面板 `/admin`**：只读概览（站点配置、用量、可观测性指标），需 `x-admin-key`
 
 ---
 
-## 架构与数据流
+## 四、设计取舍
 
-```mermaid
-flowchart LR
-  subgraph Browser["浏览器（诊断主战场）"]
-    UI[HTML / CSS / app.js]
-    RT[Resource Timing]
-    NI[Network Information API]
-    WR[WebRTC / WebSocket]
-  end
-
-  subgraph Edge["Cloudflare Worker（单文件）"]
-    R[handleRequest 路由]
-    H[/health · /node-ping/]
-    S[/speedtest · /upload-test · /stream-test/]
-    D[/api/dns-lookup · /api/dns-compare · /api/dnsbl/]
-    A[/api/domain-check · /api/site-audit/]
-    M[/api/monitor · /api/monitor-run/]
-    X[/metrics · /admin/]
-    K[(KV · 可选)]
-  end
-
-  subgraph Upstream["受控出站"]
-    DOH[DoH 解析器]
-    CT[crt.sh]
-    TG[监控目标]
-    WH[告警通道]
-  end
-
-  UI -->|页面令牌| R
-  R --> H & S & D & A & M & X
-  D --> DOH
-  A --> DOH
-  A --> CT
-  M --> TG
-  M --> WH
-  M --> K
-  RT -.零出站.-> UI
-  NI -.零出站.-> UI
-  WR -.零出站.-> UI
-```
-
-### 分层原则
-
-1. **页面层**：返回一个带 nonce CSP 的 HTML，签发 HttpOnly 页面令牌（Cookie + `x-ns-token` 头双通道），内联脚本仅注入必要数据。
-2. **资产层**：`/app.js` / `/app.css` 外置、长缓存、按内容哈希自动换版本；SW 只缓存静态资产，不缓存 API 与页面。
-3. **测量层**：浏览器侧 API 优先；Worker 侧仅提供流式大响应、DoH 查询、证书与巡检。
-4. **解释层**：质量评分、Bufferbloat 建议、域名体检评分、诊断向导，把结果转成行动。
-5. **防护层**：限流、页令牌、HMAC、SSRF 校验、KV 写预算、端点上/下限、SITE_CONFIG 开关。
+| 决策 | 原因 |
+|---|---|
+| **单文件、内嵌前端** | 部署极简；代价是文件大，但 Cloudflare 免费版 1 MB/文件足够 |
+| **零出站优先** | 能由浏览器做的诊断（RTT、DNS、TTFB、WebRTC、可达性）全部放浏览器，Worker 只做必须由边缘节点做的事 |
+| **无状态令牌 + HttpOnly Cookie** | 不依赖数据库；令牌不落在 HTML/JS 里，XSS 也偷不走 |
+| **限流 + 预算护栏** | 免费额度有限，宁可丢少量非关键数据，也不让一个异常循环打爆配额 |
+| **监控可选** | 监控必须跨请求持久化状态，天然依赖 KV；不想用 KV 的用户可以直接用无 KV 版 |
+| **不引入前端框架** | 一个文件、零构建；用原生 DOM + Canvas 手写渲染 |
 
 ---
 
-## 快速开始
+## 五、快速部署
 
-### 前置条件
+### 前置
 
-- 一个 Cloudflare 账号（免费套餐即可体验全部浏览器侧能力）；
-- Node.js ≥ 20（仅构建 / 测试 / 部署需要）；
-- `wrangler`（`npx wrangler` 或全局安装）。
+- 一个 Cloudflare 账号（免费版即可）
+- 二选一：浏览器（Dashboard）或 `wrangler`（Node 18+）
 
-### 方式 A：直接部署单文件版（最快）
+> ⚠️ **GitHub Pages 不能部署这个项目**——它是 Cloudflare Worker（需要在边缘运行 JS 并提供 API），不是静态站点。GitHub 只用来托管仓库/触发部署。
 
-仓库根目录的 `_workers.js` 就是可直接部署的产物：
+### 方式 A：Dashboard 粘贴（最快）
+
+1. 打开 Cloudflare Dashboard → **Workers & Pages** → **Create** → **Worker**。
+2. 把 `_workers-nokv.js`（或 `_workers.js`）的全部内容粘贴进在线编辑器。
+3. **Save and Deploy**。
+4. 绑定自定义域名（可选）：Worker → Settings → Domains & Routes。
+
+### 方式 B：wrangler 部署
 
 ```bash
-# 1. 登录
-npx wrangler login
-
-# 2. 部署（在根目录创建最小 wrangler.toml）
-cat > wrangler.toml <<'EOF'
-name = "netsight-pro"
-main = "_workers.js"
-compatibility_date = "2026-01-01"
-EOF
-
-# 3. 一键发布
-npx wrangler deploy
+npm i -g wrangler
+wrangler login
 ```
 
-打开部署域名即可使用。所有浏览器侧工具无需任何配置。
-
-### 方式 B：模块化开发（推荐长期维护）
-
-`project/` 是源码与测试所在：
-
-```bash
-cd project
-npm install            # 无第三方运行时依赖；此步只准备 node/npm 环境（可选）
-
-npm run build          # src + assets → dist/_workers.js（含语法与资产一致性校验）
-npm test               # 164 项 Node vm 沙箱回归，无网络
-npm run check          # node --check dist/_workers.js
-npm run verify         # build + check + test 一条龙
-
-# 同步到部署文件（如果你仍使用根目录的单文件发行版）
-node scripts/sync.mjs ../_workers.js
-
-# 部署
-npx wrangler deploy    # wrangler.toml 中 main 指向 dist/_workers.js
-```
-
-开发规则：
-
-- 前端改 `project/assets/app.js` / `app.css`（普通 JS/CSS，**不需要**模板转义）；
-- 服务端改 `project/src/**`；
-- **不要直接修改 `dist/_workers.js`**，它是生成产物；
-- 每次改动必须跑 `npm run verify`。
-
----
-
-## 部署
-
-### 推荐配置（wrangler）
+`wrangler.toml`（无 KV 版）：
 
 ```toml
-name = "netsight-pro"
-main = "dist/_workers.js"          # 单文件版改为 "_workers.js"
-compatibility_date = "2026-01-01"
-workers_dev = true
+name = "netsight-nokv"
+main = "_workers-nokv.js"
+compatibility_date = "2025-01-01"
 
 [vars]
-SITE_CONFIG = '{"siteName":"NetSight Pro","defaultLang":"","disabledTools":[],"disabledEndpoints":[],"metricsKey":"","offline":true,"certCheck":true}'
-
-# 可选：跨域白名单（精确 Origin，逗号分隔；不支持 *）
-# ALLOWED_ORIGINS = "https://diag.example.com"
-
-# 可选：KV（监控状态 / 日志 / 可选测速历史）
-# [[kv_namespaces]]
-# binding = "SPEED_HISTORY"
-# id = "<kv-namespace-id>"
-
-# 可选：Cron（每 5 分钟巡检一次）
-# [triggers]
-# crons = ["*/5 * * * *"]
-
-# 可选：自定义域
-# [[routes]]
-# pattern = "diag.example.com/*"
-# zone_name = "example.com"
+# 建议配置：让会话令牌跨 isolate 有效（与 KV 无关）
+PAGE_TOKEN_SECRET = "请替换为 32 字节以上随机串"
 ```
-
-### 密钥（不要写进 wrangler.toml）
 
 ```bash
-# 强烈推荐：开启无状态 HMAC 页面令牌（跨 isolate 生效）
-npx wrangler secret put PAGE_TOKEN_SECRET
-
-# 监控管理端点 / 管理面板 / /metrics 鉴权
-npx wrangler secret put MONITOR_ADMIN_KEY
+wrangler deploy
 ```
 
-### 部署后检查
+`wrangler.toml`（完整版 + 监控）：
+
+```toml
+name = "netsight"
+main = "_workers.js"
+compatibility_date = "2025-01-01"
+
+[[kv_namespaces]]
+binding = "SPEED_HISTORY"
+id = "把 KV 命名空间 id 填这里"
+
+[triggers]
+crons = ["*/5 * * * *"]
+
+[vars]
+PAGE_TOKEN_SECRET = "请替换为 32 字节以上随机串"
+MONITOR_ADMIN_KEY = "请替换为 24 字节以上随机串"
+```
+
+创建 KV：`wrangler kv namespace create SPEED_HISTORY`
+
+### 方式 C：GitHub + Workers Builds（推荐）
+
+1. 把仓库推到 GitHub，根目录放 `_workers-nokv.js`（或 `_workers.js`）与 `wrangler.toml`。
+2. Cloudflare Dashboard → **Workers & Pages** → 你的 Worker → **Settings** → **Build** → **Connect Git repository**。
+3. 构建设置：
+   - Build command：留空（没有构建步骤）
+   - Deploy command：`npx wrangler deploy`
+4. 之后每次 `git push` 自动部署。
+
+### 方式 D：GitHub Actions
+
+`.github/workflows/deploy.yml`：
+
+```yaml
+name: Deploy Worker
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to Cloudflare Workers
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+```
+
+需要在仓库 **Settings → Secrets and variables → Actions** 里添加：
+
+| Secret | 说明 |
+|---|---|
+| `CLOUDFLARE_API_TOKEN` | 权限至少 `Workers Scripts:Edit`、`Workers KV Storage:Edit`（若用完整版） |
+| `CLOUDFLARE_ACCOUNT_ID` | Dashboard 右侧栏的 Account ID |
+
+### 部署后自检
 
 ```bash
-# 探活用 /node-ping（公开、CORS 开放）
-curl -s https://your-domain/node-ping
-
-# /health 需要页面会话令牌，直接 curl 会得到 403 —— 这是设计行为
-# 打开浏览器访问首页，DevTools Network 中可看到 /health 的 Cookie 与 x-ns-token
-
-# 若启用了 metricsKey 或 MONITOR_ADMIN_KEY
-curl -s -H "x-metrics-key: <key>" https://your-domain/metrics | head
+curl -I https://你的域名/                 # 200 + 安全响应头 + Set-Cookie: __Host-ns_t=...
+curl -o /dev/null -w '%{http_code}\n' https://你的域名/health        # 403（没有令牌，符合设计）
+curl -o /dev/null -w '%{http_code}\n' https://你的域名/nope          # 404
+curl -o /dev/null -w '%{http_code}\n' https://你的域名/api/ip-fraud  # 410（已下线）
+curl -o /dev/null -w '%{http_code}\n' https://你的域名/x              # 404
 ```
+
+> 浏览器里的"全部功能是否正常"，用页面上的**一键体检**跑一遍最快。
 
 ---
 
-## 配置参考
+## 六、配置项
 
-### `SITE_CONFIG`（JSON 字符串，var）
+### 环境变量 / Secret
 
-| 字段 | 类型 | 默认 | 说明 |
+| 名称 | 类型 | 必填 | 说明 |
 |---|---|---|---|
-| `siteName` | string | `NetSight Pro` | 站点名，用于页面标题、Logo、Manifest、管理面板 |
-| `defaultLang` | string | `""` | 强制默认语言：`en` / `zh-CN` / `zh-TW` / `ja` / `ko` / `es`；留空跟随浏览器 |
-| `disabledTools` | string[] | `[]` | 隐藏的前端工具 key（如 `upload`、`stream`、`wizard`） |
-| `disabledEndpoints` | string[] | `[]` | 禁用的服务端路径（命中返回 403 `endpoint_disabled_by_config`） |
-| `metricsKey` | string | `""` | `/metrics` 的访问密钥；为空时回退 `MONITOR_ADMIN_KEY` |
-| `offline` | boolean | `true` | 是否启用 PWA 离线壳与 SW 注册 |
-| `certCheck` | boolean | `true` | 监控是否执行 crt.sh 证书到期检查 |
+| `PAGE_TOKEN_SECRET` | Secret | **建议必填** | ≥32 字节随机串。配置后页面令牌为无状态 HMAC，跨 isolate 有效；不配置则退化为 per-isolate 内存令牌（多实例会随机 403），新版本在无 secret 时会自动降级为 Fetch Metadata 校验以免随机失败 |
+| `MONITOR_ADMIN_KEY` | Secret | 可选 | 监控配置/管理面板/`/metrics` 的密钥；≥24 字节，不要与 `metricsKey` 复用；连续 10 次失败封 10 分钟 |
+| `ALLOWED_ORIGINS` | 文本 | 可选 | 逗号分隔的跨域白名单（如 `https://a.com,https://b.com`）。**禁止填 `*`**；白名单内的 Origin 会跳过令牌校验 |
+| `SITE_CONFIG` | 文本(JSON) | 可选 | 站点白标配置，见下 |
+| `SPEED_HISTORY` | KV 绑定 | 仅完整版监控需要 | 存监控配置/状态/日志；不绑定时监控工具自动禁用 |
+| Cron Trigger | 触发器 | 仅完整版监控需要 | 建议 `*/5 * * * *`，不要更密 |
 
-示例：
+### `SITE_CONFIG` 字段
 
 ```json
 {
-  "siteName": "MyNetSight",
+  "siteName": "NetSight Pro",
   "defaultLang": "zh-CN",
-  "disabledTools": ["upload", "stream", "concurrent"],
-  "disabledEndpoints": ["/node-ping"],
-  "metricsKey": "replace-with-random-metrics-key",
+  "disabledTools": ["monitor", "cpu"],
+  "disabledEndpoints": ["/api/site-audit"],
+  "metricsKey": "可选：/metrics 的独立密钥",
   "offline": true,
   "certCheck": true
 }
 ```
 
-### 绑定与变量
-
-| 名称 | 类型 | 必需 | 作用 |
-|---|---|---|---|
-| `PAGE_TOKEN_SECRET` | secret | 推荐 | HMAC 页面令牌密钥；未配置时退回 per-isolate 内存令牌 |
-| `MONITOR_ADMIN_KEY` | secret | 监控/管理需要 | `/api/monitor*`、`/api/admin/overview`、`/metrics` 兜底鉴权 |
-| `SPEED_HISTORY` | KV binding | 可选 | 监控状态、事件日志；可选测速历史（默认关闭） |
-| `CACHE_KV` | KV binding | 可选 | 旧 `/static/*` 静态托管，已停用，可不绑定 |
-| `ALLOWED_ORIGINS` | var | 可选 | 精确 Origin 白名单（逗号分隔，不支持 `*`） |
-| `SITE_CONFIG` | var (JSON) | 可选 | 站点级配置，见上表 |
-
-### 监控配置（`POST /api/monitor` 保存到 KV）
-
-```json
-{
-  "urls": [
-    { "url": "https://example.com/", "label": "主站" },
-    { "url": "https://api.example.com/health", "label": "API" }
-  ],
-  "webhook": "https://hooks.slack.com/services/...",
-  "format": "slack",
-  "chatId": "",
-  "failureThreshold": 2,
-  "quietHours": "23:00-08:00",
-  "maintenanceUntil": 0,
-  "certCheck": true
-}
-```
-
-- `urls`：最多 10 个；字符串或 `{url, label}` 对象；
-- `format`：`generic` / `dingtalk` / `feishu` / `wecom` / `slack` / `discord` / `telegram` / `ntfy`；
-- `chatId`：Telegram 必填；
-- `failureThreshold`：连续失败 N 次才告警（1–5）；
-- `quietHours`：固定 +8 时区，格式 `HH:MM-HH:MM`；
-- `maintenanceUntil`：毫秒时间戳，期间只记录不发送；
-- `certCheck`：是否做证书到期检查。
-
----
-
-## API 参考
-
-鉴权图例：🌐 公开 · 🍪 页面令牌（Cookie / `x-ns-token`）· 🔑 管理密钥 · ⚠️ 已停用。
-
-### 页面与资产
-
-| 方法 | 路径 | 鉴权 | 说明 |
-|---|---|---|---|
-| GET | `/` | 🌐 | 主诊断页面（签发页面令牌） |
-| GET | `/admin` | 🌐（页面） | 管理面板，输入管理密钥后只读查看 |
-| GET | `/app.js` `/app.css` | 🌐 | 前端资产，内容哈希版本、immutable |
-| GET | `/sw.js` | 🌐 | Service Worker（PWA 离线壳） |
-| GET | `/manifest.webmanifest` | 🌐 | PWA Manifest |
-| GET | `/icon.svg` `/icon-192.png` `/icon-512.png` | 🌐 | 图标 |
-
-### 健康与探测
-
-| 方法 | 路径 | 鉴权 | 说明 |
-|---|---|---|---|
-| GET/HEAD | `/node-ping` | 🌐 | 轻量探活（`Access-Control-Allow-Origin: *`） |
-| GET/HEAD | `/health` | 🍪 | 健康检查 + 可观测性摘要（RTT 轮询用） |
-| GET | `/api/page-token` | 🌐（限流） | 静默续期页面令牌 |
-
-### 测速与流量
-
-| 方法 | 路径 | 鉴权 | 说明 |
-|---|---|---|---|
-| GET | `/speedtest?size=` | 🍪 | 随机流式下载，1 B – 64 MB |
-| POST | `/upload-test` | 🍪 | 流式上传计数，≤32 MB |
-| GET | `/stream-test` | 🍪 | 5 MB 流式响应 |
-| GET | `/cpu-test?n=` | 🍪 | 浏览器侧 CPU 参考（限流） |
-| GET | `/http2-test` | 🍪 | HTTP/2 / HTTP/3 与协议检测 |
-| GET | `/ws-test` | 🍪 | WebSocket 101 升级与 ping/pong |
-| GET | `/concurrent-test` | 🍪 | 旧并发端点（前端已改用真实并发） |
-| GET | `/dns-proxy` | ⚠️ | 已停用（410） |
-
-### DNS 与安全
-
-| 方法 | 路径 | 鉴权 | 说明 |
-|---|---|---|---|
-| GET | `/api/dns-lookup?name=&type=` | 🍪 | DoH 查询，8 种记录类型 |
-| GET | `/api/dns-compare?name=&type=` | 🍪 | 6 个 DoH 解析器 wireformat 对比 + DNSSEC AD |
-| GET | `/api/dnsbl?ip=` | 🍪 | DNSBL 黑名单查询 |
-| GET | `/api/domain-check?domain=&selector=` | 🍪 | 域名体检（邮件安全 / DNSSEC / CAA / MTA-STS / BIMI / NS） |
-| GET | `/api/site-audit?url=&cert=1` | 🍪 | 站点安全头体检，逐跳重定向校验 |
-| GET | `/api/ip-fraud` | ⚠️ | 已停用（410） |
-
-### 监控与管理
-
-| 方法 | 路径 | 鉴权 | 说明 |
-|---|---|---|---|
-| GET | `/api/monitor` | 🍪 + 🔑 | 读取监控配置 |
-| POST | `/api/monitor` | 🍪 + 🔑 | 保存监控配置 |
-| POST | `/api/monitor-run` | 🍪 + 🔑 | 立即执行一次巡检 |
-| GET | `/api/admin/overview` | 🍪 + 🔑 | 管理面板数据（配置 / 状态 / 日志 / 用量 / KV 预算） |
-| GET | `/metrics` | 🔑 | Prometheus 文本指标 |
-
-### 统计与历史
-
-| 方法 | 路径 | 鉴权 | 说明 |
-|---|---|---|---|
-| POST | `/api/log-speed` | 🍪 | 记录测速结果（默认关闭 KV 写入） |
-| GET | `/api/speed-history` | 🍪 | 测速历史（可选 KV） |
-| GET | `/api/usage-stats` | 🍪 | 端点调用统计（per-isolate 内存） |
-| GET | `/api/page-token` | 🌐 | 见上 |
-
-> 所有错误响应均为 JSON，并带 `cache-control: no-store`；未知 `/api/*` 返回 404，方法不符返回 405（监控端点）。
-
----
-
-## 站点监控与告警
-
-### 工作方式
-
-1. Cron 每 5 分钟触发一次（可配置）；
-2. 读取 KV 中的配置，最多 10 个目标，并发上限 3；
-3. 每个目标：协议/端口/私网/DoH 公网解析校验 → 抓取（手动跟随重定向，逐跳重新校验）；
-4. 状态变化时更新 `monitor:state`，事件写入 `monitor:log`；
-5. 满足阈值且不在静默/维护窗口时，按格式发送 webhook；
-6. 证书：每个 https 目标每 6 小时检查一次（crt.sh），`≤14 / ≤7 / 已过期` 分级；
-7. 状态写失败时本轮不发送通知，避免下一轮重复告警。
-
-### 状态条目
-
-```json
-{
-  "https://example.com/": {
-    "status": "up",
-    "code": 200,
-    "since": 1760000000000,
-    "lastCheck": 1760003600000,
-    "error": "",
-    "failures": 0,
-    "label": "主站",
-    "certCheckedAt": 1760000000000,
-    "certDays": 87,
-    "certWarn": ""
-  },
-  "__meta": { "writtenAt": 1760003600000 }
-}
-```
-
-### 告警通道
-
-| 通道 | `format` | 说明 |
+| 字段 | 类型 | 说明 |
 |---|---|---|
-| 通用 JSON | `generic` | `{text, source}` |
-| 钉钉 | `dingtalk` | `{msgtype:"text", text:{content}}` |
-| 飞书 | `feishu` | `{msg_type:"text", content:{text}}` |
-| 企业微信 | `wecom` | `{msgtype:"text", text:{content}}` |
-| Slack | `slack` | `{text}` |
-| Discord | `discord` | `{content}` |
-| Telegram | `telegram` | `{chat_id, text}`，需 `chatId` |
-| ntfy | `ntfy` | 纯文本 POST 到 topic URL |
+| `siteName` | string(≤40) | 站点名，会显示在标题与页脚 |
+| `defaultLang` | `en` / `zh-CN` / `zh-TW` / `ja` / `ko` / `es` | 默认语言（仍可手动切换） |
+| `disabledTools[]` | string[] | 隐藏指定工具卡片，如 `["monitor","cpu"]` |
+| `disabledEndpoints[]` | string[] | 直接返回 403 的端点（**精确匹配**，注意结尾不要带 `/`） |
+| `metricsKey` | string | 为 `/metrics` 单独设密钥 |
+| `offline` | boolean | 隐藏需要出站的入口 |
+| `certCheck` | boolean | 是否启用证书到期检查（完整版监控用） |
 
 ---
 
-## 安全模型
+## 七、API 参考
 
-### 页面令牌
+### 鉴权说明
 
-- 主页面每次渲染签发一次令牌，写入 **HttpOnly / SameSite=Strict** Cookie，并由内联脚本注入 `window.__PAGE_KEY__`；
-- 前端 `fetch` 包装对同源请求自动附加 `x-ns-token`；403 时调用 `/api/page-token` **静默续期并重试一次**，不再整页刷新；
-- 配置 `PAGE_TOKEN_SECRET` 时使用无状态 HMAC 令牌（跨 isolate 生效）；未配置时回退 per-isolate Map（TTL 1 小时、LRU 淘汰、最多 8000 条）；
-- `/health` 以及所有工具 API 都要求令牌；`/node-ping`、静态资源与 `/api/page-token` 例外。
+- **页面会话令牌**：打开页面时通过 `Set-Cookie: __Host-ns_t=…; HttpOnly; SameSite=Strict; Secure` 下发，令牌**不出现在 HTML/JS 里**，同源请求自动携带。
+- **跨域**：把来源加入 `ALLOWED_ORIGINS` 即视为已授权。
+- **管理密钥**：`x-admin-key` 请求头，恒定时间比较；不接受 URL 参数。
+- **无 secret 部署**：令牌校验降级为「浏览器 Fetch Metadata 同源校验」，裸脚本仍会被 403。
 
-### SSRF 防护（面向用户输入的目标）
+### 端点列表
 
-- 协议白名单：仅 `http:` / `https:`；
-- 端口白名单：仅 80 / 443；
-- 私网判定：IPv4 常见私网 / 回环 / 链路本地 / 组播 / 保留段；IPv6 ULA、链路本地、组播、6to4、Teredo、NAT64、IPv4-mapped、旧 site-local 等；
-- 域名先做 DoH 公网解析校验（缓存 60 秒），站点体检与巡检每次重定向**重新校验**；
-- 监控 webhook 发送前重新解析 DNS，禁止重定向跳转；
-- 响应体仅在需要时读取，并设置大小上限（证书 JSON、监控响应体等）。
+| 路径 | 方法 | 鉴权 | 说明 |
+|---|---|---|---|
+| `/` | GET | 无 | 主页面（同时下发会话 Cookie） |
+| `/admin` | GET | 无（数据需 key） | 管理面板页面 |
+| `/app.css` `/app.js` `/sw.js` `/manifest.webmanifest` `/icon*` | GET | 无 | 静态资源（长缓存，URL 带内容哈希） |
+| `/health` | GET | 令牌 | 存活检查，仅返回 `{status,timestamp}` |
+| `/api/page-token` | GET | 同源浏览器上下文 | 续期 Cookie，响应体不含令牌 |
+| `/speedtest` | GET | 令牌 | 下载测速，`?size=` 1B–25MB，>2MB 走流式 |
+| `/upload-test` | POST | 令牌 | 上传测速，body ≤32MB |
+| `/stream-test` | GET | 令牌 | 流式下载，`?size=` ≤5MB |
+| `/ws-test` | GET | 令牌 | WebSocket 往返测试（Upgrade） |
+| `/cpu-test` | GET | 令牌 | CPU 基准（自校准，3 次/分/IP） |
+| `/http2-test` | GET | 令牌 | 协议/H2/H3 探测 |
+| `/node-ping` | GET | 无 | 公开节点探测（供多节点对比），`Access-Control-Allow-Origin: *` |
+| `/api/dns-lookup` | GET | 令牌 | `?name=&type=` |
+| `/api/dnsbl` | GET | 令牌 | 黑名单检测 |
+| `/api/dns-compare` | GET | 令牌 + 浏览器上下文 | 6 解析器并发对比，独立 15/分/IP |
+| `/api/domain-check` | GET | 令牌 + 浏览器上下文 | 域名安全体检，独立 15/分/IP |
+| `/api/site-audit` | GET | 令牌 + 浏览器上下文 | HTTP 安全头审计，`?url=&cert=1`，独立 5/分/IP |
+| `/api/log-speed` | POST | 令牌 | 测速历史写入（无 KV 版为 no-op，返回 `{ok:true,stored:false}`） |
+| `/api/speed-history` | GET | 令牌 | 服务端历史（无 KV 版返回 410） |
+| `/api/usage-stats` | GET | 令牌 | 内存用量统计 |
+| `/api/monitor` | GET/POST | 令牌 + `x-admin-key` | 监控配置读写（无 KV 版 410） |
+| `/api/monitor-run` | POST | 令牌 + `x-admin-key` | 立即巡检（无 KV 版 410；60s 内限一次） |
+| `/api/admin/overview` | GET | 令牌 + `x-admin-key` | 管理概览 |
+| `/metrics` | GET | `x-metrics-key` 或 `x-admin-key` | Prometheus 指标 |
 
-### 限流与预算
+**返回 410（已下线）**：`/api/ip-fraud`、`/dns-proxy`、`/static/*`
+**已删除**：`/concurrent-test`（前端的并发下载改为 N 路真实 `/speedtest`）
+**其它未匹配路径**：返回 404（不再回退到主页面）
 
-| 机制 | 限制 |
+### curl 示例
+
+```bash
+# 1) 取 Cookie（页面会 Set-Cookie）
+curl -c cookie.txt https://你的域名/ -o /dev/null
+
+# 2) 带 Cookie 调受保护端点
+curl -b cookie.txt https://你的域名/health
+curl -b cookie.txt "https://你的域名/speedtest?size=1048576" -o /dev/null -w '%{speed_download}\n'
+
+# 3) 跨域授权（需在 ALLOWED_ORIGINS 里配置来源）
+curl -H 'Origin: https://your-app.com' -H 'Sec-Fetch-Site: same-origin' \
+     "https://你的域名/api/dns-lookup?name=example.com&type=A"
+
+# 4) 管理端点
+curl -H "x-admin-key: $ADMIN_KEY" https://你的域名/api/admin/overview
+curl -H "x-admin-key: $ADMIN_KEY" https://你的域名/metrics
+```
+
+---
+
+## 八、安全模型
+
+### 会话与鉴权
+
+- 令牌只通过 **HttpOnly + SameSite=Strict + Secure** 的 `__Host-` Cookie 下发，页面脚本读不到。
+- 令牌 1 小时有效，403 时前端自动续期并重试**一次**，不会刷新风暴。
+- 管理密钥恒定时间比较、失败退避（10 次/10 分钟/IP）、只走请求头。
+
+### 限流（按 `cf-connecting-ip`）
+
+| 桶 | 上限 |
 |---|---|
-| 默认限流 | 60 次 / 分 / IP，Map 硬上限 5000 键，30 秒增量清理 |
-| `/health` | 180 次 / 分 / IP（独立桶） |
-| 大响应（`/speedtest >2MB`、`/upload-test`、`/stream-test`） | 30 次 / 分 / IP（独立桶） |
-| `/cpu-test` | 3 次 / 分 / IP |
-| KV 写入 | 20 次 / 分 / isolate、600 次 / 日 / isolate、同键去抖 10 秒、失败回滚计数 |
-| 速率历史 | 默认不写 KV；开启后单键环形缓冲、15 秒/客户端 + 30 次/分/isolate |
-| 监控 | 最多 10 目标、并发 3、证书检查 6 小时/目标、静默/维护窗口 |
+| 默认（工具端点） | 60 次/分/IP |
+| `/health` | 180 次/分/IP（RTT 轮询专用） |
+| 大响应下载（`/speedtest` >2MB、`/upload-test`、`/stream-test`） | 30 次/分/IP |
+| `/api/site-audit` | 5 次/分/IP |
+| DNS 工具（`dns-compare` / `domain-check`） | 15 次/分/IP |
+| 令牌签发 | 10 次/分/IP |
+| 静态资源 | 600 次/分/IP |
+| `/cpu-test` | 3 次/分/IP |
 
-### 内容安全
+### SSRF 防护
 
-- CSP 每响应随机 nonce，内联脚本必须带 nonce；`script-src 'self'`，无 `unsafe-inline`；
-- HTML 模板区分 `escapeHtml`（HTML 上下文）与 `escapeForJS`（JS 字符串上下文），`</script>` 逃逸被阻断；
-- `x-frame-options: DENY`、HSTS、`nosniff`、Referrer-Policy、Permissions-Policy 全量返回；
-- 前端不加载任何第三方脚本；应用页面仅使用 Font Awesome / Google Fonts 两个外部样式资源（可自托管替换）。
+所有接受 URL 的入口（站点体检、监控目标、Webhook）都经过：
 
-### 管理面
+1. 协议白名单（http/https）+ 端口白名单（80/443）
+2. 私网判定：IPv4 全保留段、IPv6 ULA/链路本地/组播/6to4/Teredo/NAT64/IPv4 映射，**以及 `127.1`、`0177.0.0.1`、`0x7f.0.0.1` 这类编码型 IP**（fail-closed）
+3. `resolvToPublicOnly` DoH 解析校验，解析失败视为不安全
+4. 重定向 `manual` 逐跳复检，且**出站前强制重新解析**，把 DNS 重绑定窗口压到毫秒级
+5. 响应体丢弃/限长，避免大 body 占资源
 
-- `/api/monitor*` 与 `/api/admin/overview` 同时要求页面令牌 + `x-admin-key`；
-- 管理密钥使用恒定时间比较；前端存 `sessionStorage`，不持久化到 localStorage；
-- `/admin` 为只读概览；修改监控回主页面「站点监控」工具；
-- `/metrics` 需要 metricsKey 或 admin key；
-- 所有已停用端点（`/dns-proxy`、`/api/ip-fraud`、`/api/reach-check`）在路由最前面返回 410。
+### 输出与浏览器侧
+
+- 全部动态内容经 `escapeHTML` / `safeJsonForScript` 转义；无 `eval`、`new Function`、`document.write`
+- CSP：`script-src 'self' 'nonce-…'`、`object-src 'none'`、`base-uri 'none'`、`frame-ancestors 'none'`、`form-action 'none'`
+- 安全响应头：`nosniff`、`X-Frame-Options: DENY`、`Referrer-Policy`、HSTS、`Permissions-Policy`
+- 动态响应统一 `cache-control: no-store` + `vary: Origin`
+
+### 隐私说明
+
+- Worker **默认不主动向第三方发请求**；诊断请求由你的浏览器发起。
+- 会用到外部服务的功能（都在你主动点击时触发）：
+  - **WebRTC 泄漏** → `stun.cloudflare.com:3478`（会向 Cloudflare 暴露你的公网 IP）
+  - **真实 IP 位置** → `ipify` / `icanhazip` / `seeip` / `ipapi.co`
+  - **证书信息** → `crt.sh`（仅完整版监控或站点体检勾选证书时）
+- 本地历史只存在浏览器 `localStorage`，不会上传；分享链接已移除 IP / 运营商 / 边缘节点。
 
 ---
 
-## 可观测性
+## 九、本地开发与自检
 
-### `/health` 返回摘要
+不需要安装依赖，只需 Node 18+（推荐 20+）。
 
-```json
-{
-  "status": "ok",
-  "version": "5.1.0",
-  "storage": { "usageBackend": "memory", "speedHistoryKv": false },
-  "kvWrite": { "today": 0, "blocked": 0, "failed": 0, "budgetPerDay": 600, "budgetPerMin": 20 },
-  "site": { "siteName": "NetSight Pro", "defaultLang": null, "disabledTools": 0, "disabledEndpoints": 0, "offline": true },
-  "metrics": {
-    "uptimeMs": 123456,
-    "requestsTotal": 42,
-    "status403": 0,
-    "status429": 0,
-    "errors500": 0,
-    "disabledByConfig": 0,
-    "rateLimitKeys": { "default": 0, "health": 0, "largeDl": 0 },
-    "kvWrites": { "attempts": 0, "success": 0, "blocked": 0, "failed": 0 },
-    "monitor": { "lastRunAt": 0, "lastDurationMs": 0, "lastChanged": false, "lastNotified": 0, "lastSuppressed": false }
-  }
-}
+```bash
+# 完整版：四套回归（单元 / 路由 / 告警状态机 / 静态护栏）
+node tools/verify-all.mjs _workers.js
+
+# 无 KV 版：专项验证（静态契约 + 关键路由）
+node tools/verify-nokv.mjs _workers-nokv.js
+
+# 单跑某一套
+node tools/check-worker.mjs _workers.js       # Worker 解析 + 内嵌 APP_JS 编译 + 纯函数断言
+node tools/route-smoke.mjs _workers.js        # 在 vm 里真实执行 handleRequest
+node tools/monitor-scenarios.mjs _workers.js  # 告警状态机（完整版）
+node tools/static-audit.mjs _workers.js       # 静态护栏（防危险写法复活）
 ```
 
-> per-isolate 计数：重启、换 isolate 后归零，这是 Workers 无状态模型的取舍。
-
-### `/metrics`（Prometheus）
-
-需要 `x-metrics-key`（SITE_CONFIG.metricsKey）或 `x-admin-key`（MONITOR_ADMIN_KEY）。暴露：
-
-- `netsight_uptime_seconds`
-- `netsight_requests_total`
-- `netsight_status_403_total` / `netsight_status_429_total` / `netsight_errors_500_total`
-- `netsight_kv_writes_total` / `_blocked_total` / `_failed_total`
-- `netsight_rate_limit_keys{store=...}`
-- `netsight_monitor_last_run_seconds` / `netsight_monitor_last_notified`
-
-### 管理面板 `/admin`
-
-输入管理密钥后可查看：版本 / 站点配置 / 用量 / 403 & 429 / KV 预算 / 监控配置、状态、日志 / 配置 JSON。只读设计，避免误操作。
-
----
-
-## 多语言、主题与 PWA
-
-- **6 种语言**：`en` / `zh-CN` / `zh-TW` / `ja` / `ko` / `es`；
-- 自动跟随 `Accept-Language`，可用 `SITE_CONFIG.defaultLang` 强制默认，也可在页面切换并记忆；
-- 日期、标题、按钮、工具说明、建议文案全部本地化；页面 `<html lang>` 同步；
-- **主题**：深色 / 浅色（跟随系统或手动），CSS 变量驱动，首屏避免闪烁；
-- **PWA**：SW 预缓存带内容哈希的静态资产，导航请求网络优先、离线时回退内置离线页；不缓存 API 与令牌页面；
-- 可在 `SITE_CONFIG` 中关闭离线壳（`offline: false`）。
-
----
-
-## 性能、成本与额度
-
-NetSight Pro 的目标之一是「免费套餐也能安心跑」。默认设计参考 Cloudflare 免费额度：
-
-| 资源 | 免费额度（参考） | 项目中的控制 |
+| 套件 | 覆盖 | 断言数 |
 |---|---|---|
-| Worker 请求 | 10 万 / 天 | 限流、静态资源缓存、前端轮询间隔 |
-| CPU | 10 ms / 请求 | 浏览器侧计算优先，Worker 只做轻量处理 |
-| 子请求 | 50 / 请求 | 站点体检/巡检控制在 ~40 以内 |
-| KV 读 | 10 万 / 天 | 监控状态 30 秒缓存、DNS 结果内存缓存 |
-| KV 写 | 1000 / 天 | 双预算（20/分、600/日 per-isolate）+ 去抖 |
-| Cron | 最小 1 分钟 | 建议 `*/5 * * * *` |
-| 内存 | 128 MB | 流式大响应、缓存上限、Map 封顶 |
+| `check-worker.mjs` | 语法、内嵌前端编译、SSRF/证书/DNS/令牌等纯函数 | 44 |
+| `route-smoke.mjs` | 鉴权、404/405/410、Cookie、CSP、爆破封禁、监控配置、零-KV 降级 | 34 |
+| `monitor-scenarios.mjs` | 阈值、去重、恢复、静默补发、webhook 重试、证书误报 | 11 |
+| `static-audit.mjs` | 危险写法不得复活 + 关键防护必须在位 | 70 |
+| `verify-nokv.mjs` | 无 KV 构建的静态契约与路由行为 | 21 |
 
-成本提示：
+**修改代码后必须做的三件事**：
 
-- `/speedtest` 单次最大 **64 MB**；大响应有独立配额（30 次/分/IP），但仍可能被刻意滥用，公开部署请叠加 Cloudflare WAF / Rate Limiting / Turnstile；
-- 精准测速单次约 40 MB 流量，属于用户主动触发；
-- 监控与证书检查的 Worker 出站有缓存与频率限制；
-- `/metrics` 与 `/admin` 仅按需访问，建议加访问控制。
+```bash
+node --check _workers.js          # 语法
+node tools/verify-all.mjs _workers.js
+# 若改了无 KV 版：node tools/verify-nokv.mjs _workers-nokv.js
+```
+
+> 前端代码在 `APP_JS` 模板字符串里，改它时注意反引号与 `${` 需要转义；自检脚本会单独编译内嵌脚本，能抓到这类错误。
 
 ---
 
-## 测试与 CI
+## 十、目录结构
 
-```bash
-cd project
-npm run verify   # build → node --check → 164 项回归
 ```
-
-- **164 项** Node vm 沙箱断言，无网络、无浏览器依赖；
-- 覆盖：令牌（HMAC/Map/LRU）、限流封顶与 429、SSRF 判定（IPv4/IPv6）、DoH wire 解析 fixture、域名体检、监控阈值/证书/维护窗口、告警 payload、6 语言页面、SITE_CONFIG、`/metrics`、PWA 离线壳等；
-- 构建脚本会做 **vm 语法检查 + 运行时资产逐字节一致性校验**；
-- CI：`.github/workflows/verify.yml`（Node 20：build → check → test），无第三方依赖。
-
-本地开发约定：
-
-```bash
-# 改了 assets/app.js 或 src/** 之后
-npm run verify
-node scripts/sync.mjs ../_workers.js   # 如果还需要单文件部署文件
-```
-
----
-
-## 项目结构
-
-```text
 .
-├── _workers.js                 # 单文件 Worker（可直接部署；由 project 构建同步）
-├── index.html                  # 经典静态介绍页（三语，纯 CSS/SVG 复刻）
-├── index-apple.html            # Apple 风格静态展示页（Canvas 动效 + 交互演示）
+├── _workers.js                 # 完整版（含可选站点监控）
+├── _workers-nokv.js            # 无 KV 版（监控已移除，零写入路径）
+├── wrangler.toml               # 部署配置（按需选择对应 main）
 ├── README.md
-├── docs/                       # README 截图
-│   ├── hero-dark.png / hero-light.png / hero-mobile.png
-│   ├── classic.png
-│   └── demo-speed.png / demo-dns.png / demo-monitor.png
-└── project/                    # 模块化源码与工程化流程
-    ├── src/
-    │   ├── server-core.js      # 常量 / 安全 / 令牌 / 限流 / 缓存 / KV 预算 / 监控 / 配置
-    │   ├── server-handler.js   # handleRequest 路由与端点
-    │   ├── lib/dns-wire.js     # RFC 8484 DoH 编解码与查询
-    │   └── handlers/
-    │       ├── page.js         # 主诊断页面渲染
-    │       ├── pwa.js          # PWA 离线壳 / Service Worker
-    │       └── admin.js        # /admin 管理面板
-    ├── assets/
-    │   ├── app.css             # 前端 CSS（原始可编辑）
-    │   └── app.js              # 前端 JS（原始可编辑，无需模板转义）
-    ├── scripts/
-    │   ├── build.mjs           # src + assets → dist/_workers.js（含校验）
-    │   └── sync.mjs            # 构建产物同步到部署文件
-    ├── tests/worker.test.mjs   # 164 项回归
-    ├── deploy/                 # wrangler 模板与配置说明
-    ├── dist/_workers.js        # 构建产物
-    ├── .github/workflows/verify.yml
-    └── package.json
+├── 修复记录-v5.1.1.md           # 逐项修复记录（P1/P2/P3 + 补充项）
+├── 无KV版报告.md                # 无 KV 版交付报告
+└── tools/
+    ├── verify-all.mjs          # 完整版总入口
+    ├── verify-nokv.mjs         # 无 KV 版总入口
+    ├── check-worker.mjs
+    ├── route-smoke.mjs
+    ├── monitor-scenarios.mjs
+    └── static-audit.mjs
 ```
 
 ---
 
-## 静态展示页
+## 十一、常见问题
 
-仓库包含两份独立静态页，均可直接托管到 Cloudflare Pages / GitHub Pages / 任意静态服务器：
+**Q：工具时好时坏、随机 403？**
+A：`PAGE_TOKEN_SECRET` 没配，旧版本令牌只存在单个 isolate。v5.1.1 起：配置该 secret（推荐）或使用会自动降级的新版本。
 
-### `index-apple.html`（推荐）
+**Q：站点监控显示"未绑定 KV / 410"？**
+A：你用的是无 KV 版，或完整版没绑定 KV。监控必须跨请求保存状态，需要 KV；其余功能不受影响。
 
-- Apple 风格视觉：系统字体、玻璃卡片、极光背景、发丝线、大标题；
-- 深色 / 浅色主题（View Transitions 平滑切换）；
-- 首屏虚拟仪表盘：Canvas 实时曲线、数字滚动、视差与浮动卡片；
-- 4 个可点击演示 Tab：实时监控 / 带宽测速 / DNS 对比 / 站点监控；
-- 6 语言切换演示、代码复制、部署命令复制；
-- 响应式（390 / 1440 已验证）、`prefers-reduced-motion` 降级、无 JS 仍可见内容；
-- 零外部依赖（内联 SVG、系统字体、原生 Canvas）。
+**Q：WebRTC 一直显示"无法判定"？**
+A：看结果里的 `ICE` 行：`mDNS > 0 且 srflx = 0` 说明 UDP 3478 被网络拦截（公司网/部分移动网络常见）；`host 0 · mDNS 0` 说明浏览器或插件禁用了 WebRTC。
 
-### `index.html`（经典版）
+**Q：TTFB 只有总耗时，没有 DNS/TCP/TLS 分项？**
+A：浏览器没有暴露 Resource Timing（隐私设置/插件/旧内核）。工具会自动回退为手动计时并标注"phase breakdown unavailable"。
 
-- 三语（简体 / 繁體 / English）；
-- 纯 CSS / SVG 复刻应用界面；
-- 内容密度高，适合作为「项目介绍长页」；
-- 同样无 CDN 请求。
+**Q：CPU 性能显示 20000 ops/ms？**
+A：那是 v5.1.0 的已知 bug（把迭代次数当吞吐）。v5.1.1 已改为自校准，显示真实量级（约 1e4）。
 
-两者都是静态页面，数据为模拟，不调用 Worker API。
+**Q：KV 会不会被写爆？**
+A：完整版有硬护栏（单 isolate 150 写/天、12 写/分、同键 10s 去抖、告警节流 10 分钟），且用量统计默认内存、测速历史默认关闭；完全不想碰 KV 就用无 KV 版——**0 条写入路径**。
 
----
+**Q：历史记录换浏览器/清缓存后没了？**
+A：历史存在 `localStorage`，属预期。可用"导出 JSON"备份、换设备后"导入"。
 
-## 常见问题
+**Q：访问 `/static/xxx` 返回 410？**
+A：静态资源走 `/app.js`、`/app.css`，`/static/` 前缀已下线。
 
-**Q：为什么 `curl /health` 返回 403？**
-A：`/health` 需要主页面签发的会话令牌（HttpOnly Cookie 或 `x-ns-token`），这是防爬虫与扫描器的设计。脚本探活用公开的 `/node-ping`。
+**Q：为什么访问任意路径都 404？**
+A：v5.1.1 起只有 `/`、`/index.html`、`/admin` 与静态资源会返回内容，其它路径 404（避免误导 API 调用方与绕过端点禁用）。
 
-**Q：部署后监控页面提示 503 / 无法保存配置？**
-A：确认已绑定 KV `SPEED_HISTORY`（`kv_missing`）并设置 `MONITOR_ADMIN_KEY`（`key_not_set`）。
-
-**Q：页面偶发 403，工具全部失败？**
-A：多 isolate 场景下请配置 `PAGE_TOKEN_SECRET` 使用无状态 HMAC 令牌。未配置时回退 per-isolate Map，前端会自动续期重试，但高频场景仍建议配置。
-
-**Q：`/metrics` 返回 403？**
-A：配置 `SITE_CONFIG.metricsKey`，或用 `x-admin-key: <MONITOR_ADMIN_KEY>` 访问。
-
-**Q：为什么工具数量从 23 变成 26？**
-A：v5.1 新增了资源瀑布、网络信息、智能诊断，并把多流/并发测速补成真实实现；同时保留经典页面的 23 项描述属于历史版本。
-
-**Q：零出站是什么意思？**
-A：默认情况下所有测量在浏览器侧完成，Worker 不主动访问第三方。DoH、证书日志、站点监控与告警只在你主动使用对应工具时发生。
-
-**Q：会不会打爆免费额度？**
-A：项目内置多层预算与限流；但公开高流量部署仍建议叠加 Cloudflare WAF / Rate Limiting / Turnstile，并禁用不需要的工具或端点（`SITE_CONFIG`）。
-
-**Q：数据存在哪里？**
-A：诊断数据默认留在浏览器（localStorage / 内存）；监控状态可选存 KV；没有第三方分析、广告或埋点。
-
-**Q：能当 API 用吗？**
-A：大部分端点需要页面令牌，不建议作为公共 API 对外暴露；自动化场景建议自行部署并使用 admin 端点或扩展公开接口。
-
-**Q：为什么精准测速会消耗较多流量？**
-A：精准模式为 4 个尺寸 × 3 轮，用于降低噪声；日常使用快速/标准即可。
+**Q：静默时段按哪个时区？**
+A：按浏览器时区（前端提交 `-getTimezoneOffset()/60`），未提交时默认 UTC+8。
 
 ---
 
-## 路线图与待办
+## 十二、配额与性能
 
-| 优先级 | 事项 | 说明 |
+以 Cloudflare **免费版**为例：
+
+| 资源 | 免费额度 | 本项目的控制手段 |
 |---|---|---|
-| P1 | 监控内容断言（D2） | 期望状态码 / body 关键字 / JSON 字段断言 |
-| P2 | 多节点 / 多 CDN 带宽对比（B2） | 需要多个 NetSight 节点 |
-| P2 | 公开状态页 / SVG 状态徽章（D5） | `badge.svg` + 可选公开状态页 |
-| P3 | 公共只读 API / 短链 | 需评估滥用面与 KV 成本 |
-| P3 | 更多语言 / 更细的无障碍优化 | 持续改进 |
-| P3 | 工程化持续拆分 | 将 `server-handler.js` 按端点继续拆到 `src/handlers/` |
+| Worker 请求 | 100,000/天 | 端点级限流 + 静态资源独立桶 |
+| CPU 时间 | 10 ms/请求 | 测速用 256 KB 随机模板复用；CPU 基准自校准并设上限 |
+| 响应体 | 无硬限制但计流量 | `/speedtest` 单次 ≤25 MB，流式生成，慢读者 30s 截止 |
+| KV 写 | 1,000/天（若绑定） | 单 isolate 预算 150/天 + 12/分 + 去抖；无 KV 版为 0 |
+| KV 读 | 100,000/天 | 60s 内存缓存；无 KV 版为 0 |
+| 子请求 | 50/请求（免费） | 单请求最多 12 次 DoH；巡检有总 deadline |
 
 ---
 
-## 更新日志
+## 十三、已知限制
 
-### v5.1.0（当前）
-
-- 新增 DoH **wireformat** 编解码与查询：DNS 对比不再依赖各解析器 JSON API，解析器扩展为 6 个（Cloudflare / Google / Quad9 / AdGuard / DNS.SB / AliDNS）；
-- 新增 **智能诊断向导**、**管理面板 `/admin`** 与 `/api/admin/overview`；
-- 监控目标支持 **`label | url` 标签**，状态与面板展示标签；
-- 工程化：`src/lib`、`src/handlers` 拆分，构建脚本支持多源码目录，CI 与 164 项回归；
-- 版本 5.1.0，静态展示页 `index-apple.html`。
-
-### v5.0.0
-
-- `SITE_CONFIG` 配置外置（站点名 / 默认语言 / 工具开关 / 端点开关 / metricsKey / offline / certCheck）；
-- `/health` 增加可观测性指标；新增 `/metrics`（Prometheus）；
-- PWA 离线壳重写；成本护栏与端点配置开关；
-- 构建/部署模板。
-
-### v4.9.0
-
-- 域名体检扩展：DNSSEC / DS / CAA / MTA-STS / BIMI / NS 一致性；
-- 监控：证书到期提醒、连续失败阈值、静默时段、维护窗口、8 种告警通道；
-- 新增 ja / ko / es，共 6 种语言；
-- 版本 4.9.0。
-
-### v4.8.0
-
-- 资源瀑布、网络信息面板、真实并发/多流测速、测速可信度（三档 / 中位数 / TTFB / 标准差）；
-- 历史趋势与对比、CSV/JSON 导出导入、分享快照；
-- 版本 4.8.0。
-
-### v4.7.2（安全与可靠性修复）
-
-- 页面令牌改为「无状态 HMAC 优先 + Map LRU 兜底」，前端 403 静默续期，不再整页刷新；
-- 限流 Map 封顶 + 增量清理；KV 写失败回滚计数；
-- 测速按实际字节计速、状态码校验；丢包率分母修正；
-- 监控先写状态再告警、HTTP 目标逐跳校验、webhook DNS 校验；
-- 站点体检 deadline / 取消响应体 / 失败 502；DNS 缓存 LRU 化；
-- 版本 4.7.2。
-
-### v4.7.1（基线）
-
-- 23 项工具、三语界面、实时延迟监控、DNS 与安全体检；
-- 单文件 Worker，默认零出站。
+1. **必须以 Cloudflare Worker 运行**，不能放 GitHub Pages / 普通静态托管（需要服务端签发令牌与测速接口）。
+2. **CSP 的 `connect-src` 保留 `https:`**：多节点对比需要浏览器直连用户输入的任意节点，收紧会废掉该功能；其余 CSP 指令均已收紧。
+3. **完整版监控依赖 KV**（或未来的 DO/D1）；无 KV 版直接不含该功能。
+4. **站点体检**最多发起 3 次请求（跟随 2 跳重定向），总耗时上限 10 秒。
+5. **无 secret 部署时**令牌校验降级为 Fetch Metadata，安全性略低于无状态 HMAC，但裸脚本仍被拦截。
+6. 部分浏览器扩展会拦截 WebRTC/Resource Timing，导致相应工具显示"无法判定"，属预期降级。
 
 ---
 
-## 贡献指南
+## 十四、贡献
 
-欢迎 Issue、PR、翻译与文档改进。
+欢迎 Issue / PR，但请遵守：
 
-1. Fork 并在 `project/` 内开发；
-2. 前端改 `assets/app.js` / `app.css`，服务端改 `src/**`；不要直接改 `dist/_workers.js`；
-3. 新增 i18n 文案必须六语齐全（en / zh-CN / zh-TW / ja / ko / es），键集合对齐；
-4. 提交前运行：
-
+1. **保持单文件可部署**：不要引入构建步骤或运行时依赖。
+2. **提交前必须通过自检**：
    ```bash
-   cd project
-   npm run verify
+   node --check _workers.js
+   node tools/verify-all.mjs _workers.js
+   # 改动无 KV 版时：
+   node tools/verify-nokv.mjs _workers-nokv.js
    ```
-
-5. PR 描述请包含：动机、改动点、验证方式、涉及端点/配置变更；
-6. 安全相关问题请勿公开提交 Issue，先通过邮件联系维护者。
-
----
-
-## 许可证与致谢
-
-- **License：GNU AGPL-3.0**。可自由使用、修改、再分发；若将修改版作为网络服务对外提供，需按 AGPL §13 向使用者提供对应源代码；
-- 本项目不附带任何官方公开演示实例，部署与数据都在你自己的 Cloudflare 账号内；
-- 感谢 Cloudflare Workers、KV、Cron 平台能力；
-- 应用页面使用的第三方前端资源：Font Awesome（图标字体，免费版许可）与 Google Fonts / Inter（字体）；如需完全自托管可替换为本地资源；
-- 静态展示页为原创、无第三方前端库；图标为内联 SVG。
-
-### 联系
-
-- 仓库：<https://github.com/BlueDriftHK/CF-workers-netdiag>
-- 邮箱：<asiacomk@gmail.com>
-- 版本：**5.1.0**
+3. **新增 i18n 文案**：至少同时补 `en` 与 `zh-CN`（其余语言会自动回退英文），6 语言齐全更好。
+4. **新增端点**：必须接入限流桶、鉴权、`no-store` 响应头，并在 README 的 API 表格登记。
+5. **安全相关改动**：说明威胁模型；不要降低 SSRF/鉴权/转义标准。
+6. 前端代码在 `APP_JS` 模板字符串内，注意反引号与 `${` 的转义。
 
 ---
 
-<p align="center">
-  <sub>把网络看透 · NetSight Pro · Built for the edge</sub>
-</p>
+## 十五、致谢与许可
+
+- 灵感与早期版本来自 [BlueDriftHK/CF-workers-netdiag](https://github.com/BlueDriftHK/CF-workers-netdiag)。
+- 运行平台：[Cloudflare Workers](https://workers.cloudflare.com/)；DNS over HTTPS 对比使用 Cloudflare / Google / Quad9 / AdGuard / DNS.SB / AliDNS 的公开 DoH 服务。
+- 图标：[Font Awesome](https://fontawesome.com/)（CDN 引入）。
+
+**License**：本仓库当前未附带 `LICENSE` 文件。若计划公开分发，建议补充 **MIT License**（或你偏好的开源协议），并在 README 顶部加上 badge。
+
+**免责声明**：本工具仅用于诊断你自有或已获授权的网络与站点。请勿用于扫描、探测或攻击他人资产；使用者需自行承担合规责任。
